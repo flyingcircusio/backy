@@ -22,7 +22,7 @@ class Patcher(object):
             if not os.path.exists(index_filename):
                 # there was no difference in the backups. Just ignore.
                 continue
-            #print "Evaluating index %s." % index_filename
+            # print "Evaluating index %s." % index_filename
             index = file(index_filename, "r").readlines()
             # XXX Stats().t(len(index))
             index.pop(0)  # finished string

@@ -24,7 +24,7 @@ def _restore(infile, outfile, difffiles, force):
         checksum.update(data)
 
         writer.setChunk(i, data)
-        #print "Writing chunk %06d" % i
+        # print "Writing chunk %06d" % i
         i += 1
 
     reader.close()

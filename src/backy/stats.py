@@ -1,11 +1,14 @@
+import time
+
 
 class Stats(object):
     # Singleton
     __instance = None
+
     def __new__(cls, *args, **kwargs):
         if not cls.__instance:
             cls.__instance = super(Stats, cls).__new__(
-                                cls, *args, **kwargs)
+                cls, *args, **kwargs)
         return cls.__instance
 
     time_started = time.time()

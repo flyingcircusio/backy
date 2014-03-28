@@ -29,7 +29,7 @@ class Writer(object):
         self.max_chunk_id = max(chunk_id, self.max_chunk_id)
         there = chunk_id * self.chunksize
         self.f.seek(there)
-        #print "Writing to %d (%.2fMB)" % (here, len(data))
+        # print "Writing to %d (%.2fMB)" % (here, len(data))
         self.f.write(data)
         # clear buffers for that action
         # XXX posix_fadvise(self.f.fileno(), 0, self.f.tell(),
@@ -40,7 +40,7 @@ class Writer(object):
         self.max_chunk_id = max(chunk_id, self.max_chunk_id)
         there = chunk_id * self.chunksize
         self.f.seek(there)
-        #print "Reading from %d" % (here)
+        # print "Reading from %d" % (here)
         data = self.f.read(self.chunksize)
         # clear buffers for that action
         # XXX posix_fadvise(self.f.fileno(), 0, self.f.tell(),

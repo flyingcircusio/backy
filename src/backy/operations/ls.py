@@ -23,7 +23,7 @@ def ls(target, diffprefix=None):
         sumsize += size
         datacreated = (datetime.datetime.fromtimestamp(mtime).
                        strftime("%Y-%m-%d %H:%M:%S"))
-        #index_filename = "%s.index" % diff
+        # index_filename = "%s.index" % diff
         print "Level %d from %s (%.1fGiB)" % (
             level, datacreated, float(size)/(1024**3))
         level += 1

@@ -13,3 +13,4 @@ htmlcov/
 .coverage
 report.xml
 *.pyc
+*.sublime*

@@ -1,5 +1,5 @@
 import backy
-#from fallocate import posix_fadvise, POSIX_FADV_SEQUENTIAL
+# from fallocate import posix_fadvise, POSIX_FADV_SEQUENTIAL
 
 
 class Reader(object):
@@ -8,7 +8,7 @@ class Reader(object):
 
     def __init__(self, filename, chunksize=backy.CHUNKSIZE):
         self.f = file(filename, "rb")
-        #posix_fadvise(self.f.fileno(), 0, 0, POSIX_FADV_SEQUENTIAL)
+        # posix_fadvise(self.f.fileno(), 0, 0, POSIX_FADV_SEQUENTIAL)
         self.chunksize = chunksize
 
     def iterchunks(self):

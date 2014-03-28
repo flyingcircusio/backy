@@ -14,7 +14,7 @@ def project_path(*names):
 
 setup(
     name='backy',
-    version='0.1dev',
+    version='1.1a1.dev',
     install_requires=[
         'setuptools',
         'fallocate',

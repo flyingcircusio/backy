@@ -46,3 +46,5 @@
 - can scrubbing especially for diffs validate block and total checksum?
 
 - get rid of the diffprefix option?
+
+- allow restoring (but warn about) inconsistent images

@@ -1,0 +1,14 @@
+- get unit test coverage
+- implement a scheduler for multiple sources (that can verify)
+- simple compound call/configuration (e.g. for many rbd volumes)
+- ability to thin out (merge) older deltas
+- keep multiple full backups?
+- fuse layer to enable direct (loop-mountable) access to old versions
+- ability to store blocks in a simple big pool using their hash?
+-- may not be that helpful as we really want the primary full backups to 
+   be directly, low-level copyable
+
+- implement detection which blocks are actually used by the filesystem and optionally limit backups (for thin provisioning)
+  to those areas
+
+- check /proc, /sys or some other interface to detect which blocks were written to

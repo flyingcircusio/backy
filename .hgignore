@@ -1,0 +1,15 @@
+syntax: glob
+
+bin/
+lib/
+include/
+.Python
+eggs/
+develop-eggs/
+.installed.cfg
+src/backy.egg-info/
+htmlcov/
+.cache
+.coverage
+report.xml
+*.pyc

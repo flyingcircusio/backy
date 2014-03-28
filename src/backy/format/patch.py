@@ -1,3 +1,7 @@
+import backy
+import gzip
+import os.path
+
 
 class Patcher(object):
     """ Applies diffs to a chunk
@@ -20,7 +24,7 @@ class Patcher(object):
                 continue
             #print "Evaluating index %s." % index_filename
             index = file(index_filename, "r").readlines()
-            Stats().t(len(index))
+            # XXX Stats().t(len(index))
             index.pop(0)  # finished string
             chunksize = int(index.pop(0))
             # for now we do only support exactly one chunksize.
@@ -30,11 +34,9 @@ class Patcher(object):
                 chunk = chunk.rstrip()
                 chunk_id, offset, length = map(int, chunk.split(","))
                 self.matrix[chunk_id] = {
-                        'filename': diff_filename,
-                        'offset': offset,
-                        'length': length,
-                        }
-        #pp(self.matrix)
+                    'filename': diff_filename,
+                    'offset': offset,
+                    'length': length}
 
     def getChunk(self, chunk_id):
         """ Returns the patched chunk or None, if there's no need to patch.
@@ -45,7 +47,7 @@ class Patcher(object):
         f = file(diff['filename'], "rb")
         f.seek(diff['offset'])
         z = f.read(diff['length'])
-        Stats().t(len(z))
+        # Stats().t(len(z))
         data = gzip.zlib.decompress(z)
         f.close()
         return data

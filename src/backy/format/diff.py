@@ -1,3 +1,8 @@
+import backy
+import glob
+import gzip
+import os
+
 
 class Differ(object):
     """ finds existing diffs, creates a new one and feeds it
@@ -29,7 +34,9 @@ class Differ(object):
 
         max_diff = 0
         diffs = sorted(glob.glob("%s.*" % prefix), reverse=True)
-        diffs = [d for d in diffs if not d.endswith(".index") and not d.endswith(".md5")]
+        diffs = [
+            d for d in diffs
+            if not d.endswith(".index") and not d.endswith(".md5")]
         if len(diffs) > 0:
             # XXX check and raise if the diff looks strange?
             max_diff = int(diffs[0].split(".")[-1])
@@ -42,7 +49,7 @@ class Differ(object):
         yield "%s\n" % self.finished
         yield "%s\n" % self.chunksize
         for i in self.index:
-            yield "%d,%d,%d\n" % i # chunk_id, offset, length
+            yield "%d,%d,%d\n" % i  # chunk_id, offset, length
 
     def write_index(self):
         data = self.dump()
@@ -55,9 +62,9 @@ class Differ(object):
         self.index.append((chunk_id, offset, length))
         self.write_index()
         self.f.write(z)
-        posix_fadvise(self.f.fileno(), 0, self.f.tell(), POSIX_FADV_DONTNEED)
-        Stats().t(len(z))
-        #print "Setting chunk %d in Diff %s" % (chunk_id, self.f.name)
+        # XXX posix_fadvise(self.f.fileno(), 0, self.f.tell(),
+        #    POSIX_FADV_DONTNEED)
+        # XXX Stats().t(len(z))
 
     def close(self):
         self.finished = "Successfully finished."

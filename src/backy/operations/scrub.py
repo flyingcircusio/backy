@@ -1,35 +1,29 @@
+from backy.format import Reader, Rollfile
 
-def scrub(args, options):
-    backupfile = args.pop(0)
-    if len(args) > 0:
-        rollfile = args.pop()
-    else:
+
+def scrub(target, rollfile=None, checkonly=False):
+    backupfile = target
+    if rollfile is None:
         rollfile = "%s.roll" % backupfile
     reader = Reader(backupfile)
     roller = Rollfile(rollfile, backupfile)
 
     print "Starting scrub (%s vs. %s)" % (backupfile, rollfile),
-    if options.checkonly:
+    if checkonly:
         print "readonly."
     else:
         print "and marking bad chunks"
 
-    i = 0
-    changed = False
-    while True:
-        data = reader.getChunk(i)
-        if not data:
-            break
-        if not roller.chunkMatches(i, data):
-            roller.setChunk(i, '0')  # pretend a single 0 which should never match
-                                     # in order to show that this chunk is destroyed
-            changed = True
-            if not options.checkonly:
-                roller.write()
-            print "Chunk %06d was destroyed." % i
-        i += 1
-    if changed and not options.checkonly:
-        roller.write()
-        pass
-    reader.close()
+    for i, data in reader.iterchunks():
+        if roller.chunkMatches(i, data):
+            continue
+        # pretend a single 0 which should never match in order to show that
+        # this chunk is destroyed
+        roller.setChunk(i, '0')
+        if not checkonly:
+            print "Chunk %06d is corrupt and has been marked." % i
+            roller.write()
+        else:
+            print "Chunk %06d is corrupt." % i
 
+    reader.close()

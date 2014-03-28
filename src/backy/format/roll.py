@@ -1,5 +1,9 @@
+import backy
+import hashlib
+
 
 class Roll(object):
+
     roll = None
 
     def __init__(self):
@@ -47,27 +51,34 @@ class Roll(object):
         """
         self.roll.append(hash)
 
+
 class Rollfile(Roll):
+
     chunksize = backy.CHUNKSIZE
     original_filename = ""
 
-    def __init__(self, filename, original_filename=None, chunksize=backy.CHUNKSIZE):
-        Roll.__init__(self)
+    def __init__(self, filename, original_filename=None,
+                 chunksize=backy.CHUNKSIZE):
+        super(Rollfile, self).__init__()
         self.filename = filename
         try:
             self.roll = map(str.rstrip, file(filename, "rb").readlines())
-            Stats().t(len(self.roll)*32)
+            # XXX Stats().t(len(self.roll)*32)
         except IOError:
             # file doesn't exist. Create now to see if we are allowed to.
             try:
                 file(filename, "wb")
             except IOError:
-                raise IOError("Couldn't create Rollfile. Please check permissions: %s" % self.filename)
+                # XXX show original error
+                raise IOError(
+                    "Couldn't create Rollfile. Please check permissions: %s"
+                    % self.filename)
             self.original_filename = original_filename
             self.chunksize = chunksize
         else:
             if len(self.roll) < 2:
-                raise IOError("Rollfile is invalid. Please remove: %s" % self.filename)
+                raise IOError(
+                    "Rollfile is invalid. Please remove: %s" % self.filename)
             self.original_filename = self.roll.pop(0)
             self.chunksize = self.roll.pop(0)
 
@@ -81,5 +92,5 @@ class Rollfile(Roll):
         data = self.dump()
         f = file(self.filename, "w")
         f.writelines(data)
-        Stats().t(f.tell())
+        # XXX Stats().t(f.tell())
         f.close()

@@ -12,3 +12,37 @@
   to those areas
 
 - check /proc, /sys or some other interface to detect which blocks were written to
+
+- provide some level of filesystem integration to perform extended scrubbing, like running appropriate fscks.
+
+- provide reasonable status output and history for monitoring tools and auditing
+
+- implement posix locking on backup files to avoid conflicts
+
+- we should be fsyncing
+
+- make explicit use of Python file's buffer argument (it should be 0 or chunk I think, but definitely not line-based)
+
+- adapting to changing sizes is important to us as we resize volumes all the time
+
+- keep checksums for blocks for diffs, too, and also allow scrubbing?
+
+- should we be using sha instead of md5?
+
+- port gocept.directory "dynamic bytes" display
+
+- reverse numeration of UI and filenames on disk sounds like it might be
+  confusing
+
+- add safety belt to avoid accidentally restoring into backup-managed files (e.g. by mixing up the parameters)
+
+- change API for patcher to provide one abstract view that presents
+  homogenous access to the chunks appropriate for a given revision
+
+- use global revision checksums (sha) instead of enumerated revisions?
+  keep metadata for time-association?
+
+- does scrubbing validate the total checksum?
+- can scrubbing especially for diffs validate block and total checksum?
+
+- get rid of the diffprefix option?

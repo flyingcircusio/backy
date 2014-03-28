@@ -1,15 +1,16 @@
+from backy.format import Reader, Writer, Rollfile, Differ
+import os.path
+import hashlib
+import shutil
 
-def backup(args, options):
-    infile = args.pop(0)
-    outfile = args.pop(0)
-    if len(args) > 0:
-        rollfile = args.pop()
-    else:
-        rollfile = "%s.roll" % outfile
-    if len(args) > 0:
-        diffprefix = args.pop()
-    else:
-        diffprefix = "%s.diff" % outfile
+
+def backup(source, target, rollfile=None, diffprefix=None):
+    infile = source
+    outfile = target
+    if rollfile is None:
+        rollfile = '%s.roll' % outfile
+    if diffprefix is None:
+        diffprefix = '%s.diff' % outfile
     checkfile = "%s.md5" % outfile
 
     reader = Reader(infile)
@@ -22,7 +23,11 @@ def backup(args, options):
         if writer.size() != reader.size():
             # We have a problem here, because the rollfile does not reflect
             # the new size. For now, we raise here.
-            raise Exception("Source and destination sizes differ (%s:%d and %s:%d, respectively). Perhaps stale entries in /dev/mapper are causing an unlinked snapshot." % (infile, reader.size(), outfile, writer.size()))
+            raise Exception(
+                "Source and destination sizes differ (%s:%d and %s:%d, "
+                "respectively). Perhaps stale entries in /dev/mapper are "
+                " causing an unlinked snapshot." % (
+                    infile, reader.size(), outfile, writer.size()))
 
         if os.path.exists(checkfile):
             diff_checkfilename = "%s.md5" % differ.filename
@@ -45,11 +50,11 @@ def backup(args, options):
             writer.setChunk(i, data)
             roller.setChunk(i, data)
             # write roller every 16 chunks
-            if i%16 == 0:
+            if i % 16 == 0:
                 roller.write()
-            #print "Writing chunk %06d" % i
+            # XXX print "Writing chunk %06d" % i
         else:
-            #print "Chunk matches: %06d" % i
+            # XXX print "Chunk matches: %06d" % i
             pass
         i += 1
 

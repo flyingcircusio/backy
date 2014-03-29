@@ -29,7 +29,7 @@ setup(
     """,
     author='Daniel Kraft <daniel.kraft@d9t.de>',
     author_email='daniel.kraft@d9t.de',
-    license='GPL',
+    license='GPL 3',
     url='https://bitbucket.org/ctheune/backy/',
     keywords='backup',
     classifiers="""\

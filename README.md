@@ -87,7 +87,7 @@ Christian Theune <ct@gocept.com>
 
 ## License
 
-GPL
+GPLv3
 
 ## Hacking
 

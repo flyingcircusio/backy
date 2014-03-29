@@ -29,7 +29,7 @@ backy knows which parts to copy to dstfile when run a second time.
 It also creates diffs to the current version so that an earlier version can be
 recreated. The diffs only contain changed data, gzipped.
 
-The diffs will be stored to diffprefix.<number> where backy increments the
+The diffs will be stored to <backup>.diff.<number> where backy increments the
 number by itself.
 
 ### Backup sub-command

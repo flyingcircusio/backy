@@ -2,13 +2,11 @@ import glob
 import os
 
 
-def clean(target, revision, diffprefix=None, force=False):
+def clean(target, revision, force=False):
     infile = target
     level = revision
-    prefix = diffprefix
 
-    if prefix is None:
-        prefix = "%s.diff" % infile
+    prefix = "%s.diff" % infile
 
     num_keep = int(level)
     if num_keep < 1 and not force:

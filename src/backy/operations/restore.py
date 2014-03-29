@@ -32,15 +32,11 @@ def _restore(infile, outfile, difffiles, force):
     return checksum.hexdigest()
 
 
-def restore(source, target, revision, checkonly=False, diffprefix=None,
-            force=None):
+def restore(source, target, revision, checkonly=False, force=None):
     infile = source
     outfile = target
     level = revision
-    prefix = diffprefix
-
-    if prefix is None:
-        prefix = "%s.diff" % infile
+    prefix = "%s.diff" % infile
 
     diffs = sorted(glob.glob("%s.*" % prefix), reverse=True)
     diffs = [

@@ -26,7 +26,6 @@ Perform a backup.
 """)
     p.set_defaults(func=backy.operations.backup)
     p.add_argument('--rollfile', default=None)
-    p.add_argument('--diffprefix', default=None)
     p.add_argument('source')
     p.add_argument('target')
 
@@ -42,7 +41,6 @@ Perform a backup.
                    action='store_true', help='check only')
     p.add_argument('-f', '--force',
                    action='store_true', help='force, overwrite existing files')
-    p.add_argument('--diffprefix', default=None)
     p.add_argument('source')
     p.add_argument('target')
 

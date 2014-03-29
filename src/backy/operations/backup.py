@@ -4,13 +4,11 @@ import hashlib
 import shutil
 
 
-def backup(source, target, rollfile=None, diffprefix=None):
+def backup(source, target, rollfile=None):
     infile = source
     outfile = target
     if rollfile is None:
         rollfile = '%s.roll' % outfile
-    if diffprefix is None:
-        diffprefix = '%s.diff' % outfile
     checkfile = "%s.md5" % outfile
 
     reader = Reader(infile)
@@ -18,7 +16,7 @@ def backup(source, target, rollfile=None, diffprefix=None):
     roller = Rollfile(rollfile, infile)
 
     if writer.existed:
-        differ = Differ(diffprefix, old_mtime=writer.old_mtime)
+        differ = Differ(outfile, old_mtime=writer.old_mtime)
 
         if writer.size() != reader.size():
             # We have a problem here, because the rollfile does not reflect

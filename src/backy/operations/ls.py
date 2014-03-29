@@ -3,11 +3,9 @@ import os.path
 import datetime
 
 
-def ls(target, diffprefix=None):
+def ls(target):
     infile = target
-    prefix = diffprefix
-    if prefix is None:
-        prefix = "%s.diff" % infile
+    prefix = "%s.diff" % infile
 
     diffs = sorted(glob.glob("%s.*" % prefix), reverse=True)
     diffs = [

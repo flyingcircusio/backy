@@ -13,7 +13,7 @@ class Differ(object):
     finished = ""
     filename = ""
 
-    def __init__(self, prefix, chunksize=backy.CHUNKSIZE, old_mtime=None):
+    def __init__(self, backupfile, chunksize=backy.CHUNKSIZE, old_mtime=None):
         """ prefix is a path with a file prefix for the diffs like this:
                 /backup/server/out.diff
             The real diff files will be
@@ -29,6 +29,7 @@ class Differ(object):
             The diff-file contains the following information:
             - the changed chunks or parts of them gzipped
         """
+        prefix = backupfile + '.diff'
         self.index = []
         self.chunksize = chunksize
 

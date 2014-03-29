@@ -4,16 +4,14 @@ import hashlib
 import shutil
 
 
-def backup(source, target, rollfile=None):
+def backup(source, target):
     infile = source
     outfile = target
-    if rollfile is None:
-        rollfile = '%s.roll' % outfile
     checkfile = "%s.md5" % outfile
 
     reader = Reader(infile)
     writer = Writer(outfile)
-    roller = Rollfile(rollfile, infile)
+    roller = Rollfile(outfile)
 
     if writer.existed:
         differ = Differ(outfile, old_mtime=writer.old_mtime)

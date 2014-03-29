@@ -1,14 +1,12 @@
 from backy.format import Reader, Rollfile
 
 
-def scrub(target, rollfile=None, checkonly=False):
+def scrub(target, checkonly=False):
     backupfile = target
-    if rollfile is None:
-        rollfile = "%s.roll" % backupfile
     reader = Reader(backupfile)
-    roller = Rollfile(rollfile, backupfile)
+    roller = Rollfile(backupfile)
 
-    print "Starting scrub (%s vs. %s)" % (backupfile, rollfile),
+    print "Starting scrub on %s" % backupfile
     if checkonly:
         print "readonly."
     else:

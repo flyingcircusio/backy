@@ -25,7 +25,6 @@ def main():
 Perform a backup.
 """)
     p.set_defaults(func=backy.operations.backup)
-    p.add_argument('--rollfile', default=None)
     p.add_argument('source')
     p.add_argument('target')
 
@@ -51,7 +50,6 @@ Perform a backup.
 Verify all blocks of the backup against their checksums.
 """)
     p.set_defaults(func=backy.operations.scrub)
-    p.add_argument('--rollfile', default=None)
     p.add_argument('target')
 
     # clean

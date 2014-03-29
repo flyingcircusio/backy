@@ -57,22 +57,22 @@ class Rollfile(Roll):
     chunksize = backy.CHUNKSIZE
     original_filename = ""
 
-    def __init__(self, filename, original_filename=None):
+    def __init__(self, backupfile):
         super(Rollfile, self).__init__()
-        self.filename = filename
+        self.filename = backupfile + '.roll'
         try:
-            self.roll = map(str.rstrip, file(filename, "rb").readlines())
+            self.roll = map(str.rstrip, file(self.filename, "rb").readlines())
             # XXX Stats().t(len(self.roll)*32)
         except IOError:
             # file doesn't exist. Create now to see if we are allowed to.
             try:
-                file(filename, "wb")
+                file(self.filename, "wb")
             except IOError:
                 # XXX show original error
                 raise IOError(
                     "Couldn't create Rollfile. Please check permissions: %s"
                     % self.filename)
-            self.original_filename = original_filename
+            self.original_filename = backupfile
         else:
             if len(self.roll) < 2:
                 raise IOError(

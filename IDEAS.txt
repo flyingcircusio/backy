@@ -1,14 +1,5 @@
 
 
-Code quality
-
-- get unit test coverage
-- review abstractions and object model
-- change API for patcher to provide one abstract view that presents
-  homogenous access to the chunks appropriate for a given revision
-- get rid of the diffprefix, and other options?
-
-
 Storage format and operations
 
 - ability to thin out (merge) older deltas

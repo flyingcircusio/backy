@@ -57,8 +57,7 @@ class Rollfile(Roll):
     chunksize = backy.CHUNKSIZE
     original_filename = ""
 
-    def __init__(self, filename, original_filename=None,
-                 chunksize=backy.CHUNKSIZE):
+    def __init__(self, filename, original_filename=None):
         super(Rollfile, self).__init__()
         self.filename = filename
         try:
@@ -74,13 +73,11 @@ class Rollfile(Roll):
                     "Couldn't create Rollfile. Please check permissions: %s"
                     % self.filename)
             self.original_filename = original_filename
-            self.chunksize = chunksize
         else:
             if len(self.roll) < 2:
                 raise IOError(
                     "Rollfile is invalid. Please remove: %s" % self.filename)
             self.original_filename = self.roll.pop(0)
-            self.chunksize = self.roll.pop(0)
 
     def dump(self):
         yield "%s\n" % self.original_filename

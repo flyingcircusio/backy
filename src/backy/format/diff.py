@@ -13,7 +13,9 @@ class Differ(object):
     finished = ""
     filename = ""
 
-    def __init__(self, backupfile, chunksize=backy.CHUNKSIZE, old_mtime=None):
+    chunksize = backy.CHUNKSIZE
+
+    def __init__(self, backupfile, old_mtime=None):
         """ prefix is a path with a file prefix for the diffs like this:
                 /backup/server/out.diff
             The real diff files will be
@@ -31,7 +33,6 @@ class Differ(object):
         """
         prefix = backupfile + '.diff'
         self.index = []
-        self.chunksize = chunksize
 
         max_diff = 0
         diffs = sorted(glob.glob("%s.*" % prefix), reverse=True)

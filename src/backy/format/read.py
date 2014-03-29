@@ -6,10 +6,11 @@ class Reader(object):
 
     _size = 0
 
-    def __init__(self, filename, chunksize=backy.CHUNKSIZE):
+    chunksize = backy.CHUNKSIZE
+
+    def __init__(self, filename):
         self.f = file(filename, "rb")
         # posix_fadvise(self.f.fileno(), 0, 0, POSIX_FADV_SEQUENTIAL)
-        self.chunksize = chunksize
 
     def iterchunks(self):
         i = 0

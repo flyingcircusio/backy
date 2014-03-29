@@ -7,7 +7,9 @@ class Writer(object):
     existed = True  # wether the outfile already existed or not.
     old_mtime = 0
 
-    def __init__(self, filename, chunksize=backy.CHUNKSIZE):
+    chunksize = backy.CHUNKSIZE
+
+    def __init__(self, filename):
         # XXX locking
         self.existed = os.path.exists(filename)
         if not self.existed:
@@ -22,7 +24,6 @@ class Writer(object):
         self.f = file(filename, "r+b")
         # XXX posix_fadvise(self.f.fileno(), 0, 0, POSIX_FADV_SEQUENTIAL)
 
-        self.chunksize = chunksize
         self.max_chunk_id = 0
 
     def setChunk(self, chunk_id, data):

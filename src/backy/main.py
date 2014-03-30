@@ -47,7 +47,8 @@ Verify all blocks a revision against their checksums.
 """)
     p.set_defaults(func=backy.operations.scrub)
     p.add_argument('-m', '--markbad',
-                   action='store_true', help='Persistently mark blocks as bad.')
+                   action='store_true',
+                   help='Persistently mark blocks as bad.')
     p.add_argument('target')
     p.add_argument('revision')
 

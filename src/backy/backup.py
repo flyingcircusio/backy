@@ -70,7 +70,7 @@ class Revision(object):
 
     def scrub(self, markbad=True):
         for i, chunk in self.iterchunks():
-            if not i in self.blocksums:
+            if i not in self.blocksums:
                 # XXX mark this revision as globally bad
                 print "Unexpected block {:06d} found in data file.".format(i)
                 continue
@@ -241,7 +241,7 @@ class DeltaRevision(Revision):
     def getChunk(self, i):
         # Calling getchunk often seems wasteful.
         # XXX check against stored checksum
-        if not i in self.blocksums:
+        if i not in self.blocksums:
             return self.backup.revisions[self.parent].getChunk(i)
         f = open(self.filename, 'rb')
         blocksums = self.blocksums.keys()

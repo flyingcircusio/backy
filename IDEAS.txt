@@ -15,6 +15,10 @@ Storage format and operations
 
 Reliability
 
+- ensure resizing works properly over multiple deltas
+- what are our error conditions and follow up errors if a backup fails?
+    - i can see that we loose the whole history if we update an existing full into a new delta and fail in between. need multiple atomic steps?
+
 - allow hunting down and reintegrating replacements blocks if they do exist in some
   copy
 - keep a log of all backy operations (incl. scrubbing, etc)

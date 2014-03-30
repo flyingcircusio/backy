@@ -1,60 +1,10 @@
-from backy.format import Patcher, Reader, Writer
-import hashlib
-import glob
-import os.path
+import backy.backup
 
 
-def _restore(infile, outfile, difffiles, force):
-    reader = Reader(infile)
-    patcher = Patcher(difffiles, reader)
-    writer = Writer(outfile)
-    if writer.existed and not force:
-        raise IOError("Outfile existed. Will not overwrite.")
-
-    # XXX refactor patcher
-    checksum = hashlib.md5()
-    for i, chunk in patcher.iterchunks():
-        checksum.update(chunk)
-        writer.setChunk(i, chunk)
-        checksum.update(chunk)
-        # print "Writing chunk %06d" % i
-
-    reader.close()
-    writer.close()
-    return checksum.hexdigest()
-
-
-def restore(source, target, revision, checkonly=False, force=None):
-    infile = source
-    outfile = target
-    level = revision
-    prefix = "%s.diff" % infile
-
-    diffs = sorted(glob.glob("%s.*" % prefix), reverse=True)
-    diffs = [
-        d for d in diffs
-        if not d.endswith(".index") and not d.endswith(".md5")]
-    if level > len(diffs):
-        raise ValueError(
-            "We don't have a backup of level %d. Maximum level is %d." %
-            (level, len(diffs)))
-    to_restore = diffs[:level]
-
-    # find out target checksum from oldest diff or - if level=0 - from image
-    target_checksum_file = "%s.md5" % infile
-    target_checksum = ""
-    if os.path.exists(target_checksum_file):
-        target_checksum = file(target_checksum_file, "r").read()
-    if level > 0:
-        print "Using diffs: %s" % to_restore
-        oldest_diff = to_restore[-1]
-        target_checksum_file = "%s.md5" % oldest_diff
-        target_checksum = file(target_checksum_file, "r").read()
-
-    checksum = _restore(infile, outfile, to_restore, force)
-
-    if target_checksum and target_checksum != checksum:
-        raise Exception(
-            "ERROR: Checksums don't match. Restore image is invalid.")
-    elif target_checksum:
-        print "Restore checksum validated. Restore image is valid."
+def restore(backupdir, target, revision):
+    backup = backy.backup.Backup(backupdir)
+    if revision == 'last':
+        revision = backup.revision_history[-1].uuid
+    r = backup.revisions[revision]
+    print "Restoring revision {}".format(r.uuid)
+    r.restore(target)

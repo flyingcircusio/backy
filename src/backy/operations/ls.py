@@ -25,4 +25,5 @@ def ls(target):
 
     print
     print "== Summary"
-    print "{} revisions with {} blocks".format(len(revisions), total_blocks)
+    print "{} revisions with {} blocks (~{} blocks/revision)".format(
+        len(revisions), total_blocks, total_blocks/len(revisions))

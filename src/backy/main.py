@@ -35,10 +35,8 @@ Perform a backup.
 Perform a backup.
 """)
     p.set_defaults(func=backy.operations.restore)
-    p.add_argument('-r', '--revision', default=0, type=int)
-    p.add_argument('-f', '--force',
-                   action='store_true', help='force, overwrite existing files')
-    p.add_argument('source')
+    p.add_argument('-r', '--revision', default='last')
+    p.add_argument('backupdir')
     p.add_argument('target')
 
     # scrub

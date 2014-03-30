@@ -15,6 +15,11 @@ class Revision(object):
     parent = None
     blocks = None
 
+    def __init__(self, uuid, backup):
+        self.uuid = uuid
+        self.backup = backup
+        self.blocks = {}
+
     @classmethod
     def select_type(cls, type):
         if type == 'full':
@@ -41,10 +46,6 @@ class Revision(object):
             (int(i), data) for i, data in metadata['blocks'].items())
         return r
 
-    def __init__(self, uuid, backup):
-        self.uuid = uuid
-        self.backup = backup
-
     @property
     def filename(self):
         return '{}/{}'.format(self.backup.path, self.uuid)
@@ -65,6 +66,10 @@ class Revision(object):
 
     def scrub(self, markbad=True):
         for i, chunk in self.iterchunks():
+            if not i in self.blocks:
+                # XXX mark this revision as globally bad
+                print "Unexpected block {:06d} found in data file.".format(i)
+                continue
             if self.blocks[i].startswith('bad:'):
                 print "Chunk {:06d} is known as corrupt.".format(i)
                 continue
@@ -76,40 +81,73 @@ class Revision(object):
             print "Marking corrupt chunks."
             self.write_info()
 
+    def remove(self):
+        os.unlink(self.filename)
+        os.unlink(self.info_filename)
+
 
 class FullRevision(Revision):
 
     type = 'full'
 
     _data = None
+    delta = None
 
     def start(self, size):
         assert self._data is None
         # Prepare for storing data
         self._checksum = hashlib.md5()
         # XXX locking, assert it does not exist yet
-        self._data = open(self.filename, 'w')
+        try:
+            self._data = open(self.filename, 'rb+')
+        except Exception:
+            self._data = open(self.filename, 'wb+')
 
         self._data.seek(size)
         self._data.truncate()
         self._data.seek(0)
 
+        self._seen_last_chunk = False
         self._index = 0
 
-        self.blocks = {}
+        print "Starting to back up revision {}".format(self.uuid)
+        if self.delta:
+            print "\t using delta revision {}".format(self.delta.uuid)
+            self.delta.start()
 
     def store(self, i, chunk):
         assert i == self._index
-        assert len(chunk) == backy.CHUNKSIZE
-        assert self._data.tell() == i*backy.CHUNKSIZE
+        assert not self._seen_last_chunk
+
+        if len(chunk) != backy.CHUNKSIZE:
+            self._seen_last_chunk = True
+
+        checksum = hashlib.md5(chunk).hexdigest()
         self._checksum.update(chunk)
-        self._data.write(chunk)
-        self.blocks[self._index] = hashlib.md5(chunk).hexdigest()
+        print "{:06d} | {} | PROCESS".format(i, checksum)
+
+        if self.blocks.get(i) != checksum:
+            if self.delta:
+                self._data.seek(i*backy.CHUNKSIZE)
+                print "{:06d} | {} | STORE DELTA".format(i, self.blocks[i])
+                old_chunk = self._data.read(backy.CHUNKSIZE)
+                self.delta.store(i, old_chunk)
+                self.delta.blocks[i] = self.blocks[i]
+
+            print "{:06d} | {} | STORE MAIN".format(i, checksum)
+            self._data.seek(i*backy.CHUNKSIZE)
+            self._data.write(chunk)
+            self.blocks[i] = checksum
+
         self._index += 1
 
     def stop(self):
+        self._data.close()
+        self._data = None
         self.checksum = self._checksum.hexdigest()
         self.write_info()
+        if self.delta:
+            self.delta.stop()
 
     def iterchunks(self):
         assert self._data is None
@@ -126,14 +164,76 @@ class FullRevision(Revision):
         self._data.close()
         self._data = None
 
-    def remove(self):
+    def migrate_to_delta(self):
+        full = Revision.create('full', self.backup)
+
+        previous = DeltaRevision(self.uuid, self.backup)
+        previous.timestamp = self.timestamp
+        previous.checksum = self.checksum
+        previous.parent = full.uuid
+        previous.write_info()
+
+        os.link(self.filename, full.filename)
         os.unlink(self.filename)
-        os.unlink(self.info_filename)
+
+        full.delta = previous
+        full.blocks = self.blocks
+
+        return full
+
+    def restore(self, target):
+        assert not target.startswith(self.backup.path)
+
+        target = open(target, 'wb')
+        checksum = hashlib.md5()
+        for i, chunk in self.iterchunks():
+            if not self.blocks[i] == hashlib.md5(chunk).hexdigest():
+                print "WARNING: Inconsistent chunk {:06d}.".format(i)
+            checksum.update(chunk)
+            target.write(chunk)
+        if checksum.hexdigest() != self.checksum:
+            print "WARNING: restored with inconsistent checksum."
+        else:
+            print "Restored with matching checksum."
+        os.fsync(target.fileno())
+        target.close()
 
 
 class DeltaRevision(Revision):
 
     type = 'delta'
+
+    _data = None
+
+    def start(self):
+        self._data = open(self.filename, 'wb')
+
+    def store(self, i, chunk):
+        self.blocks[i] = hashlib.md5(chunk).hexdigest()
+        self._data.write(chunk)
+
+    def stop(self):
+        self._data.close()
+        self._data = None
+        self.write_info()
+
+    def iterchunks(self):
+        assert self._data is None
+        self._data = open(self.filename, 'r')
+        i = 0
+        blocks = self.blocks.items()
+        blocks.sort()
+
+        while True:
+            chunk = self._data.read(backy.CHUNKSIZE)
+            if not chunk:
+                break
+            yield blocks[i][0], chunk
+            if len(chunk) != backy.CHUNKSIZE:
+                break
+            i += 1
+        self._data.close()
+        self._data = None
 
 
 class Source(object):
@@ -146,26 +246,15 @@ class Source(object):
 
     def iterchunks(self):
         i = 0
+        self.f.seek(0)
         while True:
-            data = self.getChunk(i)
+            data = self.f.read(backy.CHUNKSIZE)
             if not data:
                 break
+            print "{:06d} | {} | READ".format(
+                i, hashlib.md5(data).hexdigest())
             yield i, data
             i += 1
-
-    def getChunk(self, chunk_id):
-        here = self.f.tell()
-        there = chunk_id * backy.CHUNKSIZE
-        if there > self.size:
-            return ""
-        if here != there:
-            self.f.seek(there)
-        data = self.f.read(backy.CHUNKSIZE)
-        # clear buffers for that action
-        # XXX posix_fadvise(
-        #     self.f.fileno(), 0, self.f.tell(), POSIX_FADV_DONTNEED)
-        # XXX Stats().t(len(data))
-        return data
 
     @property
     def size(self):
@@ -196,10 +285,27 @@ class Backup(object):
             r = Revision.load(file, self)
             self.revisions[r.uuid] = r
 
+        self.revision_history = self.revisions.values()
+        self.revision_history.sort(key=lambda r: r.timestamp)
+
     def backup(self, path):
         source = Source(path)
-        r = Revision.create('full', self)
+
+        if self.revision_history:
+            previous = self.revision_history[-1]
+            r = previous.migrate_to_delta()
+        else:
+            r = Revision.create('full', self)
+
         r.start(source.size)
         for index, chunk in source.iterchunks():
             r.store(index, chunk)
         r.stop()
+
+        if os.path.exists(self.path+'/last'):
+            os.unlink(self.path+'/last')
+        os.symlink(r.filename, self.path+'/last')
+
+        if os.path.exists(self.path+'/last.backy'):
+            os.unlink(self.path+'/last.backy')
+        os.symlink(r.info_filename, self.path+'/last.backy')

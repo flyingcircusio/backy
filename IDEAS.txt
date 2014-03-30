@@ -30,7 +30,7 @@ Reliability
 - provide reasonable status output and history for monitoring tools and auditing
 - implement posix locking on backup files to avoid conflicts
 - we should be fsyncing
-- should we be using sha instead of md5?
+
 - add safety belt to avoid accidentally restoring into backup-managed files (e.g. by mixing up the parameters)
 - does scrubbing validate the total checksum?
 - can scrubbing especially for diffs validate block and total checksum?

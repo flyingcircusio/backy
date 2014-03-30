@@ -48,7 +48,9 @@ class BackyFS(fuse.Fuse):
                     time of most recent metadata change on Unix,
                     or the time of creation on Windows).
         """
+        print "***"
         print "*** getattr", path
+        print "***"
         st = fuse.Stat()
         st.st_nlink = 1
         if path == '/':
@@ -63,20 +65,28 @@ class BackyFS(fuse.Fuse):
             st.st_mtime = revision.timestamp
         return st
 
+    def access(self, *args):
+        pass
+
     def readdir(self, path, offset):
+        print "***"
         print "*** readdir", path, offset
+        print "***"
         assert path == '/'
-        yield fuse.Direntry('.')
-        yield fuse.Direntry('..')
         for revision in self.backup.revisions:
+            print revision
             yield fuse.Direntry(revision)
 
     def lock(self, path):
+        print "***"
         print "*** lock"
+        print "***"
         return -errno.EINVAL
 
     def statfs(self):
+        print "***"
         print "*** statfs"
+        print "***"
         s = fuse.StatVfs()
         s.f_bsize = 4*1024
         s.f_frsize = s.f_bsize

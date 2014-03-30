@@ -5,27 +5,19 @@ import os.path
 
 
 def _restore(infile, outfile, difffiles, force):
-
-    patcher = Patcher(difffiles)
     reader = Reader(infile)
+    patcher = Patcher(difffiles, reader)
     writer = Writer(outfile)
     if writer.existed and not force:
         raise IOError("Outfile existed. Will not overwrite.")
 
     # XXX refactor patcher
-    i = 0
     checksum = hashlib.md5()
-    while True:
-        data = patcher.getChunk(i)
-        if not data:
-            data = reader.getChunk(i)
-        if not data:
-            break
-        checksum.update(data)
-
-        writer.setChunk(i, data)
+    for i, chunk in patcher.iterchunks():
+        checksum.update(chunk)
+        writer.setChunk(i, chunk)
+        checksum.update(chunk)
         # print "Writing chunk %06d" % i
-        i += 1
 
     reader.close()
     writer.close()

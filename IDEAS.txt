@@ -15,6 +15,11 @@ Storage format and operations
 
 Reliability
 
+- allow hunting down and reintegrating replacements blocks if they do exist in some
+  copy
+- keep a log of all backy operations (incl. scrubbing, etc)
+- turn towards "a backup archive is a directory" instead of a base 
+  name
 - provide some level of filesystem integration to perform extended scrubbing, like running appropriate fscks.
 - provide reasonable status output and history for monitoring tools and auditing
 - implement posix locking on backup files to avoid conflicts

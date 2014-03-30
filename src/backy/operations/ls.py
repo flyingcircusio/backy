@@ -1,31 +1,28 @@
-import glob
-import os.path
 import datetime
+import backy.backup
+
+
+def format_timestamp(ts):
+    return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+
+# XXX also show whether revisions are known to have bad blocks
 
 
 def ls(target):
-    infile = target
-    prefix = "%s.diff" % infile
+    backup = backy.backup.Backup(target)
+    revisions = backup.revisions.values()
+    revisions.sort(key=lambda r: r.timestamp)
 
-    diffs = sorted(glob.glob("%s.*" % prefix), reverse=True)
-    diffs = [
-        d for d in diffs
-        if not d.endswith(".index") and not d.endswith(".md5")]
+    total_blocks = 0
 
-    level = 0
-    diffs.insert(0, infile)
-    sumsize = 0
-    for diff in diffs:
-        mtime = os.path.getmtime(diff)
-        size = os.path.getsize(diff)
-        sumsize += size
-        datacreated = (datetime.datetime.fromtimestamp(mtime).
-                       strftime("%Y-%m-%d %H:%M:%S"))
-        # index_filename = "%s.index" % diff
-        print "Level %d from %s (%.1fGiB)" % (
-            level, datacreated, float(size)/(1024**3))
-        level += 1
+    print "== Revisions"
+    for r in revisions:
+        print "{}\t{}\t{}".format(
+            format_timestamp(r.timestamp),
+            len(r.blocks),
+            r.uuid)
+        total_blocks += len(r.blocks)
+
     print
-    print """\
-Statistics: Backup contains %d levels with a total size of %.1fGiB""" % (
-        level, float(sumsize)/(1024**3))
+    print "== Summary"
+    print "{} revisions with {} blocks".format(len(revisions), total_blocks)

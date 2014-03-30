@@ -9,7 +9,7 @@ class Patcher(object):
 
     matrix = None
 
-    def __init__(self, diff_filenames):
+    def __init__(self, diff_filenames, reader):
         """ diff_filenames are the data filenames, i.e. NOT the index filename.
             Example: ['img.diff.1', 'img.diff.2']
             The diffs are applied i reverse numerical order (i.e. 3,2,1)

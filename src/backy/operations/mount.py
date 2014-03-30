@@ -68,6 +68,8 @@ class BackyFS(fuse.Fuse):
     def readdir(self, path, offset):
         print "*** readdir", path, offset
         assert path == '/'
+        yield fuse.Direntry('.')
+        yield fuse.Direntry('..')
         for revision in self.backup.revisions:
             yield fuse.Direntry(revision)
 

@@ -1,25 +1,11 @@
-import glob
-import os
+import backy.backup
 
 
-def clean(target, revision, force=False):
-    infile = target
-    level = revision
+def clean(target, keep):
+    backup = backy.backup.Backup(target)
 
-    prefix = "%s.diff" % infile
-
-    num_keep = int(level)
-    if num_keep < 1 and not force:
-        raise ValueError("You must keep at least one diff.")
-
-    diffs = sorted(glob.glob("%s.*" % prefix), reverse=True)
-    diffs = [
-        d for d in diffs
-        if not d.endswith(".index") and not d.endswith(".md5")]
-
-    delete = diffs[num_keep:]
-    for d in delete:
-        files = sorted(glob.glob("%s*" % d))
-        for f in files:
-            print "Deleting: %s" % f
-            os.unlink(f)
+    revisions = backup.revisions.values()
+    revisions.sort(key=lambda r: r.timestamp)
+    for r in revisions[:-keep]:
+        print "Removing revision {}".format(r.uuid)
+        r.remove()

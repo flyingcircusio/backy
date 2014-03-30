@@ -36,8 +36,6 @@ Perform a backup.
 """)
     p.set_defaults(func=backy.operations.restore)
     p.add_argument('-r', '--revision', default=0, type=int)
-    p.add_argument('-n', '--checkonly',
-                   action='store_true', help='check only')
     p.add_argument('-f', '--force',
                    action='store_true', help='force, overwrite existing files')
     p.add_argument('source')
@@ -47,21 +45,22 @@ Perform a backup.
     p = subparsers.add_parser(
         'scrub',
         help="""\
-Verify all blocks of the backup against their checksums.
+Verify all blocks a revision against their checksums.
 """)
     p.set_defaults(func=backy.operations.scrub)
+    p.add_argument('-m', '--markbad',
+                   action='store_true', help='Persistently mark blocks as bad.')
     p.add_argument('target')
+    p.add_argument('revision')
 
     # clean
     p = subparsers.add_parser(
         'clean',
         help="""\
-Remove old incrementals.
+Remove old revisions.
 """)
     p.set_defaults(func=backy.operations.clean)
-    p.add_argument('-r', '--revision', default=0, type=int)
-    p.add_argument('-f', '--force',
-                   action='store_true', help='force, overwrite existing files')
+    p.add_argument('-k', '--keep', default=1, type=int)
     p.add_argument('target')
 
     # ls

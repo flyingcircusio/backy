@@ -19,9 +19,9 @@ def ls(target):
     for r in revisions:
         print "{}\t{}\t{}".format(
             format_timestamp(r.timestamp),
-            len(r.blocks),
+            len(r.blocksums),
             r.uuid)
-        total_blocks += len(r.blocks)
+        total_blocks += len(r.blocksums)
 
     print
     print "== Summary"

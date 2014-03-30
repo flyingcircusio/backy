@@ -73,6 +73,17 @@ List contents of backup.
     p.set_defaults(func=backy.operations.ls)
     p.add_argument('target')
 
+    # mount
+    p = subparsers.add_parser(
+        'mount',
+        help="""\
+FUSE-Mount the backup to get access to mountable block-image files
+from old revisions.
+""")
+    p.set_defaults(func=backy.operations.mount)
+    p.add_argument('backupfile')
+    p.add_argument('mountpoint')
+
     args = parser.parse_args()
 
     # Consume global arguments

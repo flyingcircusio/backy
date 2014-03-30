@@ -1,61 +1,51 @@
-- document file and directory formats
+SOON
 
-Storage format and operations
+- document file and directory formats
+- unit test coverage
+- update usage documentation
 
 - ability to thin out (merge) older deltas
-- keep multiple full backups?
-- fuse layer to enable direct (loop-mountable) access to old versions
-- ability to store blocks in a simple big pool using their hash?
--- may not be that helpful as we really want the primary full backups to 
-   be directly, low-level copyable
+- force creation of full backups
 - adapting to changing sizes is important to us as we resize volumes all the time
-- keep checksums for blocks for diffs, too, and also allow scrubbing?
-- use global revision checksums (sha) instead of enumerated revisions?
-  keep metadata for time-association?
+    - ensure resizing works properly over multiple deltas
 
-Reliability
-
-- scrubbing: full: consistency between block sums and number of blocks
+- scrubbing: consistency between block sums and number of blocks
 - scrubbing: chain of parent pointers
-- ensure resizing works properly over multiple deltas
+- does scrubbing validate the total checksum? (esp. for diffs?)
+
+
 - what are our error conditions and follow up errors if a backup fails?
     - i can see that we loose the whole history if we update an existing full into a new delta and fail in between. need multiple atomic steps?
 
-- allow hunting down and reintegrating replacements blocks if they do exist in some
-  copy
 - keep a log of all backy operations (incl. scrubbing, etc)
-- turn towards "a backup archive is a directory" instead of a base 
-  name
-- provide some level of filesystem integration to perform extended scrubbing, like running appropriate fscks.
 - provide reasonable status output and history for monitoring tools and auditing
 - implement posix locking on backup files to avoid conflicts
 - we should be fsyncing
 
-- add safety belt to avoid accidentally restoring into backup-managed files (e.g. by mixing up the parameters)
-- does scrubbing validate the total checksum?
-- can scrubbing especially for diffs validate block and total checksum?
-- allow restoring (but warn about) inconsistent images
+
+- implement a scheduler for multiple sources (that can verify)
+- simple compound call/configuration (e.g. for many rbd volumes)
 
 
-Optimizations
 
+LATER
+
+- fuse layer to enable direct (loop-mountable) access to old versions
 - get fadvice back
+- port gocept.directory "dynamic bytes" display
+
+
+
+FAR FUTURE / NOT SURE IDEAS
+
+- ability to store blocks in a simple big pool using their hash?
+-- may not be that helpful as we really want the primary full backups to 
+   be directly, low-level copyable
+- allow hunting down and reintegrating replacements blocks if they do 
+   exist in some copy
+- provide some level of filesystem integration to perform extended scrubbing, like running appropriate fscks.
 - implement detection which blocks are actually used by the filesystem and optionally limit backups (for thin provisioning)
   to those areas
 - check /proc, /sys or some other interface to detect which blocks were written to
 - make explicit use of Python file's buffer argument (it should be 0 or chunk I think, but definitely not line-based)
-
-Usability
-
-- port gocept.directory "dynamic bytes" display
-- reverse numeration of UI and filenames on disk sounds like it might be
-  confusing
-
-Scheduling
-
-- implement a scheduler for multiple sources (that can verify)
-
-Configuration
-
-- simple compound call/configuration (e.g. for many rbd volumes)
 

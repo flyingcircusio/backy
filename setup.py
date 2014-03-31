@@ -18,7 +18,6 @@ setup(
     install_requires=[
         'setuptools',
         'fallocate',
-        'fuse-python',
     ],
     extras_require={
         'test': [

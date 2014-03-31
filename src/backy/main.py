@@ -15,6 +15,8 @@ def main():
 
     parser.add_argument(
         '-v', '--verbose', action='store_true',  help='verbose output')
+    parser.add_argument(
+        '-b', '--backupdir', default='.')
 
     subparsers = parser.add_subparsers()
 

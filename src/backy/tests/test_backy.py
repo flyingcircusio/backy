@@ -1,6 +1,7 @@
 import os
 import backy
 import backy.operations
+import pytest
 
 
 def generate_test_data(target, size):
@@ -11,6 +12,7 @@ def generate_test_data(target, size):
     f.close()
 
 
+@pytest.mark.smoke
 def test_comprehensive_workflow(tmpdir):
     # These copies of data are intended to be different versions of the same
     # file.
@@ -76,15 +78,3 @@ def test_comprehensive_workflow(tmpdir):
     # Restore image1 from level 3
     backy.operations.restore(backup, restore_target, 3)
     assert open(source1, 'r').read() == open(restore_target, 'r').read()
-
-
-def test_scrub():
-    pass
-
-
-def test_ls():
-    pass
-
-
-def test_clean():
-    pass

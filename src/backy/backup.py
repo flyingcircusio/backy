@@ -40,14 +40,7 @@ class Backup(object):
         self.revision_history = self.revisions.values()
         self.revision_history.sort(key=lambda r: r.timestamp)
 
-    def init(self, source):
-        if not os.path.exists(self.path):
-            os.makedirs(self.path)
-        if os.path.exists(self.path + '/config'):
-            raise RuntimeError('Refusing initialize with existing config.')
-        json.dump({'chunksize': self.CHUNKSIZE,
-                   'source': source},
-                  open(self.path+'/config', 'wb'))
+    # Internal API
 
     def find_revision(self, spec):
         self._scan()
@@ -70,6 +63,17 @@ class Backup(object):
         else:
             result = [self.find_revision(spec)]
         return result
+
+    # Command API
+
+    def init(self, source):
+        if not os.path.exists(self.path):
+            os.makedirs(self.path)
+        if os.path.exists(self.path + '/config'):
+            raise RuntimeError('Refusing initialize with existing config.')
+        json.dump({'chunksize': self.CHUNKSIZE,
+                   'source': source},
+                  open(self.path+'/config', 'wb'))
 
     def ls(self):
         self._scan()

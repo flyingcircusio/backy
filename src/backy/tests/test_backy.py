@@ -7,9 +7,10 @@ import subprocess
 
 def generate_test_data(target, size):
     f = open(target, 'wb')
-    for chunk in range(size // backy.CHUNKSIZE):
-        f.write(os.urandom(backy.CHUNKSIZE))
-    f.write(os.urandom(size % backy.CHUNKSIZE))
+    block = 8*1024
+    for chunk in range(size // block):
+        f.write(os.urandom(block))
+    f.write(os.urandom(size % block))
     f.close()
 
 
@@ -26,7 +27,6 @@ def test_smoketest_internal(tmpdir):
 
     backup_dir = str(tmpdir / 'image1.backup')
     os.mkdir(backup_dir)
-
     backup = backy.backup.Backup(backup_dir)
 
     # Backup first state

@@ -154,7 +154,7 @@ class FullRevision(Revision):
         assert i == self.blocks
         assert not self._seen_last_chunk
 
-        if len(chunk) != backy.CHUNKSIZE:
+        if len(chunk) != self.backup.CHUNKSIZE:
             self._seen_last_chunk = True
 
         checksum = hashlib.md5(chunk).hexdigest()
@@ -163,14 +163,14 @@ class FullRevision(Revision):
 
         if self.blocksums.get(i) != checksum:
             if self.delta:
-                self._data.seek(i*backy.CHUNKSIZE)
+                self._data.seek(i*self.backup.CHUNKSIZE)
                 print "{:06d} | {} | STORE DELTA".format(i, self.blocksums[i])
-                old_chunk = self._data.read(backy.CHUNKSIZE)
+                old_chunk = self._data.read(self.backup.CHUNKSIZE)
                 self.delta.store(i, old_chunk)
                 self.delta.blocksums[i] = self.blocksums[i]
 
             print "{:06d} | {} | STORE MAIN".format(i, checksum)
-            self._data.seek(i*backy.CHUNKSIZE)
+            self._data.seek(i*self.backup.CHUNKSIZE)
             self._data.write(chunk)
             self.blocksums[i] = checksum
 
@@ -189,11 +189,11 @@ class FullRevision(Revision):
         self._data = open(self.filename, 'rb')
         i = 0
         while True:
-            chunk = self._data.read(backy.CHUNKSIZE)
+            chunk = self._data.read(self.backup.CHUNKSIZE)
             if not chunk:
                 break
             yield i, chunk
-            if len(chunk) != backy.CHUNKSIZE:
+            if len(chunk) != self.backup.CHUNKSIZE:
                 break
             i += 1
         if not i == self.blocks:
@@ -203,9 +203,9 @@ class FullRevision(Revision):
 
     def getChunk(self, i):
         f = open(self.filename, 'rb')
-        f.seek(i*backy.CHUNKSIZE)
+        f.seek(i*self.backup.CHUNKSIZE)
         # XXX check against stored checksum
-        return f.read(backy.CHUNKSIZE)
+        return f.read(self.backup.CHUNKSIZE)
 
     def migrate_to_delta(self):
         full = Revision.create('full', self.backup)
@@ -261,23 +261,24 @@ class DeltaRevision(Revision):
         f = open(self.filename, 'rb')
         blocksums = self.blocksums.keys()
         blocksums.sort()
-        f.seek(blocksums.index(i) * backy.CHUNKSIZE)
-        return f.read(backy.CHUNKSIZE)
+        f.seek(blocksums.index(i) * self.backup.CHUNKSIZE)
+        return f.read(self.backup.CHUNKSIZE)
 
 
 class Source(object):
 
     _size = 0
 
-    def __init__(self, filename):
+    def __init__(self, filename, backup):
         self.f = file(filename, "rb")
+        self.backup = backup
         # posix_fadvise(self.f.fileno(), 0, 0, POSIX_FADV_SEQUENTIAL)
 
     def iterchunks(self):
         i = 0
         self.f.seek(0)
         while True:
-            data = self.f.read(backy.CHUNKSIZE)
+            data = self.f.read(self.backup.CHUNKSIZE)
             if not data:
                 break
             print "{:06d} | {} | READ".format(
@@ -302,6 +303,8 @@ class Source(object):
 
 
 class Backup(object):
+
+    CHUNKSIZE = 4 * 1024**2
 
     def __init__(self, path):
         # The path identifies the newest backup. Additional files
@@ -363,7 +366,7 @@ class Backup(object):
 
     def backup(self, source):
         self._scan()
-        source = Source(source)
+        source = Source(source, self)
 
         if self.revision_history:
             previous = self.revision_history[-1]

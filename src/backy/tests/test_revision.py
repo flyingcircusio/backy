@@ -1,4 +1,5 @@
-from backy.backup import Revision, FullRevision, DeltaRevision, Backup
+from backy.revision import Revision, FullRevision, DeltaRevision
+from backy.backup import Backup
 import mock
 import os.path
 import pytest

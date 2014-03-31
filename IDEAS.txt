@@ -13,7 +13,6 @@ SOON
 - scrubbing: chain of parent pointers
 - does scrubbing validate the total checksum? (esp. for diffs?)
 
-
 - what are our error conditions and follow up errors if a backup fails?
     - i can see that we loose the whole history if we update an existing full into a new delta and fail in between. need multiple atomic steps?
 
@@ -22,10 +21,13 @@ SOON
 - implement posix locking on backup files to avoid conflicts
 - we should be fsyncing
 
-
 - implement a scheduler for multiple sources (that can verify)
-- simple compound call/configuration (e.g. for many rbd volumes)
 
+- simple compound call/configuration (e.g. for many rbd volumes)
+  to avoid overloading systems. e.g. by paying attention whether other backy processes are running (does posix have semaphores?)
+
+  alternatively we could try to limit reading/writing to a certain number
+  of blocks per second
 
 
 LATER

@@ -2,6 +2,7 @@ from backy.backup import Revision, FullRevision, DeltaRevision, Backup
 import mock
 import os.path
 import pytest
+import shutil
 import time
 
 
@@ -105,3 +106,79 @@ def test_store_delta_revision_data(tmpdir):
 {"parent": "asdf", "blocks": 3, "uuid": "asdf2", "blocksums": {"0": "asdf"}, \
 "timestamp": 25, "checksum": "cbd6de6dee", "type": "delta"}\
 """
+
+
+def test_scrub_full_consistent(tmpdir):
+    shutil.copytree(SAMPLE_DIR + '/scrub-consistent/',
+                    str(tmpdir / 'backup'))
+    backup = Backup(str(tmpdir / 'backup'))
+    revision = backup.find_revision('528f6c52-d4a6-4237-806a-78207688f511')
+    assert revision.type == 'full'
+    result = revision.scrub()
+    assert result == []
+
+
+def test_scrub_delta_consistent(tmpdir):
+    shutil.copytree(SAMPLE_DIR + '/scrub-consistent/',
+                    str(tmpdir / 'backup'))
+    backup = Backup(str(tmpdir / 'backup'))
+    revision = backup.find_revision('de8285c3-af53-4967-a257-e66ea24f1020')
+    assert revision.type == 'delta'
+    result = revision.scrub()
+    assert result == []
+
+
+def test_scrub_full_inconsistent(tmpdir, capsys):
+    shutil.copytree(SAMPLE_DIR + '/scrub-inconsistent/',
+                    str(tmpdir / 'backup'))
+    backup = Backup(str(tmpdir / 'backup'))
+    revision = backup.find_revision('528f6c52-d4a6-4237-806a-78207688f511')
+    assert revision.type == 'full'
+    result = revision.scrub()
+    assert result == [1]
+    backup._scan()
+    revision = backup.find_revision('528f6c52-d4a6-4237-806a-78207688f511')
+    assert revision.blocksums == {
+        0: 'e3b3dd4af7830bc49936c432757c0703',
+        1: 'bad:6ff52182dd6928ffb59e26615e505213',
+        2: 'f7e83d96381f32d558b532a3b22643ba',
+        3: '02d5693204eb61a9f1c234eef3d3b880'}
+    # running a second time shows that they have been marked already
+    result = revision.scrub()
+    assert result == [1]
+
+    out, err = capsys.readouterr()
+    assert """\
+Scrubbing 528f6c52-d4a6-4237-806a-78207688f511 ...
+Chunk 000001 is corrupt
+Marking corrupt chunks.
+Scrubbing 528f6c52-d4a6-4237-806a-78207688f511 ...
+Chunk 000001 is known as corrupt.
+Marking corrupt chunks.
+""" == out
+
+
+def test_scrub_delta_inconsistent(tmpdir, capsys):
+    shutil.copytree(SAMPLE_DIR + '/scrub-inconsistent/',
+                    str(tmpdir / 'backup'))
+    backup = Backup(str(tmpdir / 'backup'))
+    revision = backup.find_revision('de8285c3-af53-4967-a257-e66ea24f1020')
+    assert revision.type == 'delta'
+    result = revision.scrub()
+    assert result == [1]
+    backup._scan()
+    revision = backup.find_revision('de8285c3-af53-4967-a257-e66ea24f1020')
+    assert revision.blocksums == {1: u'bad:18d1ff02f24fdcd6dd680e93ba11920d'}
+    # running a second time shows that they have been marked already
+    result = revision.scrub()
+    assert result == [1]
+
+    out, err = capsys.readouterr()
+    assert """\
+Scrubbing de8285c3-af53-4967-a257-e66ea24f1020 ...
+Chunk 000001 is corrupt
+Marking corrupt chunks.
+Scrubbing de8285c3-af53-4967-a257-e66ea24f1020 ...
+Chunk 000001 is known as corrupt.
+Marking corrupt chunks.
+""" == str(out)

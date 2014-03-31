@@ -1,7 +1,7 @@
 import backy.backup
 import os
 import pytest
-import re
+from backy.tests import Ellipsis
 import subprocess
 
 
@@ -28,6 +28,7 @@ def test_smoketest_internal(tmpdir):
     backup_dir = str(tmpdir / 'image1.backup')
     os.mkdir(backup_dir)
     backup = backy.backup.Backup(backup_dir)
+    backup.init(source1)
 
     # Backup first state
     backup.backup(source1)
@@ -81,27 +82,6 @@ def test_smoketest_internal(tmpdir):
     # Restore image1 from level 3
     backup.restore(restore_target, 3)
     assert open(source1, 'r').read() == open(restore_target, 'r').read()
-
-
-class Ellipsis(object):
-
-    def __init__(self, ellipsis):
-        self.ellipsis = ellipsis
-        pattern = ellipsis.replace('...', '.+')
-        self.pattern = re.compile(pattern)
-
-    def __eq__(self, other):
-        assert isinstance(other, str)
-        if self.pattern.match(other):
-            return True
-        return False
-
-
-def test_ellipsis():
-    assert Ellipsis('...') == 'asdf'
-    assert Ellipsis('a...c') == 'abc'
-    assert Ellipsis('a...d') != 'abc'
-    assert Ellipsis('a...c...g') == 'abcdefg'
 
 
 @pytest.mark.smoke

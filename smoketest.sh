@@ -10,6 +10,8 @@ BACKUP=$( mktemp -d -t backy.test.XXXXX )
 mkdir ${BACKUP}/backup
 cd ${BACKUP}/backup
 
+$BACKY init ../original
+
 echo "Using ${BACKUP} as workspace."
 
 echo -n "Generating Test Data"
@@ -20,9 +22,9 @@ echo -n "."
 dd if=/dev/urandom of=$BACKUP/img_state3.img bs=1048576 count=20 2>/dev/null
 echo " Done."
 
-
 echo -n "Backing up img_state1.img. "
-$BACKY backup ../img_state1.img
+ln -sf img_state1.img ../original
+$BACKY backup
 echo "Done."
 
 echo -n "Restoring img_state1.img from level 0. "
@@ -43,7 +45,8 @@ rm $BACKUP/restore_*
 
 
 echo -n "Backing up img_state2.img. "
-$BACKY backup ../img_state2.img
+ln -sf img_state2.img ../original
+$BACKY backup
 echo "Done."
 
 echo -n "Restoring img_state2.img from level 0. "
@@ -77,10 +80,9 @@ rm $BACKUP/restore_*
 
 
 
-
-
 echo -n "Backing up img_state2.img again. "
-$BACKY backup ../img_state2.img
+ln -sf img_state2.img ../original
+$BACKY backup
 echo "Done."
 
 echo -n "Restoring img_state2.img from level 0. "
@@ -130,7 +132,8 @@ rm $BACKUP/restore_*
 
 
 echo -n "Backing up img_state3.img. "
-$BACKY backup ../img_state3.img
+ln -sf img_state3.img ../original
+$BACKY backup 
 echo "Done."
 
 echo -n "Restoring img_state3.img from level 0. "

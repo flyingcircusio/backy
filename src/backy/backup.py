@@ -77,8 +77,8 @@ class Revision(object):
         json.dump(metadata, open(self.info_filename, 'w'))
 
     def scrub(self, markbad=True):
+        bad = []
         print "Scrubbing {} ...".format(self.uuid)
-        hasbad = False
         for i, chunk in self.iterchunks():
             if i not in self.blocksums:
                 # XXX mark this revision as globally bad
@@ -86,18 +86,19 @@ class Revision(object):
                 continue
             if self.blocksums[i].startswith('bad:'):
                 print "Chunk {:06d} is known as corrupt.".format(i)
-                hasbad = True
+                bad.append(i)
                 continue
             if hashlib.md5(chunk).hexdigest() == self.blocksums[i]:
                 continue
-            hasbad = True
+            bad.append(i)
             print "Chunk {:06d} is corrupt".format(i)
             self.blocksums[i] = 'bad:{}'.format(self.blocksums[i])
         if markbad:
             print "Marking corrupt chunks."
             self.write_info()
-        if not hasbad:
+        if not bad:
             print "OK"
+        return bad
 
     def remove(self):
         os.unlink(self.filename)
@@ -310,9 +311,14 @@ class Backup(object):
         # The path identifies the newest backup. Additional files
         # will be named with suffixes.
         self.path = os.path.realpath(path)
-        self._scan()
 
     def _scan(self):
+        config = json.load(open(self.path + '/config'))
+        self.CHUNKSIZE = config['chunksize']
+        source = config['source']
+        source = os.path.join(self.path, source)
+        self.source = os.path.realpath(source)
+
         self.revisions = {}
 
         # Load all revision infos
@@ -322,6 +328,15 @@ class Backup(object):
 
         self.revision_history = self.revisions.values()
         self.revision_history.sort(key=lambda r: r.timestamp)
+
+    def init(self, source):
+        if not os.path.exists(self.path):
+            os.makedirs(self.path)
+        if os.path.exists(self.path + '/config'):
+            raise RuntimeError('Refusing initialize with existing config.')
+        json.dump({'chunksize': self.CHUNKSIZE,
+                   'source': source},
+                  open(self.path+'/config', 'wb'))
 
     def find_revision(self, spec):
         self._scan()
@@ -362,11 +377,14 @@ class Backup(object):
         print "{} revisions with {} blocks (~{} blocks/revision)".format(
             len(self.revisions),
             total_blocks,
-            total_blocks/len(self.revisions))
+            0 if not self.revisions else total_blocks/len(self.revisions))
 
-    def backup(self, source):
+    def backup(self, source=None):
         self._scan()
-        source = Source(source, self)
+        if source:
+            # This is a helper to support testing.
+            self.source = source
+        source = Source(self.source, self)
 
         if self.revision_history:
             previous = self.revision_history[-1]
@@ -381,11 +399,13 @@ class Backup(object):
 
         if os.path.exists(self.path+'/last'):
             os.unlink(self.path+'/last')
-        os.symlink(r.filename, self.path+'/last')
+        os.symlink(os.path.relpath(r.filename, self.path),
+                   self.path+'/last')
 
         if os.path.exists(self.path+'/last.backy'):
             os.unlink(self.path+'/last.backy')
-        os.symlink(r.info_filename, self.path+'/last.backy')
+        os.symlink(os.path.relpath(r.info_filename, self.path),
+                   self.path+'/last.backy')
 
     def clean(self, keep):
         self._scan()
@@ -396,6 +416,7 @@ class Backup(object):
     def restore(self, target, revision):
         self._scan()
         revision = self.find_revision(revision)
+        # XXX safety belt
         print "Restoring revision {}".format(revision.uuid)
         revision.restore(target)
 

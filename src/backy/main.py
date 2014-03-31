@@ -26,7 +26,6 @@ def main():
 Perform a backup.
 """)
     p.set_defaults(func='backup')
-    p.add_argument('source')
 
     # RESTORE
     p = subparsers.add_parser(
@@ -66,6 +65,15 @@ Remove old revisions.
 List contents of backup.
 """)
     p.set_defaults(func='ls')
+
+    # MOUNT
+    p = subparsers.add_parser(
+        'init',
+        help="""\
+Initialize backup for a <source> in the backup directory.
+""")
+    p.set_defaults(func='init')
+    p.add_argument('source')
 
     # MOUNT
     p = subparsers.add_parser(

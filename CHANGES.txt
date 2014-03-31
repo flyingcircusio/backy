@@ -2,7 +2,9 @@
 Changelog
 =========
 
-1.1a1.dev (unreleased)
-======================
+2.0a1 (unreleased)
+==================
+
+- More or less complete rewrite.
 
 - Initial open source import as provided by Daniel Kraft (D9T).

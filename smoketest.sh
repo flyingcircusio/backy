@@ -5,7 +5,7 @@ set -e
 HERE=$( cd $( dirname $0 ); pwd )
 BACKY="${HERE}/bin/backy"
 DIFF=/usr/bin/diff
-BACKUP=$( mktemp -d -t backy.test )
+BACKUP=$( mktemp -d -t backy.test.XXXXX )
 
 mkdir ${BACKUP}/backup
 cd ${BACKUP}/backup

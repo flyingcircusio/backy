@@ -1,10 +1,14 @@
 import backy.backup
 import errno
-import fuse
 import stat
 
-
-fuse.fuse_python_api = (0, 2)
+try:
+    import fuse
+    from fuse import Fuse
+    fuse.fuse_python_api = (0, 2)
+except ImportError:
+    class Fuse(object):
+        __is_not_really_fuse__ = True
 
 
 if not hasattr(__builtins__, 'bytes'):
@@ -23,11 +27,15 @@ class RevisionFile(object):
         raise OSError('Not writable.')
 
 
-class BackyFS(fuse.Fuse):
+class BackyFS(Fuse):
 
     file_class = RevisionFile
 
     def __init__(self, backupfile):
+        if self.__is_not_really_fuse__:
+            raise RuntimeError(
+                'fuse-python package not installed. '
+                'mounting not supported.')
         fuse.Fuse.__init__(self)
         self.backup = backy.backup.Backup(backupfile)
 

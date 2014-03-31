@@ -8,6 +8,7 @@ DIFF=/usr/bin/diff
 BACKUP=$( mktemp -d -t backy.test )
 
 mkdir ${BACKUP}/backup
+cd ${BACKUP}/backup
 
 echo "Using ${BACKUP} as workspace."
 
@@ -21,11 +22,11 @@ echo " Done."
 
 
 echo -n "Backing up img_state1.img. "
-$BACKY backup $BACKUP/img_state1.img $BACKUP/backup
+$BACKY backup ../img_state1.img
 echo "Done."
 
 echo -n "Restoring img_state1.img from level 0. "
-$BACKY restore -r 0 $BACKUP/backup $BACKUP/restore_state1.img
+$BACKY restore -r 0 ../restore_state1.img
 echo "Done."
 
 echo -n "Diffing restore_state1.img against img_state1.img. "
@@ -41,14 +42,12 @@ fi
 rm $BACKUP/restore_*
 
 
-
-
 echo -n "Backing up img_state2.img. "
-$BACKY backup $BACKUP/img_state2.img $BACKUP/backup
+$BACKY backup ../img_state2.img
 echo "Done."
 
 echo -n "Restoring img_state2.img from level 0. "
-$BACKY restore -r 0 $BACKUP/backup $BACKUP/restore_state2.img
+$BACKY restore -r 0 ../restore_state2.img
 echo "Done."
 
 echo -n "Diffing restore_state2.img against img_state2.img. "
@@ -61,7 +60,7 @@ else
 fi
 
 echo -n "Restoring img_state1.img from level 1. "
-$BACKY restore -r 1 $BACKUP/backup $BACKUP/restore_state1.img
+$BACKY restore -r 1 ../restore_state1.img
 echo "Done."
 
 echo -n "Diffing restore_state1.img against img_state1.img. "
@@ -81,11 +80,11 @@ rm $BACKUP/restore_*
 
 
 echo -n "Backing up img_state2.img again. "
-$BACKY backup $BACKUP/img_state2.img $BACKUP/backup
+$BACKY backup ../img_state2.img
 echo "Done."
 
 echo -n "Restoring img_state2.img from level 0. "
-$BACKY restore -r 0 $BACKUP/backup $BACKUP/restore_state2.img
+$BACKY restore -r 0 ../restore_state2.img
 echo "Done."
 
 echo -n "Diffing restore_state2.img against img_state2.img. "
@@ -100,7 +99,7 @@ fi
 rm $BACKUP/restore_state2.img
 
 echo -n "Restoring img_state2.img from level 1. "
-$BACKY restore -r 1 $BACKUP/backup $BACKUP/restore_state2.img
+$BACKY restore -r 1 ../restore_state2.img
 echo "Done."
 
 echo -n "Diffing restore_state2.img against img_state2.img. "
@@ -113,7 +112,7 @@ else
 fi
 
 echo -n "Restoring img_state1.img from level 2. "
-$BACKY restore -r 2 $BACKUP/backup  $BACKUP/restore_state1.img
+$BACKY restore -r 2 ../restore_state1.img
 echo "Done."
 
 echo -n "Diffing restore_state1.img against img_state1.img. "
@@ -131,11 +130,11 @@ rm $BACKUP/restore_*
 
 
 echo -n "Backing up img_state3.img. "
-$BACKY backup $BACKUP/img_state3.img $BACKUP/backup
+$BACKY backup ../img_state3.img
 echo "Done."
 
 echo -n "Restoring img_state3.img from level 0. "
-$BACKY restore -r 0 $BACKUP/backup $BACKUP/restore_state3.img
+$BACKY restore -r 0 ../restore_state3.img
 echo "Done."
 
 echo -n "Diffing restore_state3.img against img_state3.img. "
@@ -148,7 +147,7 @@ else
 fi
 
 echo -n "Restoring img_state2.img from level 1. "
-$BACKY restore -r 1 $BACKUP/backup $BACKUP/restore_state2.img
+$BACKY restore -r 1 ../restore_state2.img
 echo "Done."
 
 echo -n "Diffing restore_state2.img against img_state2.img. "
@@ -163,7 +162,7 @@ fi
 rm $BACKUP/restore_state2.img
 
 echo -n "Restoring img_state2.img from level 2. "
-$BACKY restore -r 2 $BACKUP/backup $BACKUP/restore_state2.img
+$BACKY restore -r 2 ../restore_state2.img
 echo "Done."
 
 echo -n "Diffing restore_state2.img against img_state2.img. "
@@ -176,7 +175,7 @@ else
 fi
 
 echo -n "Restoring img_state1.img from level 3. "
-$BACKY restore -r 3 $BACKUP/backup $BACKUP/restore_state1.img
+$BACKY restore -r 3 ../restore_state1.img
 echo "Done."
 
 echo -n "Diffing restore_state1.img against img_state1.img. "
@@ -188,13 +187,13 @@ else
     exit 2
 fi
 
-$BACKY scrub $BACKUP/backup all
+$BACKY scrub all
 
-$BACKY ls $BACKUP/backup
+$BACKY ls
 
-$BACKY clean $BACKUP/backup
+$BACKY clean
 
-$BACKY ls $BACKUP/backup
+$BACKY ls
 
 # cleanup
 rm -r $BACKUP

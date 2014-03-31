@@ -1,11 +1,10 @@
 # -*- encoding: utf-8 -*-
 
-# from fadvise import posix_fadvise, POSIX_FADV_SEQUENTIAL, POSIX_FADV_DONTNEED
 import argparse
+import backy.backup
+import logging
 import os
 import sys
-import backy.operations
-import logging
 
 
 def main():
@@ -20,68 +19,62 @@ def main():
 
     subparsers = parser.add_subparsers()
 
-    # backup
+    # BACKUP
     p = subparsers.add_parser(
         'backup',
         help="""\
 Perform a backup.
 """)
-    p.set_defaults(func=backy.operations.backup)
+    p.set_defaults(func='backup')
     p.add_argument('source')
-    p.add_argument('target')
 
-    # restore
+    # RESTORE
     p = subparsers.add_parser(
         'restore',
         help="""\
 Perform a backup.
 """)
-    p.set_defaults(func=backy.operations.restore)
+    p.set_defaults(func='restore')
     p.add_argument('-r', '--revision', default='last')
-    p.add_argument('backupdir')
-    p.add_argument('target')
+    p.add_argument('target', default=None)
 
-    # scrub
+    # SCRUB
     p = subparsers.add_parser(
         'scrub',
         help="""\
 Verify all blocks a revision against their checksums.
 """)
-    p.set_defaults(func=backy.operations.scrub)
+    p.set_defaults(func='scrub')
     p.add_argument('-m', '--markbad',
                    action='store_true',
                    help='Persistently mark blocks as bad.')
-    p.add_argument('target')
-    p.add_argument('revision')
+    p.add_argument('revision', default='all')
 
-    # clean
+    # CLEAN
     p = subparsers.add_parser(
         'clean',
         help="""\
 Remove old revisions.
 """)
-    p.set_defaults(func=backy.operations.clean)
+    p.set_defaults(func='clean')
     p.add_argument('-k', '--keep', default=1, type=int)
-    p.add_argument('target')
 
-    # ls
+    # LS
     p = subparsers.add_parser(
         'ls',
         help="""\
 List contents of backup.
 """)
-    p.set_defaults(func=backy.operations.ls)
-    p.add_argument('target')
+    p.set_defaults(func='ls')
 
-    # mount
+    # MOUNT
     p = subparsers.add_parser(
         'mount',
         help="""\
 FUSE-Mount the backup to get access to mountable block-image files
 from old revisions.
 """)
-    p.set_defaults(func=backy.operations.mount)
-    p.add_argument('backupfile')
+    p.set_defaults(func='mount')
     p.add_argument('mountpoint')
 
     args = parser.parse_args()
@@ -94,14 +87,17 @@ from old revisions.
     logging.basicConfig(
         stream=sys.stdout, level=level, format='%(message)s')
 
+    backup = backy.backup.Backup(args.backupdir)
+    func = getattr(backup, args.func)
+
     # Pass over to function
     func_args = dict(args._get_kwargs())
     del func_args['func']
     del func_args['verbose']
+    del func_args['backupdir']
 
     try:
-        args.func(**func_args)
-        # XXX print stats
+        func(**func_args)
         sys.exit(0)
     except Exception, e:
         logging.error('Unexpected exception')

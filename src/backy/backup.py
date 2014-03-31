@@ -1,10 +1,18 @@
 from glob import glob
 import backy
+import backy.fusefs
+import datetime
 import hashlib
 import json
-import uuid
-import time
 import os
+import os.path
+import sys
+import time
+import uuid
+
+
+def format_timestamp(ts):
+    return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
 
 class Revision(object):
@@ -69,6 +77,8 @@ class Revision(object):
         json.dump(metadata, open(self.info_filename, 'w'))
 
     def scrub(self, markbad=True):
+        print "Scrubbing {} ...".format(self.uuid)
+        hasbad = False
         for i, chunk in self.iterchunks():
             if i not in self.blocksums:
                 # XXX mark this revision as globally bad
@@ -76,20 +86,25 @@ class Revision(object):
                 continue
             if self.blocksums[i].startswith('bad:'):
                 print "Chunk {:06d} is known as corrupt.".format(i)
+                hasbad = True
                 continue
             if hashlib.md5(chunk).hexdigest() == self.blocksums[i]:
                 continue
+            hasbad = True
             print "Chunk {:06d} is corrupt".format(i)
             self.blocksums[i] = 'bad:{}'.format(self.blocksums[i])
         if markbad:
             print "Marking corrupt chunks."
             self.write_info()
+        if not hasbad:
+            print "OK"
 
     def remove(self):
         os.unlink(self.filename)
         os.unlink(self.info_filename)
 
     def restore(self, target):
+        target = os.path.realpath(target)
         assert not target.startswith(self.backup.path)
 
         target = open(target, 'wb')
@@ -291,7 +306,10 @@ class Backup(object):
     def __init__(self, path):
         # The path identifies the newest backup. Additional files
         # will be named with suffixes.
-        self.path = path
+        self.path = os.path.realpath(path)
+        self._scan()
+
+    def _scan(self):
         self.revisions = {}
 
         # Load all revision infos
@@ -302,8 +320,50 @@ class Backup(object):
         self.revision_history = self.revisions.values()
         self.revision_history.sort(key=lambda r: r.timestamp)
 
-    def backup(self, path):
-        source = Source(path)
+    def find_revision(self, spec):
+        self._scan()
+        if spec == 'last':
+            return self.revision_history[-1].uuid
+
+        try:
+            spec = int(spec)
+            return self.revision_history[-spec-1]
+        except ValueError:
+            return self.revisions[spec]
+
+        # "goto fail" - should never come here.
+        raise KeyError("Could not find revision %r" % spec)
+
+    def find_revisions(self, spec):
+        self._scan()
+        if spec == 'all':
+            result = self.revisions.values()
+        else:
+            result = [self.find_revision(spec)]
+        return result
+
+    def ls(self):
+        self._scan()
+        total_blocks = 0
+
+        print "== Revisions"
+        for r in self.revision_history:
+            print "{}\t{}\t{}".format(
+                format_timestamp(r.timestamp),
+                len(r.blocksums),
+                r.uuid)
+            total_blocks += len(r.blocksums)
+
+        print
+        print "== Summary"
+        print "{} revisions with {} blocks (~{} blocks/revision)".format(
+            len(self.revisions),
+            total_blocks,
+            total_blocks/len(self.revisions))
+
+    def backup(self, source):
+        self._scan()
+        source = Source(source)
 
         if self.revision_history:
             previous = self.revision_history[-1]
@@ -323,3 +383,28 @@ class Backup(object):
         if os.path.exists(self.path+'/last.backy'):
             os.unlink(self.path+'/last.backy')
         os.symlink(r.info_filename, self.path+'/last.backy')
+
+    def clean(self, keep):
+        self._scan()
+        for r in self.revision_history[:-keep]:
+            print "Removing revision {}".format(r.uuid)
+            r.remove()
+
+    def restore(self, target, revision):
+        self._scan()
+        revision = self.find_revision(revision)
+        print "Restoring revision {}".format(revision.uuid)
+        revision.restore(target)
+
+    def scrub(self, revision, markbad=False):
+        self._scan()
+        for r in self.find_revisions(revision):
+            r.scrub(markbad)
+
+    def mount(self, mountpoint):
+        self._scan()
+        fs = backy.fuse.BackyFS(self)
+        # XXX meh.
+        sys.argv = ['foo', '-d', mountpoint]
+        fs.parse(errex=1)
+        fs.main()

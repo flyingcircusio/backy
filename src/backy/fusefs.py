@@ -1,9 +1,7 @@
 import backy.backup
 import errno
 import fuse
-import logging
 import stat
-import sys
 
 
 fuse.fuse_python_api = (0, 2)
@@ -99,12 +97,3 @@ class BackyFS(fuse.Fuse):
         s.f_flag = 0
         s.f_namemax = 255
         return s
-
-
-def mount(backupfile, mountpoint):
-    logging.getLogger().setLevel(logging.DEBUG)
-    fs = BackyFS(backupfile)
-    # XXX meh.
-    sys.argv = ['foo', '-d', mountpoint]
-    fs.parse(errex=1)
-    fs.main()

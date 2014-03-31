@@ -8,6 +8,7 @@
     backy [-b <backupdir>] restore [-r|--revision <revision>] [target]
     backy [-b <backupdir>] scrub [-n|--checkonly]
     backy [-b <backupdir>] init
+    backy [-b <backupdir>] mount <mountpoint>
 
 ## Restore
 

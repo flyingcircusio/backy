@@ -23,6 +23,9 @@ setup(
     extras_require={
         'test': [
         ],
+        'fuse': [
+            'fuse-python',
+        ]
     },
     entry_points="""
         [console_scripts]

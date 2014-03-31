@@ -83,13 +83,6 @@ def test_smoketest_internal(tmpdir):
     assert open(source1, 'r').read() == open(restore_target, 'r').read()
 
 
-def match_ellipsis(pattern, compare):
-    pattern = pattern.replace('...', '.+')
-    pattern = re.compile(pattern)
-    if not pattern.match(compare):
-        raise AssertionError(pattern, compare)
-
-
 class Ellipsis(object):
 
     def __init__(self, ellipsis):

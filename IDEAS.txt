@@ -4,8 +4,12 @@ SOON
 - unit test coverage
 - update usage documentation
 
-- ability to thin out (merge) older deltas
-- force creation of full backups
+
+maintenance
+    - ability to thin out (merge) older deltas
+    - create historic full backups 
+
+
 - adapting to changing sizes is important to us as we resize volumes all the time
     - ensure resizing works properly over multiple deltas
 
@@ -21,16 +25,17 @@ SOON
 - implement posix locking on backup files to avoid conflicts
 - we should be fsyncing
 
-- implement a scheduler for multiple sources (that can verify)
-
 - simple compound call/configuration (e.g. for many rbd volumes)
   to avoid overloading systems. e.g. by paying attention whether other backy processes are running (does posix have semaphores?)
 
   alternatively we could try to limit reading/writing to a certain number
   of blocks per second
 
+- clean out incomplete backups
 
 LATER
+
+- scheduler
 
 - fuse layer to enable direct (loop-mountable) access to old versions
 - get fadvice back

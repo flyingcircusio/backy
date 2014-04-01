@@ -1,0 +1,51 @@
+# File formats
+
+All backup data of a single source is stored in one directory.
+
+This directory contains a number of files:
+
+* config
+* *uuid*
+* *uuid*.backy
+
+## Configuration (config)
+
+Stores per-source configuration data in JSON.
+
+Expected keys are:
+
+* blocksize - in bytes, 4MB by default, **must not** be changed once backups have started
+* source - path to the file or block device that should be backed up
+
+## Revision information (<uuid>.rev)
+
+Stores per-revision information in JSON.
+
+Expected keys are:
+
+* uuid - the UUID of the revision, should match the filename
+* timestamp - the date when the revision was created (when backup has begun)
+* checksum - the checksum of the complete source file corresponding to this revision
+* parent - the parent revision which this is based on (currently only used for delta revisions)
+* blocksums - a dict mapping block numbers to their block checksums (sparse for delta revisions)
+* blocks - number of total blocks in the file corresponding to this revision
+* type - "full" or "delta" indicating the type of the revision
+
+## Full backup data files (*uuid*)
+
+Contains all data of the source in identical form. Can be directly used, e.g.
+as loop mounts or by dd-ing back to the original device.
+
+## Delta backup files (*uuid*)
+
+Contains all changed blocks in a compact form. Maps block positions 
+by their block IDs.
+
+E.g. if a delta contains blocks 4,7,10, then the mapping will be :
+
+* 4 -> 1
+* 7 -> 2
+* 10 -> 3
+
+Mapped blocks' (1,2,3) data is then stored consecutively without
+additional metadata.

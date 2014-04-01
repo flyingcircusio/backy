@@ -1,3 +1,4 @@
+from backy.utils import SafeWritableFile
 import hashlib
 import json
 import os
@@ -36,7 +37,7 @@ class Revision(object):
 
     @classmethod
     def load(cls, file, backup):
-        metadata = json.load(open(file))
+        metadata = json.load(open(file, 'rb'))
         r = cls.select_type(metadata['type'])(
             metadata['uuid'], backup)
         r.timestamp = metadata['timestamp']
@@ -53,7 +54,7 @@ class Revision(object):
 
     @property
     def info_filename(self):
-        return self.filename + '.backy'
+        return self.filename + '.rev'
 
     def write_info(self):
         metadata = {
@@ -64,7 +65,8 @@ class Revision(object):
             'blocksums': self.blocksums,
             'blocks': self.blocks,
             'type': self.type}
-        json.dump(metadata, open(self.info_filename, 'w'))
+        with SafeWritableFile(self.info_filename) as f:
+            json.dump(metadata, f)
 
     def scrub(self, markbad=True):
         bad = []
@@ -98,18 +100,20 @@ class Revision(object):
         target = os.path.realpath(target)
         assert not target.startswith(self.backup.path)
 
-        target = open(target, 'wb')
-        checksum = hashlib.md5()
-        for i, chunk in self.iterchunks(True):
-            checksum.update(chunk)
-            print "{:06d} | - | RESTORE".format(i)
-            target.write(chunk)
+        # XXX safety belt? especially if target exists and is equal to source?
+        # Can't rename because targets may be device files.
+        with SafeWritableFile(target, rename=False) as target:
+            checksum = hashlib.md5()
+            for i, chunk in self.iterchunks(True):
+                checksum.update(chunk)
+                # use second column to show whether chunk was OK
+                print "{:06d} | - | RESTORE".format(i)
+                target.write(chunk)
+
         if checksum.hexdigest() != self.checksum:
             print "WARNING: restored with inconsistent checksum."
         else:
             print "Restored with matching checksum."
-        os.fsync(target.fileno())
-        target.close()
 
 
 class FullRevision(Revision):
@@ -138,7 +142,7 @@ class FullRevision(Revision):
 
         print "Starting to back up revision {}".format(self.uuid)
         if self.delta:
-            print "\t using delta revision {}".format(self.delta.uuid)
+            print "\t turning revision {} into delta".format(self.delta.uuid)
             self.delta.start()
 
     def store(self, i, chunk):
@@ -168,6 +172,8 @@ class FullRevision(Revision):
         self.blocks += 1
 
     def stop(self):
+        self._data.flush()
+        os.fsync(self._data)
         self._data.close()
         self._data = None
         self.checksum = self._checksum.hexdigest()
@@ -193,6 +199,7 @@ class FullRevision(Revision):
         self._data = None
 
     def getChunk(self, i):
+        # XXX When is this used?
         f = open(self.filename, 'rb')
         f.seek(i*self.backup.CHUNKSIZE)
         # XXX check against stored checksum
@@ -208,8 +215,7 @@ class FullRevision(Revision):
         previous.blocks = self.blocks
         previous.write_info()
 
-        os.link(self.filename, full.filename)
-        os.unlink(self.filename)
+        os.rename(self.filename, full.filename)
 
         full.delta = previous
         full.blocksums = self.blocksums
@@ -231,6 +237,8 @@ class DeltaRevision(Revision):
         self._data.write(chunk)
 
     def stop(self):
+        self._data.flush()
+        os.fsync(self._data)
         self._data.close()
         self._data = None
         self.write_info()

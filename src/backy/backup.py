@@ -1,3 +1,6 @@
+from backy.revision import Revision
+from backy.source import Source
+from backy.utils import SafeWritableFile
 from glob import glob
 import backy
 import backy.fusefs
@@ -6,8 +9,6 @@ import json
 import os
 import os.path
 import sys
-from backy.revision import Revision
-from backy.source import Source
 
 
 def format_timestamp(ts):
@@ -24,7 +25,7 @@ class Backup(object):
         self.path = os.path.realpath(path)
 
     def _scan(self):
-        config = json.load(open(self.path + '/config'))
+        config = json.load(open(self.path + '/config', 'rb'))
         self.CHUNKSIZE = config['chunksize']
         source = config['source']
         source = os.path.join(self.path, source)
@@ -33,7 +34,7 @@ class Backup(object):
         self.revisions = {}
 
         # Load all revision infos
-        for file in glob(self.path + '/*.backy'):
+        for file in glob(self.path + '/*.rev'):
             r = Revision.load(file, self)
             self.revisions[r.uuid] = r
 
@@ -71,9 +72,9 @@ class Backup(object):
             os.makedirs(self.path)
         if os.path.exists(self.path + '/config'):
             raise RuntimeError('Refusing initialize with existing config.')
-        json.dump({'chunksize': self.CHUNKSIZE,
-                   'source': source},
-                  open(self.path+'/config', 'wb'))
+        with SafeWritableFile(self.path+'/config') as f:
+            json.dump({'chunksize': self.CHUNKSIZE, 'source': source},
+                      f)
 
     def ls(self):
         self._scan()
@@ -117,10 +118,10 @@ class Backup(object):
         os.symlink(os.path.relpath(r.filename, self.path),
                    self.path+'/last')
 
-        if os.path.exists(self.path+'/last.backy'):
-            os.unlink(self.path+'/last.backy')
+        if os.path.exists(self.path+'/last.rev'):
+            os.unlink(self.path+'/last.rev')
         os.symlink(os.path.relpath(r.info_filename, self.path),
-                   self.path+'/last.backy')
+                   self.path+'/last.rev')
 
     def clean(self, keep):
         self._scan()

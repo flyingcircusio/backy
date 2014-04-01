@@ -43,7 +43,7 @@ def test_revision_create_delta():
 
 def test_load_full_sample1():
     backup = mock.Mock()
-    r = Revision.load(SAMPLE_DIR + '/full_sample1.backy', backup)
+    r = Revision.load(SAMPLE_DIR + '/full_sample1.rev', backup)
     assert r.uuid == 'asdf'
     assert r.timestamp == 20
     assert r.checksum == '6r7tf97ewt'
@@ -55,7 +55,7 @@ def test_load_full_sample1():
 
 def test_load_delta_sample1():
     backup = mock.Mock()
-    r = Revision.load(SAMPLE_DIR + '/delta_sample1.backy', backup)
+    r = Revision.load(SAMPLE_DIR + '/delta_sample1.rev', backup)
     assert r.uuid == 'asdf2'
     assert r.timestamp == 21
     assert r.checksum == '6r7tf97ewt'
@@ -70,7 +70,7 @@ def test_filenames_based_on_uuid_and_backup_dir():
     backup.path = '/srv/backup/foo'
     r = Revision('asdf', backup)
     assert r.filename == '/srv/backup/foo/asdf'
-    assert r.info_filename == '/srv/backup/foo/asdf.backy'
+    assert r.info_filename == '/srv/backup/foo/asdf.rev'
 
 
 def test_store_full_revision_data(tmpdir):

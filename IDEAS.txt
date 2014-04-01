@@ -25,9 +25,11 @@ maintenance (as part of running "backup" or as separate "maintenance" command)
 - allow rate-limitation on operations (e.g. max X blocks per seconds)
   to avoid overloading systems
 
-  allow checking whether a certain number of backy jobs are already 
+- allow checking whether a certain number of backy jobs are already 
   running to delay operations
 
+- dependency output: show which backups require which (and how many)
+  others to restore successfully
 
 LATER
 

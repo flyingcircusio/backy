@@ -50,7 +50,6 @@ Perform necessary maintenance tasks according to backup configuration:
 * merge deltas (into other deltas or full backups)
 * delete old revisions
 
-
 ### Restore sub-command
 
 Restore a given backup (most current by default) into the given location (or
@@ -63,6 +62,13 @@ Check consistency of specified revisions.
 ### Status sub-command
 
 Show backup inventory and provide summary information about backup health.
+
+## Revision specifications
+
+If a single revision is expected, you can specify full UUIDs,
+or numbers. Numbers specify the N-th newest revision (0 being the the newest, 1 the previous revision, and so on).
+
+If multiple revisions may be given you can pass a single revision (as described above) or the world 'all' to match all existing revisions.
 
 ## Examples
 

@@ -19,6 +19,15 @@ def main():
 
     subparsers = parser.add_subparsers()
 
+    # INIT
+    p = subparsers.add_parser(
+        'init',
+        help="""\
+Initialize backup for a <source> in the backup directory.
+""")
+    p.set_defaults(func='init')
+    p.add_argument('source')
+
     # BACKUP
     p = subparsers.add_parser(
         'backup',
@@ -26,6 +35,14 @@ def main():
 Perform a backup.
 """)
     p.set_defaults(func='backup')
+
+    # STATUS
+    p = subparsers.add_parser(
+        'status',
+        help="""\
+Show backup status. Show inventory and summary information.
+""")
+    p.set_defaults(func='status')
 
     # RESTORE
     p = subparsers.add_parser(
@@ -49,31 +66,14 @@ Verify all blocks a revision against their checksums.
                    help='Persistently mark blocks as bad.')
     p.add_argument('revision', default='all')
 
-    # CLEAN
+    # MAINTENANCE
     p = subparsers.add_parser(
-        'clean',
+        'maintenance',
         help="""\
-Remove old revisions.
+Perform maintenance: merge deltas and remove old backups according to schedule.
 """)
-    p.set_defaults(func='clean')
+    p.set_defaults(func='maintenance')
     p.add_argument('-k', '--keep', default=1, type=int)
-
-    # LS
-    p = subparsers.add_parser(
-        'ls',
-        help="""\
-List contents of backup.
-""")
-    p.set_defaults(func='ls')
-
-    # MOUNT
-    p = subparsers.add_parser(
-        'init',
-        help="""\
-Initialize backup for a <source> in the backup directory.
-""")
-    p.set_defaults(func='init')
-    p.add_argument('source')
 
     # MOUNT
     p = subparsers.add_parser(

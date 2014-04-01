@@ -192,11 +192,11 @@ fi
 
 $BACKY scrub all
 
-$BACKY ls
+$BACKY status
 
-$BACKY clean
+$BACKY maintenance
 
-$BACKY ls
+$BACKY status
 
 # cleanup
 rm -r $BACKUP

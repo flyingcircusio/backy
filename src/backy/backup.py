@@ -76,7 +76,7 @@ class Backup(object):
             json.dump({'chunksize': self.CHUNKSIZE, 'source': source},
                       f)
 
-    def ls(self):
+    def status(self):
         self._scan()
         total_blocks = 0
 
@@ -123,7 +123,7 @@ class Backup(object):
         os.symlink(os.path.relpath(r.info_filename, self.path),
                    self.path+'/last.rev')
 
-    def clean(self, keep):
+    def maintenance(self, keep):
         self._scan()
         for r in self.revision_history[:-keep]:
             print "Removing revision {}".format(r.uuid)

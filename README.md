@@ -1,20 +1,21 @@
+**This is work in progress. Parts of this file are currently fiction.**
+
 ## Synopsis
 
     backy --help
-    backy [-b <backupdir>] auto
-    backy [-b <backupdir>] status
+    backy [-b <backupdir>] init
     backy [-b <backupdir>] backup
-    backy [-b <backupdir>] clean [-r|--revision <revision>]
+    backy [-b <backupdir>] status
     backy [-b <backupdir>] restore [-r|--revision <revision>] [target]
     backy [-b <backupdir>] scrub [-n|--checkonly]
-    backy [-b <backupdir>] init
+    backy [-b <backupdir>] maintenance
     backy [-b <backupdir>] mount <mountpoint>
 
 ## Restore
 
-Restore latest image:
+Restore latest image back to the original source:
 
-    $ backy restore
+    $ backy restore 
 
 Restore previous image:
 
@@ -29,30 +30,39 @@ It supports regular verification of the stored data and is intended to be
 as simple as possible, support disaster recovery even with basic system tools
 (not using backy) and be easy to monitor.
 
-Once configured, everything you should need to do is run this as a cron-job:
+Once configured, everything you should need to do is run two cronjobs
+regularly:
 
-    $ backy -b /srv/backup/mynode auto
-
+    $ backy -b /srv/backup/mynode backup
+    $ backy -b /srv/backup/mynode maintenance
 
 ### Backup sub-command
 
-XXX
+Check whether a backup is needed according to schedule. If it is,
+then create a new full backup and turn the last backup into a delta.
 
-### Clean sub-command
+If no backup is needed, just exit silently.
 
-XXX
+### Maintenance sub-command
+
+Perform necessary maintenance tasks according to backup configuration:
+
+* merge deltas (into other deltas or full backups)
+* delete old revisions
+
 
 ### Restore sub-command
 
-XXX
+Restore a given backup (most current by default) into the given location (or
+back to the source if nothing is specified).
 
 ### Scrub sub-command
 
-XXX
+Check consistency of specified revisions.
 
-### List sub-command
+### Status sub-command
 
-XXX
+Show backup inventory and provide summary information about backup health.
 
 ## Examples
 
@@ -80,4 +90,3 @@ GPLv3
     $ bin/python bootstrap.py
     $ bin/buildout
     $ bin/py.test
-    $ ./smoketest.sh

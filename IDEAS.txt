@@ -1,7 +1,5 @@
 SOON
 
-- update usage documentation
-
 maintenance (as part of running "backup" or as separate "maintenance" command)
     - create historic full and merged delta backups 
     - ability to just trigger "backup" and have it not do anything if 

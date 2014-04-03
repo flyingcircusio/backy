@@ -10,14 +10,15 @@ def test_ceph_source(close, open, cmd):
     source = CephSource('test/test04', Mock())
     source.open()
     cmd.return_value = """\
-{"1": {"pool": "test", "name": "test04", "snap": "backy"}}\
+{"1": {"pool": "test", "name": "test04", "snap": "backy", \
+"device": "/dev/rbd1"}}\
 """
     source.close()
     cmd.assert_has_calls([
         call.cmd('rbd snap create test/test04@backy', shell=True).
         call.cmd('rbd map test/test04@backy', shell=True).
         call.cmd('rbd --format=json showmapped', shell=True).
-        call.cmd('rbd unmap test/test04@backy', shell=True).
+        call.cmd('rbd unmap /dev/rbd1', shell=True).
         call.cmd('rbd snap rm test/test04@backy', shell=True)])
 
 

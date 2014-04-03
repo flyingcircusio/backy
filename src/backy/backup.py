@@ -118,7 +118,7 @@ class Backup(object):
             for index, chunk in self.source.iterchunks():
                 r.store(index, chunk)
             r.stop()
-        except:  # Intentional bare except to support reliable cleanup
+        finally:
             self.source.close()
 
         if os.path.exists(self.path+'/last'):

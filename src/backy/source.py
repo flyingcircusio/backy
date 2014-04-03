@@ -84,9 +84,9 @@ class CephSource(Source):
                 continue
             if mapped['snap'] != 'backy':
                 continue
-            print ("Creating and mapping Ceph snapshot 'backy' for volume {}".
+            print ("Removing mapping Ceph snapshot 'backy' for volume {}".
                    format(self.ceph_volume))
-            cmd('rbd unmap {}@backy'.format(self.ceph_volume), shell=True)
+            cmd('rbd unmap {}'.format(mapped['device']), shell=True)
             cmd('rbd snap rm {}@backy'.format(self.ceph_volume), shell=True)
             break
         else:

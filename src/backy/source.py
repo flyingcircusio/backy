@@ -76,6 +76,8 @@ class CephSource(Source):
         super(CephSource, self).open()
 
     def close(self):
+        super(CephSource, self).close()
+
         rbdmap = json.loads(cmd('rbd --format=json showmapped', shell=True))
         for mapped in rbdmap.values():
             if mapped['pool'] != self.ceph_volume.split('/')[0]:
@@ -86,10 +88,9 @@ class CephSource(Source):
                 continue
             print ("Removing mapping Ceph snapshot 'backy' for volume {}".
                    format(self.ceph_volume))
+
             cmd('rbd unmap {}'.format(mapped['device']), shell=True)
             cmd('rbd snap rm {}@backy'.format(self.ceph_volume), shell=True)
             break
         else:
             print "ERROR: Could not find mapped RBD volume for unmapping!"
-
-        super(CephSource, self).close()

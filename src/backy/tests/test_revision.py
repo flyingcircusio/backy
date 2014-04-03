@@ -137,7 +137,7 @@ def test_scrub_full_inconsistent(tmpdir, capsys):
     assert revision.type == 'full'
     result = revision.scrub()
     assert result == [1]
-    backup._scan()
+    backup._scan_revisions()
     revision = backup.find_revision('528f6c52-d4a6-4237-806a-78207688f511')
     assert revision.blocksums == {
         0: 'e3b3dd4af7830bc49936c432757c0703',
@@ -167,7 +167,7 @@ def test_scrub_delta_inconsistent(tmpdir, capsys):
     assert revision.type == 'delta'
     result = revision.scrub()
     assert result == [1]
-    backup._scan()
+    backup._scan_revisions()
     revision = backup.find_revision('de8285c3-af53-4967-a257-e66ea24f1020')
     assert revision.blocksums == {1: u'bad:18d1ff02f24fdcd6dd680e93ba11920d'}
     # running a second time shows that they have been marked already

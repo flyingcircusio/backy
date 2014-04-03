@@ -31,7 +31,8 @@ def test_smoketest_internal(tmpdir):
     backup.init(source1)
 
     # Backup first state
-    backup.backup(source1)
+    backup.source.filename = source1
+    backup.backup()
 
     # Restore first state from level 0
     restore_target = str(tmpdir / 'image1.restore')
@@ -39,7 +40,8 @@ def test_smoketest_internal(tmpdir):
     assert open(source1, 'r').read() == open(restore_target, 'r').read()
 
     # Backup second state
-    backup.backup(source2)
+    backup.source.filename = source2
+    backup.backup()
 
     # Restore second state from level 0
     backup.restore(restore_target, 0)
@@ -50,7 +52,8 @@ def test_smoketest_internal(tmpdir):
     assert open(source1, 'r').read() == open(restore_target, 'r').read()
 
     # Backup second state again
-    backup.backup(source2)
+    backup.source.filename = source2
+    backup.backup()
 
     # Restore image2 from level 0 again
     backup.restore(restore_target, 0)
@@ -65,7 +68,8 @@ def test_smoketest_internal(tmpdir):
     assert open(source1, 'r').read() == open(restore_target, 'r').read()
 
     # Backup third state
-    backup.backup(source3)
+    backup.source.filename = source3
+    backup.backup()
 
     # Restore image3 from level 0
     backup.restore(restore_target, 0)

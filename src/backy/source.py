@@ -70,13 +70,13 @@ class CephSource(Source):
         print ("Creating and mapping Ceph snapshot 'backy' for volume {}".
                format(self.ceph_volume))
 
-        cmd('rbd snap create {}@backy'.format(self.ceph_volume))
-        cmd('rbd map {}@backy'.format(self.ceph_volume))
+        cmd('rbd snap create {}@backy'.format(self.ceph_volume), shell=True)
+        cmd('rbd map {}@backy'.format(self.ceph_volume), shell=True)
 
         super(CephSource, self).open()
 
     def close(self):
-        rbdmap = json.loads(cmd('rbd --format=json showmapped'))
+        rbdmap = json.loads(cmd('rbd --format=json showmapped', shell=True))
         for mapped in rbdmap.values():
             if mapped['pool'] != self.ceph_volume.split('/')[0]:
                 continue
@@ -86,8 +86,8 @@ class CephSource(Source):
                 continue
             print ("Creating and mapping Ceph snapshot 'backy' for volume {}".
                    format(self.ceph_volume))
-            cmd('rbd unmap {}@backy'.format(self.ceph_volume))
-            cmd('rbd snap rm {}@backy'.format(self.ceph_volume))
+            cmd('rbd unmap {}@backy'.format(self.ceph_volume), shell=True)
+            cmd('rbd snap rm {}@backy'.format(self.ceph_volume), shell=True)
             break
         else:
             print "ERROR: Could not find mapped RBD volume for unmapping!"

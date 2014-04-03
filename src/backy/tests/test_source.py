@@ -14,11 +14,11 @@ def test_ceph_source(close, open, cmd):
 """
     source.close()
     cmd.assert_has_calls([
-        call.cmd('rbd snap create test/test04@backy').
-        call.cmd('rbd map test/test04@backy').
-        call.cmd('rbd --format=json showmapped').
-        call.cmd('rbd unmap test/test04@backy').
-        call.cmd('rbd snap rm test/test04@backy')])
+        call.cmd('rbd snap create test/test04@backy', shell=True).
+        call.cmd('rbd map test/test04@backy', shell=True).
+        call.cmd('rbd --format=json showmapped', shell=True).
+        call.cmd('rbd unmap test/test04@backy', shell=True).
+        call.cmd('rbd snap rm test/test04@backy', shell=True)])
 
 
 def test_configure_ceph_source(tmpdir):

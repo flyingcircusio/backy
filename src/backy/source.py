@@ -1,8 +1,9 @@
+from subprocess import check_output
 import hashlib
-from subprocess import check_call
+import json
 import os.path
 
-cmd = check_call
+cmd = check_output
 
 
 class Source(object):
@@ -66,12 +67,29 @@ class CephSource(Source):
         self.ceph_volume = self.filename
         self.filename = '/dev/rbd/{}@backy'.format(self.ceph_volume)
 
+        print ("Creating and mapping Ceph snapshot 'backy' for volume {}".
+               format(self.ceph_volume))
+
         cmd('rbd snap create {}@backy'.format(self.ceph_volume))
         cmd('rbd map {}@backy'.format(self.ceph_volume))
 
         super(CephSource, self).open()
 
     def close(self):
-        cmd('rbd unmap {}@backy'.format(self.ceph_volume))
-        cmd('rbd snap rm {}@backy'.format(self.ceph_volume))
+        rbdmap = json.loads(cmd('rbd --format=json showmapped'))
+        for mapped in rbdmap.values():
+            if mapped['pool'] != self.ceph_volume.split('/')[0]:
+                continue
+            if mapped['name'] != self.ceph_volume.split('/')[1]:
+                continue
+            if mapped['snap'] != 'backy':
+                continue
+            print ("Creating and mapping Ceph snapshot 'backy' for volume {}".
+                   format(self.ceph_volume))
+            cmd('rbd unmap {}@backy'.format(self.ceph_volume))
+            cmd('rbd snap rm {}@backy'.format(self.ceph_volume))
+            break
+        else:
+            print "ERROR: Could not find mapped RBD volume for unmapping!"
+
         super(CephSource, self).close()

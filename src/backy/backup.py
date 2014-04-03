@@ -30,9 +30,11 @@ class Backup(object):
             return
         config = json.load(open(self.path + '/config', 'rb'))
         self.CHUNKSIZE = config['chunksize']
-        source = config['source']
-        source = os.path.join(self.path, source)
-        self.source = Source(os.path.realpath(source), self)
+
+        self.source = Source.configure(
+            config.get('source-type', Source.type_),
+            config['source'],
+            self)
 
     def _scan_revisions(self):
         self.revisions = {}
@@ -76,7 +78,9 @@ class Backup(object):
         if os.path.exists(self.path + '/config'):
             raise RuntimeError('Refusing initialize with existing config.')
         with SafeWritableFile(self.path+'/config') as f:
-            json.dump({'chunksize': self.CHUNKSIZE, 'source': source},
+            json.dump({'chunksize': self.CHUNKSIZE,
+                       'source': source,
+                       'source-type': Source.type_},
                       f)
         self._configure()
 

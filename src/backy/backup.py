@@ -23,16 +23,19 @@ class Backup(object):
         # The path identifies the newest backup. Additional files
         # will be named with suffixes.
         self.path = os.path.realpath(path)
+        self._configure()
 
-    def _scan(self):
+    def _configure(self):
+        if not os.path.exists(self.path + '/config'):
+            return
         config = json.load(open(self.path + '/config', 'rb'))
         self.CHUNKSIZE = config['chunksize']
         source = config['source']
         source = os.path.join(self.path, source)
-        self.source = os.path.realpath(source)
+        self.source = Source(os.path.realpath(source), self)
 
+    def _scan_revisions(self):
         self.revisions = {}
-
         # Load all revision infos
         for file in glob(self.path + '/*.rev'):
             r = Revision.load(file, self)
@@ -44,7 +47,7 @@ class Backup(object):
     # Internal API
 
     def find_revision(self, spec):
-        self._scan()
+        self._scan_revisions()
         if spec == 'last':
             return self.revision_history[-1].uuid
 
@@ -58,7 +61,7 @@ class Backup(object):
         raise KeyError("Could not find revision %r" % spec)
 
     def find_revisions(self, spec):
-        self._scan()
+        self._scan_revisions()
         if spec == 'all':
             result = self.revisions.values()
         else:
@@ -75,9 +78,10 @@ class Backup(object):
         with SafeWritableFile(self.path+'/config') as f:
             json.dump({'chunksize': self.CHUNKSIZE, 'source': source},
                       f)
+        self._configure()
 
     def status(self):
-        self._scan()
+        self._scan_revisions()
         total_blocks = 0
 
         print "== Revisions"
@@ -95,12 +99,8 @@ class Backup(object):
             total_blocks,
             0 if not self.revisions else total_blocks/len(self.revisions))
 
-    def backup(self, source=None):
-        self._scan()
-        if source:
-            # This is a helper to support testing.
-            self.source = source
-        source = Source(self.source, self)
+    def backup(self):
+        self._scan_revisions()
 
         if self.revision_history:
             previous = self.revision_history[-1]
@@ -108,10 +108,14 @@ class Backup(object):
         else:
             r = Revision.create('full', self)
 
-        r.start(source.size)
-        for index, chunk in source.iterchunks():
-            r.store(index, chunk)
-        r.stop()
+        self.source.open()
+        try:
+            r.start(self.source.size)
+            for index, chunk in self.source.iterchunks():
+                r.store(index, chunk)
+            r.stop()
+        except:  # Intentional bare except to support reliable cleanup
+            self.source.close()
 
         if os.path.exists(self.path+'/last'):
             os.unlink(self.path+'/last')
@@ -124,25 +128,25 @@ class Backup(object):
                    self.path+'/last.rev')
 
     def maintenance(self, keep):
-        self._scan()
+        self._scan_revisions()
         for r in self.revision_history[:-keep]:
             print "Removing revision {}".format(r.uuid)
             r.remove()
 
     def restore(self, target, revision):
-        self._scan()
+        self._scan_revisions()
         revision = self.find_revision(revision)
         # XXX safety belt
         print "Restoring revision {}".format(revision.uuid)
         revision.restore(target)
 
     def scrub(self, revision, markbad=False):
-        self._scan()
+        self._scan_revisions()
         for r in self.find_revisions(revision):
             r.scrub(markbad)
 
     def mount(self, mountpoint):
-        self._scan()
+        self._scan_revisions()
         fs = backy.fuse.BackyFS(self)
         # XXX meh.
         sys.argv = ['foo', '-d', mountpoint]

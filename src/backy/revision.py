@@ -109,6 +109,8 @@ class Revision(object):
                 # use second column to show whether chunk was OK
                 print "{:06d} | - | RESTORE".format(i)
                 target.write(chunk)
+                # XXX need real throttling and fadvise back.
+                time.sleep(0.1)
 
         if checksum.hexdigest() != self.checksum:
             print "WARNING: restored with inconsistent checksum."

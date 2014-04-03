@@ -1,4 +1,19 @@
+Immediate for gocept internal testing release
+
+- simple plugin option to allow preparing/unpreparing the source:
+
+  - snapshotting and mapping/unmapping before and after backup
+
+- simple schedule that only keeps the last 7 days of incrementals
+
+- mark backup data files as a-w
+
+
 SOON
+
+- sparse files und 0 blöcke filtern
+
+  - kann man später wieder löcher in files schießen?
 
 maintenance (as part of running "backup" or as separate "maintenance" command)
     - create historic full and merged delta backups 
@@ -30,6 +45,8 @@ maintenance (as part of running "backup" or as separate "maintenance" command)
 
 - dependency output: show which backups require which (and how many)
   others to restore successfully
+
+
 
 LATER
 

@@ -14,3 +14,4 @@ htmlcov/
 report.xml
 *.pyc
 *.sublime*
+lib64

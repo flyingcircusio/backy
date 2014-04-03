@@ -6,7 +6,7 @@ Immediate for gocept internal testing release
 - mark backup data files as a-w
 
 
-SOON
+SOONhg
 
 - sparse files und 0 blöcke filtern
 
@@ -16,12 +16,12 @@ SOON
 
   - evt. als maintenance task auch 4k blöcke später wieder "freischießen"
 
-- implement "undo/redolog" style master full backup creation to 
+- implement "undo/redolog" style master full backup creation to
   avoid accidental corruption
 
 maintenance (as part of running "backup" or as separate "maintenance" command)
-    - create historic full and merged delta backups 
-    - ability to just trigger "backup" and have it not do anything if 
+    - create historic full and merged delta backups
+    - ability to just trigger "backup" and have it not do anything if
       the last backup is sufficiently new
     - delete backups according to schedule
     - clean out incorrect backups
@@ -44,7 +44,7 @@ maintenance (as part of running "backup" or as separate "maintenance" command)
 - allow rate-limitation on operations (e.g. max X blocks per seconds)
   to avoid overloading systems
 
-- allow checking whether a certain number of backy jobs are already 
+- allow checking whether a certain number of backy jobs are already
   running to delay operations
 
 - dependency output: show which backups require which (and how many)
@@ -67,7 +67,7 @@ LATER
 QUESTIONABLE IDEAS
 
 - ability to store blocks in a simple big pool using their hash?
--- may not be that helpful as we really want the primary full backups to 
+-- may not be that helpful as we really want the primary full backups to
    be directly, low-level copyable
 
 - provide some level of filesystem integration to perform extended scrubbing, like running appropriate fscks

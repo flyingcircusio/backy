@@ -1,8 +1,9 @@
+from backy.tests import Ellipsis
 import backy.backup
 import os
 import pytest
-from backy.tests import Ellipsis
 import subprocess
+import time
 
 
 def generate_test_data(target, size):
@@ -43,6 +44,15 @@ def test_smoketest_internal(tmpdir):
     backup.source.filename = source2
     backup.backup()
 
+    # Assert that nothing happened: 24 hours interval by default
+    backup._scan_revisions()
+    assert len(backup.revisions) == 1
+
+    # Set interval to 0 to let tests continue
+    backup.INTERVAL = 0
+    time.sleep(1)
+    backup.backup()
+
     # Restore second state from level 0
     backup.restore(restore_target, 0)
     assert open(source2, 'r').read() == open(restore_target, 'r').read()
@@ -52,6 +62,7 @@ def test_smoketest_internal(tmpdir):
     assert open(source1, 'r').read() == open(restore_target, 'r').read()
 
     # Backup second state again
+    time.sleep(1)
     backup.source.filename = source2
     backup.backup()
 

@@ -10,7 +10,10 @@ BACKUP=$( mktemp -d -t backy.test.XXXXX )
 mkdir ${BACKUP}/backup
 cd ${BACKUP}/backup
 
-$BACKY init ../original
+# $BACKY init ../original
+cat > config <<EOF
+{"source": "../original", "chunksize": 4194304, "interval": 0}
+EOF
 
 echo "Using ${BACKUP} as workspace."
 
@@ -133,7 +136,7 @@ rm $BACKUP/restore_*
 
 echo -n "Backing up img_state3.img. "
 ln -sf img_state3.img ../original
-$BACKY backup 
+$BACKY backup
 echo "Done."
 
 echo -n "Restoring img_state3.img from level 0. "

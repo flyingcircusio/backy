@@ -9,6 +9,7 @@ import json
 import os
 import os.path
 import sys
+import time
 
 
 def format_timestamp(ts):
@@ -17,7 +18,8 @@ def format_timestamp(ts):
 
 class Backup(object):
 
-    CHUNKSIZE = 4 * 1024**2
+    CHUNKSIZE = 4 * 1024**2  # 4MiB
+    INTERVAL = 24 * 60 * 60  # 1 day
 
     def __init__(self, path):
         # The path identifies the newest backup. Additional files
@@ -30,6 +32,7 @@ class Backup(object):
             return
         config = json.load(open(self.path + '/config', 'rb'))
         self.CHUNKSIZE = config['chunksize']
+        self.INTERVAL = config.get('interval', self.INTERVAL)
 
         self.source = Source.configure(
             config.get('source-type', Source.type_),
@@ -108,6 +111,9 @@ class Backup(object):
 
         if self.revision_history:
             previous = self.revision_history[-1]
+            if time.time() - previous.timestamp < self.INTERVAL:
+                print "No backup required."
+                return
             r = previous.migrate_to_delta()
         else:
             r = Revision.create('full', self)

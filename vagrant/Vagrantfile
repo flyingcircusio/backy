@@ -1,0 +1,17 @@
+Vagrant.configure("2") do |config|
+
+  config.vm.define :ceph do |role|
+    role.vm.box = "hashicorp/precise64"
+    role.vm.network :private_network, ip: "192.168.251.100"
+    role.vm.hostname = "ceph"
+    role.vm.provision :shell, :path => "ceph-server.sh"
+  end
+
+  config.vm.define :client do |role|
+    role.vm.box = "hashicorp/precise64"
+    role.vm.hostname = "ceph-client"
+    role.vm.provision :shell, :path => "ceph-client.sh"
+    role.vm.network :private_network, ip: "192.168.251.101"
+  end
+
+end

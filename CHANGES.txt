@@ -5,6 +5,7 @@ Changelog
 2.0a1 (unreleased)
 ==================
 
-- More or less complete rewrite.
+- More or less complete rewrite expecting a copy-on-write filesystem as the
+  target.
 
 - Initial open source import as provided by Daniel Kraft (D9T).

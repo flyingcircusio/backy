@@ -22,15 +22,12 @@ setup(
     extras_require={
         'test': [
         ],
-        'fuse': [
-            'fuse-python',
-        ]
     },
     entry_points="""
         [console_scripts]
             backy = backy.main:main
     """,
-    author='Daniel Kraft <daniel.kraft@d9t.de>',
+    author='Daniel Kraft <daniel.kraft@d9t.de>, Christian Theune <ct@gocept.com>',
     author_email='daniel.kraft@d9t.de',
     license='GPL 3',
     url='https://bitbucket.org/ctheune/backy/',
@@ -38,9 +35,9 @@ setup(
     classifiers="""\
 License :: OSI Approved :: GPL
 Programming Language :: Python
-Programming Language :: Python :: 2
-Programming Language :: Python :: 2.7
-Programming Language :: Python :: 2 :: Only
+Programming Language :: Python :: 3
+Programming Language :: Python :: 3.3
+Programming Language :: Python :: 3 :: Only
 """[:-1].split('\n'),
     description=__doc__.strip(),
     long_description='\n\n'.join(open(project_path(name)).read() for name in (

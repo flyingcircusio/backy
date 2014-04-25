@@ -12,7 +12,7 @@ cd ${BACKUP}/backup
 
 # $BACKY init ../original
 cat > config <<EOF
-{"source": "../original", "chunksize": 4194304, "interval": 0}
+{"source": "../original", "chunksize": 4194304, "source-type": "plain", "interval": 0}
 EOF
 
 echo "Using ${BACKUP} as workspace."
@@ -202,4 +202,6 @@ $BACKY maintenance
 $BACKY status
 
 # cleanup
-rm -r $BACKUP
+if [ "$1" != "keep" ]; then
+    rm -rf $BACKUP
+fi

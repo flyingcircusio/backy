@@ -1,59 +1,82 @@
 **This is work in progress. Parts of this file are currently fiction.**
 
+Backy is a block-based backup utility for virtual machines (i.e. volume files).
+
+Backy is intended to be:
+
+* space-, time-, and network-efficient
+* trivial to restore
+* reliable
+
+To achieve this, we rely on:
+
+* using a copy-on-write filesystem (like ZFS or btrfs) as the target
+  filesystem to achieve space-efficiency
+* using a snapshot-capable main storage for our volumes (e.g.
+  Ceph, LVM, ...) that allows easy extraction of changes between snapshots
+* leverage proven, existing low-level tools
+* keep the code-base small, simple, and well-tested
+
 ## Synopsis
 
     backy --help
     backy [-b <backupdir>] init
     backy [-b <backupdir>] backup
     backy [-b <backupdir>] status
-    backy [-b <backupdir>] restore [-r|--revision <revision>] [target]
-    backy [-b <backupdir>] scrub [-n|--checkonly]
-    backy [-b <backupdir>] maintenance
-    backy [-b <backupdir>] mount <mountpoint>
 
-## Restore
+## Disaster recovery / full restore
 
-Restore latest image back to the original source:
+The most important question is: I screwed up - how do I get my data back?
 
-    $ backy restore 
+Here's the fast answer to make a full restore of the most recent backup:
 
-Restore previous image:
+    $ cd /srv/backy/my-virtual-machine
+    $ dd if=latest of=/srv/kvm/my-virtual-machine bs=4048000
 
-    $ backy restore -r 1
+If you like to pick a specific version, it's only a little more effort:
 
-## Description
+    $ cd /srv/backy/my-virtual-machine
+    $ backy status
+    == Revisions
+    2014-04-25 10:07:51 96d8b001-0ffc-4149-8c35-cf003f5638d6    20.00 GiB   252s
+    2014-04-25 10:13:20 d95e4f6c-cfef-48ee-aec2-d7c9e91c1bec    24.34 MiB   13s
 
-Backy backs up block devices (or large files) into archives and keeps
-"reverse incremental" deltas of older versions.
+    == Summary
+    2 revisions
+    20.02 GiB data (estimated)
+    $ dd if=96d8b001-0ffc-4149-8c35-cf003f5638d6 of=/srv/kvm/my-virtual-machine bs=4048000
 
-It supports regular verification of the stored data and is intended to be
-as simple as possible, support disaster recovery even with basic system tools
-(not using backy) and be easy to monitor.
+## Restoring individual files
 
-Once configured, everything you should need to do is run two cronjobs
-regularly:
+The image files are exact copies of the data from the virtual disks. You can use regular Linux tools to interact with them:
 
-    $ backy -b /srv/backup/mynode backup
-    $ backy -b /srv/backup/mynode maintenance
+    $ cd /srv/backy/my-virtual-machine
+    $ ls -lah latest
+    lrwxrwxrwx 1 root root  36 Apr 25 10:13 last -> d95e4f6c-cfef-48ee-aec2-d7c9e91c1bec
+    $ kpartx -av d95e4f6c-cfef-48ee-aec2-d7c9e91c1bec
+    add map loop0p1 (253:9): 0 41934815 linear /dev/loop0 8192
+    $ mkdir /root/restore
+    $ mount -o ro /dev/mapper/loop0p1 /root/restore
+    $ cd /root/restore
+    $ ls
+    bin  boot  dev  etc  home  lib  lost+found  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
+
+To clean up:
+
+    $ cd /srv/backy/my-virtual-machine
+    $ umount /root/restore
+    $ kpartx -av d95e4f6c-cfef-48ee-aec2-d7c9e91c1bec
+
 
 ### Backup sub-command
 
-Check whether a backup is needed according to schedule. If it is,
-then create a new full backup and turn the last backup into a delta.
+Do a backup.
+
+This includes checking whether a backup is needed, cleaning up from previous
+incomplete backups, and removing backups that are no longer needed according to
+the schedule.
 
 If no backup is needed, just exit silently.
-
-### Maintenance sub-command
-
-Perform necessary maintenance tasks according to backup configuration:
-
-* merge deltas (into other deltas or full backups)
-* delete old revisions
-
-### Restore sub-command
-
-Restore a given backup (most current by default) into the given location (or
-back to the source if nothing is specified).
 
 ### Scrub sub-command
 
@@ -65,10 +88,12 @@ Show backup inventory and provide summary information about backup health.
 
 ## Revision specifications
 
-If a single revision is expected, you can specify full UUIDs,
-or numbers. Numbers specify the N-th newest revision (0 being the the newest, 1 the previous revision, and so on).
+If a command expects a single revision, you can specify full UUIDs, or numbers.
+Numbers specify the N-th newest revision (0 being the the newest, 1 the
+previous revision, and so on).
 
-If multiple revisions may be given you can pass a single revision (as described above) or the world 'all' to match all existing revisions.
+If multiple revisions may be given you can pass a single revision (as described
+above) or the world 'all' to match all existing revisions.
 
 ## Examples
 
@@ -90,9 +115,13 @@ GPLv3
 
 ## Hacking
 
+Backy is intended to be compatible with Python 3.2 and 3.3. It is expected to
+work properly on Linux and Mac OS X, even though specific backends may not be
+avaible on some platforms.
+
     $ hg clone https://bitbucket.org/ctheune/backy
     $ cd backy
-    $ virtualenv --python=python2.7 .
+    $ virtualenv --python=python3.3 .
     $ bin/python bootstrap.py
     $ bin/buildout
     $ bin/py.test

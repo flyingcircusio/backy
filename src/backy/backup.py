@@ -1,15 +1,15 @@
 from backy.revision import Revision
-from backy.source import Source
-from backy.utils import SafeWritableFile
+from backy.source import select_source
+from backy.utils import SafeWritableFile, format_bytes_flexible
 from glob import glob
-import backy
-import backy.fusefs
 import datetime
 import json
 import os
 import os.path
-import sys
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def format_timestamp(ts):
@@ -18,7 +18,6 @@ def format_timestamp(ts):
 
 class Backup(object):
 
-    CHUNKSIZE = 4 * 1024**2  # 4MiB
     INTERVAL = 24 * 60 * 60  # 1 day
 
     def __init__(self, path):
@@ -30,14 +29,11 @@ class Backup(object):
     def _configure(self):
         if not os.path.exists(self.path + '/config'):
             return
-        config = json.load(open(self.path + '/config', 'rb'))
-        self.CHUNKSIZE = config['chunksize']
+        config = json.load(open(self.path + '/config', 'r', encoding='utf-8'))
         self.INTERVAL = config.get('interval', self.INTERVAL)
 
-        self.source = Source.configure(
-            config.get('source-type', Source.type_),
-            config['source'],
-            self)
+        self.source = select_source(
+            config.get('source-type'))(config['source'])
 
     def _scan_revisions(self):
         self.revisions = {}
@@ -46,7 +42,7 @@ class Backup(object):
             r = Revision.load(file, self)
             self.revisions[r.uuid] = r
 
-        self.revision_history = self.revisions.values()
+        self.revision_history = list(self.revisions.values())
         self.revision_history.sort(key=lambda r: r.timestamp)
 
     # Internal API
@@ -80,85 +76,61 @@ class Backup(object):
             os.makedirs(self.path)
         if os.path.exists(self.path + '/config'):
             raise RuntimeError('Refusing initialize with existing config.')
+
+        pool, image = source.split('/')
         with SafeWritableFile(self.path+'/config') as f:
-            json.dump({'chunksize': self.CHUNKSIZE,
-                       'source': source,
-                       'source-type': Source.type_},
-                      f)
+            d = json.dumps({'source': {'pool': pool, 'image': image},
+                           'source-type': 'ceph-rbd'})
+            d = d.encode('utf-8')
+            f.write(d)
         self._configure()
 
     def status(self):
         self._scan_revisions()
-        total_blocks = 0
 
-        print "== Revisions"
+        total_bytes = 0
+
+        print("== Revisions")
         for r in self.revision_history:
-            print "{}\t{}\t{}".format(
+            total_bytes += r.stats.get('bytes_written', 0)
+            print("{0}\t{1}\t{2}\t{3:d}s".format(
                 format_timestamp(r.timestamp),
-                len(r.blocksums),
-                r.uuid)
-            total_blocks += len(r.blocksums)
+                r.uuid,
+                format_bytes_flexible(r.stats.get('bytes_written', 0)),
+                int(r.stats.get('duration', 0))))
 
-        print
-        print "== Summary"
-        print "{} revisions with {} blocks (~{} blocks/revision)".format(
-            len(self.revisions),
-            total_blocks,
-            0 if not self.revisions else total_blocks/len(self.revisions))
+        print()
+        print("== Summary")
+        print("{} revisions".format(len(self.revisions)))
+        print("{} data (estimated)".format(
+            format_bytes_flexible(total_bytes)))
 
     def backup(self):
         self._scan_revisions()
 
+        # Clean-up incomplete revisions
+        for revision in self.revision_history:
+            if 'duration' not in revision.stats:
+                logger.info('Removing incomplete revision {}'.
+                            format(revision.uuid))
+                revision.remove()
+
+        self._scan_revisions()
+
+        start = time.time()
+
+        new_revision = Revision.create(self)
         if self.revision_history:
-            previous = self.revision_history[-1]
-            if time.time() - previous.timestamp < self.INTERVAL:
-                print "No backup required."
-                return
-            r = previous.migrate_to_delta()
-        else:
-            r = Revision.create('full', self)
+            new_revision.parent = self.revision_history[-1].uuid
+        new_revision.materialize()
 
-        self.source.open()
-        try:
-            r.start(self.source.size)
-            for index, chunk in self.source.iterchunks():
-                r.store(index, chunk)
-            r.stop()
-        finally:
-            self.source.close()
-
-        if os.path.exists(self.path+'/last'):
-            os.unlink(self.path+'/last')
-        os.symlink(os.path.relpath(r.filename, self.path),
-                   self.path+'/last')
-
-        if os.path.exists(self.path+'/last.rev'):
-            os.unlink(self.path+'/last.rev')
-        os.symlink(os.path.relpath(r.info_filename, self.path),
-                   self.path+'/last.rev')
+        self.source.backup(new_revision)
+        new_revision.set_link('last')
+        new_revision.stats['duration'] = time.time() - start
+        new_revision.write_info()
 
     def maintenance(self, keep):
         self._scan_revisions()
         for r in self.revision_history[:-keep]:
-            print "Removing revision {}".format(r.uuid)
+            print("Removing revision {}".format(r.uuid))
             r.remove()
-
-    def restore(self, target, revision):
-        self._scan_revisions()
-        revision = self.find_revision(revision)
-        # XXX safety belt
-        print "Restoring revision {}".format(revision.uuid)
-        revision.restore(target)
-
-    def scrub(self, revision, markbad=False):
-        self._scan_revisions()
-        for r in self.find_revisions(revision):
-            r.scrub(markbad)
-
-    def mount(self, mountpoint):
-        self._scan_revisions()
-        fs = backy.fuse.BackyFS(self)
-        # XXX meh.
-        sys.argv = ['foo', '-d', mountpoint]
-        fs.parse(errex=1)
-        fs.main()

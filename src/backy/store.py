@@ -33,10 +33,10 @@ class ChunkWriter(object):
 
     def _write_enable(self):
         if os.path.exists(self.filename):
-            os.chmod(self.filename, 0640)
+            os.chmod(self.filename, 0o640)
 
     def _write_protect(self):
-        os.chmod(self.filename, 0440)
+        os.chmod(self.filename, 0o440)
 
     def __enter__(self):
         # The context manager is not intended to be re-entrant and we

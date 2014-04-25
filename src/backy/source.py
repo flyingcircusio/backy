@@ -168,7 +168,8 @@ class CephRBD(object):
         try:
             self._rbd_find_snapshot(self.revision.parent)
         except KeyError:
-            logger.info('Parent snapshot does not exist. Reading full snapshot.')
+            logger.info(
+                'Parent snapshot does not exist. Reading full snapshot.')
             self.full()
             return
 
@@ -219,7 +220,6 @@ class CephRBD(object):
 
         target.flush()
         os.fsync(target)
-
 
     def _rbd_find_mapping(self, **kw):
         mappings = self._rbd_cmd('showmapped', format='json')

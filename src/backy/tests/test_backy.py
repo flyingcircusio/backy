@@ -15,6 +15,8 @@ def generate_test_data(target, size):
     f.close()
 
 
+# XXX reactivate when we have a simple non-ceph source
+@pytest.skip
 @pytest.mark.smoke
 def test_smoketest_internal(tmpdir):
     # These copies of data are intended to be different versions of the same

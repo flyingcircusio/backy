@@ -148,7 +148,6 @@ class CephRBD(object):
             self._rbd_cmd('snap create {}'.format(self._snapshot_image_name()))
 
     def clean_snapshots(self):
-        return  # XXX don't remove for now to simplify testing
         # Remove all snapshots but the one we just used to backup.
         for snapshot in self._rbd_ls_snap():
             if not snapshot['name'].startswith('backy-'):

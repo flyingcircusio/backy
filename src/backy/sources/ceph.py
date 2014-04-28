@@ -97,6 +97,11 @@ class CephRBD(object):
         self.pool = config['pool']
         self.image = config['image']
 
+    @staticmethod
+    def config_from_cli(spec):
+        pool, image = spec.split('/')
+        return dict(pool=pool, image=image)
+
     @property
     def _image_name(self):
         return '{}/{}'.format(self.pool, self.image)

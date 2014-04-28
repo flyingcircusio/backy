@@ -26,6 +26,7 @@ def main():
 Initialize backup for a <source> in the backup directory.
 """)
     p.set_defaults(func='init')
+    p.add_argument('type')
     p.add_argument('source')
 
     # BACKUP

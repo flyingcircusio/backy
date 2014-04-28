@@ -1,5 +1,6 @@
 from backy.backup import Backup
 from backy.sources.file import File
+import json
 import os.path
 import pytest
 import shutil
@@ -71,3 +72,24 @@ def test_find_revision_empty(simple_file_config):
 
     with pytest.raises(KeyError):
         backup.find_revision("fdasfdka")
+
+
+def test_init_ceph(tmpdir):
+    backup = Backup(str(tmpdir))
+    backup.init('ceph-rbd', 'test/test04')
+    config = open(str(tmpdir/'config')).read()
+    config = json.loads(config)
+    assert config == {
+        "source-type": "ceph-rbd",
+        "source": {"image": "test04", "pool": "test"}}
+
+
+def test_init_file(tmpdir):
+    backup = Backup(str(tmpdir))
+    backup.init('file', '/dev/foo')
+
+    config = open(str(tmpdir/'config')).read()
+    config = json.loads(config)
+    assert config == {
+        "source-type": "file",
+        "source": {"filename": "/dev/foo"}}

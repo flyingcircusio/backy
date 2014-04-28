@@ -72,16 +72,18 @@ class Backup(object):
 
     # Command API
 
-    def init(self, source):
+    def init(self, type, source):
         if not os.path.exists(self.path):
             os.makedirs(self.path)
         if os.path.exists(self.path + '/config'):
-            raise RuntimeError('Refusing initialize with existing config.')
+            raise RuntimeError('Refusing to initialize with existing config.')
 
-        pool, image = source.split('/')
+        source_factory = select_source(type)
+        source_config = source_factory.config_from_cli(source)
+
         with SafeWritableFile(self.path+'/config') as f:
-            d = json.dumps({'source': {'pool': pool, 'image': image},
-                           'source-type': 'ceph-rbd'})
+            d = json.dumps({'source': source_config,
+                            'source-type': type})
             d = d.encode('utf-8')
             f.write(d)
         self._configure()

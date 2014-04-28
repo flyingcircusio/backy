@@ -51,7 +51,9 @@ def test_verbose_logging(capsys, argv):
 
 
 def print_args(*args, **kw):
-    print(args, kw)
+    import pprint
+    print(args)
+    pprint.pprint(kw)
 
 
 def test_call_status(capfd, argv, monkeypatch):
@@ -63,7 +65,8 @@ def test_call_status(capfd, argv, monkeypatch):
     assert exit.value.code == 0
     out, err = capfd.readouterr()
     assert Ellipsis("""\
-(<backy.backup.Backup object at ...>,) {}
+(<backy.backup.Backup object at ...>,)
+{}
 """) == out
     assert err == ""
 
@@ -72,13 +75,15 @@ def test_call_init(capfd, argv, monkeypatch):
     monkeypatch.setattr(backy.backup.Backup, 'init', print_args)
     argv.append('-v')
     argv.append('init')
+    argv.append('ceph-rbd')
     argv.append('test/test04')
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
     out, err = capfd.readouterr()
     assert Ellipsis("""\
-(<backy.backup.Backup object at ...>,) {'source': 'test/test04'}
+(<backy.backup.Backup object at ...>,)
+{'source': 'test/test04', 'type': 'ceph-rbd'}
 """) == out
     assert err == ""
 
@@ -92,7 +97,8 @@ def test_call_backup(capfd, argv, monkeypatch):
     assert exit.value.code == 0
     out, err = capfd.readouterr()
     assert Ellipsis("""\
-(<backy.backup.Backup object at ...>,) {}
+(<backy.backup.Backup object at ...>,)
+{}
 """) == out
     assert err == ""
 
@@ -106,7 +112,8 @@ def test_call_maintenance(capfd, argv, monkeypatch):
     assert exit.value.code == 0
     out, err = capfd.readouterr()
     assert Ellipsis("""\
-(<backy.backup.Backup object at ...>,) {'keep': 1}
+(<backy.backup.Backup object at ...>,)
+{'keep': 1}
 """) == out
     assert err == ""
 
@@ -124,7 +131,9 @@ def test_call_unexpected_exception(capsys, argv, monkeypatch):
     backy.main.main()
     out, err = capsys.readouterr()
     assert out == """\
-('Unexpected exception',) {}
-(RuntimeError('test',),) {}
+('Unexpected exception',)
+{}
+(RuntimeError('test',),)
+{}
 """
     assert err == ""

@@ -93,3 +93,24 @@ def test_init_file(tmpdir):
     assert config == {
         "source-type": "file",
         "source": {"filename": "/dev/foo"}}
+
+
+def test_init_creates_directory(tmpdir):
+    target = str(tmpdir / 'asdf')
+    assert not os.path.exists(target)
+    backup = Backup(target)
+    backup.init('file', '/dev/foo')
+    assert os.path.isdir(target)
+
+
+def test_init_refused_with_existing_config(tmpdir):
+    existing_config = b"""\
+{"source-type": "file", "source": {"filename": "asdf"}, "marker": 1}\
+"""
+    with open(str(tmpdir/'config'), 'wb') as f:
+        f.write(existing_config)
+    backup = Backup(str(tmpdir))
+    with pytest.raises(RuntimeError):
+        backup.init('file', '/dev/foo')
+    with open(str(tmpdir/'config'), 'rb') as f:
+        assert f.read() == existing_config

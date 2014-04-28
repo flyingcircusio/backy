@@ -3,11 +3,12 @@ from backy.sources import select_source
 from backy.utils import SafeWritableFile, format_bytes_flexible
 from glob import glob
 import datetime
+import fcntl
 import json
+import logging
 import os
 import os.path
 import time
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,10 @@ class Backup(object):
 
         self.revision_history = list(self.revisions.values())
         self.revision_history.sort(key=lambda r: r.timestamp)
+
+    def _lock(self):
+        self._lock_file = open(self.path+'/config', 'rb')
+        fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     # Internal API
 
@@ -109,6 +114,8 @@ class Backup(object):
             format_bytes_flexible(total_bytes)))
 
     def backup(self):
+        self._lock()
+
         self._scan_revisions()
 
         # Clean-up incomplete revisions
@@ -133,6 +140,8 @@ class Backup(object):
         new_revision.write_info()
 
     def maintenance(self, keep):
+        self._lock()
+
         self._scan_revisions()
         for r in self.revision_history[:-keep]:
             print("Removing revision {}".format(r.uuid))

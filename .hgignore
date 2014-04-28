@@ -1,18 +1,19 @@
 syntax: glob
 
-bin/
-lib/
-include/
-.Python
-eggs/
-develop-eggs/
-.installed.cfg
-src/backy.egg-info/
-htmlcov/
-.cache
-.coverage
-report.xml
 *.pyc
 *.sublime*
+.cache
+.coverage
+.DS_Store
+.installed.cfg
+.Python
+bin/
+develop-eggs/
+eggs/
+htmlcov/
+include/
+lib/
 lib64
+report.xml
+src/backy.egg-info/
 vagrant/.vagrant

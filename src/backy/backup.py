@@ -33,8 +33,7 @@ class Backup(object):
         config = json.load(open(self.path + '/config', 'r', encoding='utf-8'))
         self.INTERVAL = config.get('interval', self.INTERVAL)
 
-        self.source = select_source(
-            config.get('source-type'))(config['source'])
+        self.source = select_source(config['source-type'])(config['source'])
 
     def _scan_revisions(self):
         self.revisions = {}
@@ -51,16 +50,17 @@ class Backup(object):
     def find_revision(self, spec):
         self._scan_revisions()
         if spec == 'last':
-            return self.revision_history[-1].uuid
+            spec = -1
 
         try:
             spec = int(spec)
-            return self.revision_history[-spec-1]
         except ValueError:
             return self.revisions[spec]
-
-        # "goto fail" - should never come here.
-        raise KeyError("Could not find revision %r" % spec)
+        else:
+            try:
+                return self.revision_history[-spec-1]
+            except IndexError:
+                raise KeyError(spec)
 
     def find_revisions(self, spec):
         self._scan_revisions()

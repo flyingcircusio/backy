@@ -24,6 +24,7 @@ class Backup(object):
         # The path identifies the newest backup. Additional files
         # will be named with suffixes.
         self.path = os.path.realpath(path)
+        logger.debug('Using backup located at {}'.format(self.path))
         self._configure()
 
     def _configure(self):

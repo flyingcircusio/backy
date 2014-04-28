@@ -5,7 +5,8 @@ class Ellipsis(object):
 
     def __init__(self, ellipsis):
         self.ellipsis = ellipsis
-        pattern = ellipsis.replace('...', '.+')
+        pattern = re.escape(ellipsis)
+        pattern = pattern.replace('\.\.\.', '.+')
         self.pattern = re.compile(pattern)
 
     def __eq__(self, other):

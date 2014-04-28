@@ -14,3 +14,8 @@ def test_ellipsis():
     assert Ellipsis('a...c...g') == 'abcdefg'
     with pytest.raises(Exception):
         assert Ellipsis('') == 'abcdefg'
+
+
+def test_ellipsis_escaping():
+    obj = (object(),)
+    assert Ellipsis('(<object object at ...>,)') == repr(obj)

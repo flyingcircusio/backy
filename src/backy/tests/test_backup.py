@@ -30,6 +30,34 @@ def test_empty_revisions(simple_file_config):
     assert backup.revision_history == []
 
 
+def test_load_revisions(simple_file_config, tmpdir):
+    backup = simple_file_config
+
+    with open(str(tmpdir / '123-123.rev'), 'wb') as f:
+        f.write(b'{"uuid": "123-123", "timestamp": 1, "parent": null}')
+    with open(str(tmpdir / '123-124.rev'), 'wb') as f:
+        f.write(b'{"uuid": "124-124", "timestamp": 2, "parent": "123-123"}')
+
+    backup._scan_revisions()
+    assert set(backup.revisions.keys()) == set(["123-123", "124-124"])
+    assert [x.uuid for x in backup.revision_history] == ["123-123", "124-124"]
+
+    assert backup.revision_history[1].uuid == "124-124"
+    assert backup.revision_history[1].parent == "123-123"
+
+    assert backup.find_revisions("all") == backup.revision_history
+
+    assert backup.find_revision("last").uuid == "124-124"
+    assert backup.find_revision(0).uuid == "124-124"
+    assert backup.find_revision(1).uuid == "123-123"
+    assert backup.find_revision("124-124").uuid == "124-124"
+
+    with pytest.raises(KeyError):
+        backup.find_revision("125-125")
+
+    assert backup.find_revisions(1) == [backup.find_revision(1)]
+
+
 def test_find_revision_empty(simple_file_config):
     backup = simple_file_config
 

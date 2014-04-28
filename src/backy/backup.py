@@ -48,12 +48,13 @@ class Backup(object):
     # Internal API
 
     def find_revision(self, spec):
-        self._scan_revisions()
         if spec == 'last':
-            spec = -1
+            spec = 0
 
         try:
             spec = int(spec)
+            if spec < 0:
+                raise KeyError("Integer revisions must be positive.")
         except ValueError:
             return self.revisions[spec]
         else:
@@ -63,9 +64,8 @@ class Backup(object):
                 raise KeyError(spec)
 
     def find_revisions(self, spec):
-        self._scan_revisions()
         if spec == 'all':
-            result = self.revisions.values()
+            result = self.revision_history[:]
         else:
             result = [self.find_revision(spec)]
         return result

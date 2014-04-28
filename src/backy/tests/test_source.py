@@ -1,4 +1,4 @@
-from backy.source import CephRBD
+from backy.sources.ceph import CephRBD
 from backy.backup import Backup
 
 

@@ -12,12 +12,6 @@ logger = logging.getLogger(__name__)
 cmd = check_output
 
 
-def select_source(type_):
-    if type_ == CephRBD.type_:
-        return CephRBD
-    raise KeyError("Unknown source type %r" % type_)
-
-
 def unpack_from(fmt, f):
     size = struct.calcsize(fmt)
     b = f.read(size)
@@ -98,10 +92,6 @@ class RBDDiffV1N(object):
 
 
 class CephRBD(object):
-
-    # The filename is expected to hold "pool/volume".
-
-    type_ = 'ceph-rbd'
 
     def __init__(self, config):
         self.pool = config['pool']

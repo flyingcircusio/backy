@@ -1,5 +1,5 @@
 from backy.revision import Revision
-from backy.source import select_source
+from backy.sources import select_source
 from backy.utils import SafeWritableFile, format_bytes_flexible
 from glob import glob
 import datetime

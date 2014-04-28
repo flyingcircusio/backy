@@ -26,6 +26,11 @@ setup(
     entry_points="""
         [console_scripts]
             backy = backy.main:main
+
+        [backy.sources]
+            ceph-rbd = backy.sources.ceph:CephRBD
+            file = backy.sources.file:File
+
     """,
     author='Daniel Kraft <daniel.kraft@d9t.de>, Christian Theune <ct@gocept.com>',
     author_email='daniel.kraft@d9t.de',

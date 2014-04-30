@@ -2,12 +2,24 @@ from backy.utils import SafeWritableFile
 from subprocess import check_output
 import glob
 import json
+import logging
 import os
+import sys
 import time
 import uuid
 
-
+logger = logging.getLogger(__name__)
 cmd = check_output
+
+
+if sys.platform == 'linux2':
+    def cp_reflink(source, target):
+        cmd('cp --reflink=always {} {}'.
+            format(source, target), shell=True)
+else:
+    def cp_reflink(source, target):
+        logger.warn('Performing non-COW copy: {} -> {}'.format(source, target))
+        cmd('cp {} {}'. format(source, target), shell=True)
 
 
 class Revision(object):
@@ -52,9 +64,7 @@ class Revision(object):
             return
 
         parent = self.backup.find_revision(self.parent)
-        cmd('cp --reflink=always {} {}'.
-            format(parent.filename, self.filename),
-            shell=True)
+        cp_reflink(parent.filename, self.filename)
 
     def write_info(self):
         metadata = {

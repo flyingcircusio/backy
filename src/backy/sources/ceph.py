@@ -1,8 +1,9 @@
+from backy.utils import safe_copy
 from subprocess import check_output
 import json
+import logging
 import os
 import struct
-import logging
 import sys
 
 
@@ -245,20 +246,13 @@ class CephRBD(object):
         self.revision.stats['bytes_written'] = 0
 
         source = open(mapped['device'], 'rb')
-        # We are guaranteed that _a_ file exists at this point - CoW semantics
-        # like us to avoid accidentally creating a new file.
         target = open(self.revision.filename, 'r+b')
-        while True:
-            chunk = source.read(4*1024**2)
+        # Note: we're using r+b here to avoid accidentally creating a new
+        # file and break copy-on-write semantics of the underlying filesystem.
+
+        for chunk in safe_copy(source, target):
             self.revision.stats['bytes_written'] += len(chunk)
             print('.', end='')
             sys.stdout.flush()
-            if not chunk:
-                break
-            target.write(chunk)
-
-        target.flush()
-        os.fsync(target)
-        source.close()
 
         self._rbd_cmd('unmap {}'.format(mapped['device']))

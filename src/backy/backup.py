@@ -1,6 +1,6 @@
 from backy.revision import Revision
 from backy.sources import select_source
-from backy.utils import SafeWritableFile, format_bytes_flexible
+from backy.utils import SafeWritableFile, format_bytes_flexible, safe_copy
 from glob import glob
 import datetime
 import fcntl
@@ -53,7 +53,7 @@ class Backup(object):
     # Internal API
 
     def find_revision(self, spec):
-        if spec == 'last':
+        if spec in ['last', 'latest']:
             spec = 0
 
         try:
@@ -127,6 +127,20 @@ class Backup(object):
 
         self._scan_revisions()
 
+        try:
+            last = self.find_revision(0)
+        except KeyError:
+            pass
+        else:
+            next_backup_due = last.timestamp + self.INTERVAL
+            next_backup_remaining = next_backup_due - time.time()
+            if next_backup_remaining > 0:
+                logger.info('{} seconds left until next backup. '
+                            'Sleeping.'.format(next_backup_remaining))
+                return
+            logger.info('Backup due since {} seconds. Starting.'.format(
+                        next_backup_remaining))
+
         start = time.time()
 
         new_revision = Revision.create(self)
@@ -146,3 +160,13 @@ class Backup(object):
         for r in self.revision_history[:-keep]:
             print("Removing revision {}".format(r.uuid))
             r.remove()
+
+    def restore(self, revision, target):
+        self._lock()
+        self._scan_revisions()
+
+        r = self.find_revision(revision)
+        source = open(r.filename, 'rb')
+        target = open(target, 'wb')
+        for chunk in safe_copy(source, target):
+            pass

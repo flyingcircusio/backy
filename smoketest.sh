@@ -10,19 +10,19 @@ BACKUP=$( mktemp -d -t backy.test.XXXXX )
 mkdir ${BACKUP}/backup
 cd ${BACKUP}/backup
 
-# $BACKY init ../original
+# $BACKY init file ../original
 cat > config <<EOF
-{"source": "../original", "chunksize": 4194304, "source-type": "plain", "interval": 0}
+{"source": {"filename": "../original"}, "source-type": "file", "interval": 0}
 EOF
 
 echo "Using ${BACKUP} as workspace."
 
 echo -n "Generating Test Data"
-dd if=/dev/urandom of=$BACKUP/img_state1.img bs=1048576 count=20 2>/dev/null
+dd if=/dev/urandom of=$BACKUP/img_state1.img bs=1048576 count=5 2>/dev/null
 echo -n "."
-dd if=/dev/urandom of=$BACKUP/img_state2.img bs=1048576 count=20 2>/dev/null
+dd if=/dev/urandom of=$BACKUP/img_state2.img bs=1048576 count=5 2>/dev/null
 echo -n "."
-dd if=/dev/urandom of=$BACKUP/img_state3.img bs=1048576 count=20 2>/dev/null
+dd if=/dev/urandom of=$BACKUP/img_state3.img bs=1048576 count=5 2>/dev/null
 echo " Done."
 
 echo -n "Backing up img_state1.img. "
@@ -192,8 +192,6 @@ else
     echo "ERROR: $res"
     exit 2
 fi
-
-$BACKY scrub all
 
 $BACKY status
 

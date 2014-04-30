@@ -57,6 +57,16 @@ Perform a backup.
 """)
     p.set_defaults(func='backup')
 
+    # RESTORE
+    p = subparsers.add_parser(
+        'restore',
+        help="""\
+Restore (a given revision) to a given target.
+""")
+    p.add_argument('-r', '--revision', default='latest')
+    p.add_argument('target')
+    p.set_defaults(func='restore')
+
     # STATUS
     p = subparsers.add_parser(
         'status',

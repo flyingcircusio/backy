@@ -61,3 +61,16 @@ def format_bytes_flexible(number):
     if plurals and number != 1:
         label += 's'
     return '%s %s' % (format % (number / factor), label)
+
+
+def safe_copy(source, target):
+    while True:
+        chunk = source.read(4*1024**2)
+        if not chunk:
+            break
+        yield chunk
+        target.write(chunk)
+    target.flush()
+    os.fsync(target)
+    target.close()
+    source.close()

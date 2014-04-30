@@ -19,9 +19,10 @@ def test_display_usage(capsys, argv):
         backy.main.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
-    assert out == """\
-usage: py.test [-h] [-v] [-b BACKUPDIR] {init,backup,status,maintenance} ...
-"""
+    assert """\
+usage: py.test [-h] [-v] [-b BACKUPDIR]
+               {init,backup,restore,status,maintenance} ...
+""" == out
     assert err == ""
 
 
@@ -31,13 +32,15 @@ def test_display_help(capsys, argv):
         backy.main.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
-    assert out.startswith("""\
-usage: py.test [-h] [-v] [-b BACKUPDIR] {init,backup,status,maintenance} ...
+    assert Ellipsis("""\
+usage: py.test [-h] [-v] [-b BACKUPDIR]
+               {init,backup,restore,status,maintenance} ...
 
 Backup and restore for block devices.
 
 positional arguments:
-""")
+...
+""") == out
     assert err == ""
 
 
@@ -70,8 +73,8 @@ def test_call_status(capsys, caplog, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-backup.py                   28 DEBUG    Backup(".../backy")
-main.py                     95 DEBUG    backup.status(**{})
+backup.py                  ... DEBUG    Backup(".../backy")
+main.py                    ... DEBUG    backup.status(**{})
 """) == caplog.text()
 
 
@@ -91,8 +94,8 @@ def test_call_init(capsys, caplog, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-backup.py                   28 DEBUG    Backup(".../backy")
-main.py                     95 DEBUG    backup.init(**{...ceph-rbd...})
+backup.py                  ... DEBUG    Backup(".../backy")
+main.py                    ... DEBUG    backup.init(**{...ceph-rbd...})
 """) == caplog.text()
 
 
@@ -110,8 +113,8 @@ def test_call_backup(capsys, caplog, argv, monkeypatch):
 """) == out
     assert "" == err
     assert Ellipsis("""\
-backup.py                   28 DEBUG    Backup(".../backy")
-main.py                     95 DEBUG    backup.backup(**{})
+backup.py                  ... DEBUG    Backup(".../backy")
+main.py                    ... DEBUG    backup.backup(**{})
 """) == caplog.text()
 
 
@@ -129,8 +132,8 @@ def test_call_maintenance(capsys, caplog, argv, monkeypatch):
 """) == out
     assert "" == err
     assert Ellipsis("""\
-backup.py                   28 DEBUG    Backup(".../backy")
-main.py                     95 DEBUG    backup.maintenance(**{'keep': 1})
+backup.py                  ... DEBUG    Backup(".../backy")
+main.py                    ... DEBUG    backup.maintenance(**{'keep': 1})
 """) == caplog.text()
 
 
@@ -149,10 +152,10 @@ def test_call_unexpected_exception(capsys, caplog, argv, monkeypatch):
     assert "" == out
     assert "" == err
     assert Ellipsis("""\
-backup.py                   28 DEBUG    Backup("...")
-main.py                     95 DEBUG    backup.status(**{})
-main.py                     99 ERROR    Unexpected exception
-main.py                    100 ERROR    test
+backup.py                  ... DEBUG    Backup("...")
+main.py                    ... DEBUG    backup.status(**{})
+main.py                    ... ERROR    Unexpected exception
+main.py                    ... ERROR    test
 Traceback (most recent call last):
   File ".../main.py", line ..., in main
     func(**func_args)

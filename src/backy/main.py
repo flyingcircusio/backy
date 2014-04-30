@@ -7,6 +7,26 @@ import os
 import sys
 
 
+logger = logging.getLogger(__name__)
+
+
+def init_logging(verbose=False):
+    if verbose:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+    logging.basicConfig(
+        filename='backy.log',
+        format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+        level=logging.DEBUG)
+
+    console = logging.StreamHandler(sys.stdout)
+    console.setLevel(level)
+    logging.getLogger('').addHandler(console)
+
+    logger.debug(' '.join(sys.argv))
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Backup and restore for block devices.',
@@ -56,13 +76,7 @@ Perform maintenance: remove old backups according to schedule.
 
     args = parser.parse_args()
 
-    # Consume global arguments
-    if args.verbose:
-        level = logging.DEBUG
-    else:
-        level = logging.INFO
-    logging.basicConfig(
-        stream=sys.stdout, level=level, format='%(message)s')
+    init_logging(args.verbose)
 
     if not hasattr(args, 'func'):
         parser.print_usage()
@@ -78,9 +92,10 @@ Perform maintenance: remove old backups according to schedule.
     del func_args['backupdir']
 
     try:
+        logger.debug('backup.{0}(**{1!r})'.format(args.func, func_args))
         func(**func_args)
         sys.exit(0)
     except Exception as e:
-        logging.error('Unexpected exception')
-        logging.exception(e)
+        logger.error('Unexpected exception')
+        logger.exception(e)
         os._exit(1)

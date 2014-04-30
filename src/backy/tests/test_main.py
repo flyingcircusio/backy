@@ -56,22 +56,26 @@ def print_args(*args, **kw):
     pprint.pprint(kw)
 
 
-def test_call_status(capfd, argv, monkeypatch):
+def test_call_status(capsys, caplog, argv, monkeypatch):
     monkeypatch.setattr(backy.backup.Backup, 'status', print_args)
     argv.append('-v')
     argv.append('status')
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
-    out, err = capfd.readouterr()
+    out, err = capsys.readouterr()
     assert Ellipsis("""\
-(<backy.backup.Backup object at ...>,)
+(<backy.backup.Backup object at 0x...>,)
 {}
 """) == out
     assert err == ""
+    assert Ellipsis("""\
+backup.py                   28 DEBUG    Backup(".../backy")
+main.py                     95 DEBUG    backup.status(**{})
+""") == caplog.text()
 
 
-def test_call_init(capfd, argv, monkeypatch):
+def test_call_init(capsys, caplog, argv, monkeypatch):
     monkeypatch.setattr(backy.backup.Backup, 'init', print_args)
     argv.append('-v')
     argv.append('init')
@@ -80,45 +84,57 @@ def test_call_init(capfd, argv, monkeypatch):
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
-    out, err = capfd.readouterr()
+    out, err = capsys.readouterr()
     assert Ellipsis("""\
 (<backy.backup.Backup object at ...>,)
 {'source': 'test/test04', 'type': 'ceph-rbd'}
 """) == out
     assert err == ""
+    assert Ellipsis("""\
+backup.py                   28 DEBUG    Backup(".../backy")
+main.py                     95 DEBUG    backup.init(**{...ceph-rbd...})
+""") == caplog.text()
 
 
-def test_call_backup(capfd, argv, monkeypatch):
+def test_call_backup(capsys, caplog, argv, monkeypatch):
     monkeypatch.setattr(backy.backup.Backup, 'backup', print_args)
     argv.append('-v')
     argv.append('backup')
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
-    out, err = capfd.readouterr()
+    out, err = capsys.readouterr()
     assert Ellipsis("""\
-(<backy.backup.Backup object at ...>,)
+(<backy.backup.Backup object at 0x...>,)
 {}
 """) == out
-    assert err == ""
+    assert "" == err
+    assert Ellipsis("""\
+backup.py                   28 DEBUG    Backup(".../backy")
+main.py                     95 DEBUG    backup.backup(**{})
+""") == caplog.text()
 
 
-def test_call_maintenance(capfd, argv, monkeypatch):
+def test_call_maintenance(capsys, caplog, argv, monkeypatch):
     monkeypatch.setattr(backy.backup.Backup, 'maintenance', print_args)
     argv.append('-v')
     argv.append('maintenance')
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
-    out, err = capfd.readouterr()
+    out, err = capsys.readouterr()
     assert Ellipsis("""\
-(<backy.backup.Backup object at ...>,)
+(<backy.backup.Backup object at 0x...>,)
 {'keep': 1}
 """) == out
-    assert err == ""
+    assert "" == err
+    assert Ellipsis("""\
+backup.py                   28 DEBUG    Backup(".../backy")
+main.py                     95 DEBUG    backup.maintenance(**{'keep': 1})
+""") == caplog.text()
 
 
-def test_call_unexpected_exception(capsys, argv, monkeypatch):
+def test_call_unexpected_exception(capsys, caplog, argv, monkeypatch):
     def do_raise(*args, **kw):
         raise RuntimeError("test")
     monkeypatch.setattr(backy.backup.Backup, 'status', do_raise)
@@ -130,10 +146,17 @@ def test_call_unexpected_exception(capsys, argv, monkeypatch):
     argv.append('status')
     backy.main.main()
     out, err = capsys.readouterr()
-    assert out == """\
-('Unexpected exception',)
-{}
-(RuntimeError('test',),)
-{}
-"""
-    assert err == ""
+    assert "" == out
+    assert "" == err
+    assert Ellipsis("""\
+backup.py                   28 DEBUG    Backup("...")
+main.py                     95 DEBUG    backup.status(**{})
+main.py                     99 ERROR    Unexpected exception
+main.py                    100 ERROR    test
+Traceback (most recent call last):
+  File ".../main.py", line ..., in main
+    func(**func_args)
+  File ".../src/backy/tests/test_main.py", line ..., in do_raise
+    raise RuntimeError("test")
+RuntimeError: test
+""") == caplog.text()

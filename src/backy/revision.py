@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import sys
-import time
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -28,6 +27,7 @@ class Revision(object):
     timestamp = None
     parent = None
     stats = None
+    tag = ''
 
     def __init__(self, uuid, backup):
         self.uuid = uuid
@@ -37,7 +37,11 @@ class Revision(object):
     @classmethod
     def create(cls, backup):
         r = Revision(str(uuid.uuid4()), backup)
-        r.timestamp = time.time()
+        r.timestamp = backup.now()
+        if backup.revision_history:
+            # validate that this parent is a cutally a good parent. need
+            # to contact the source for this ...
+            r.parent = backup.revision_history[-1].uuid
         return r
 
     @classmethod
@@ -47,6 +51,7 @@ class Revision(object):
         r.timestamp = metadata['timestamp']
         r.parent = metadata['parent']
         r.stats = metadata.get('stats', {})
+        r.tag = metadata.get('tag', '')
         return r
 
     @property
@@ -71,7 +76,8 @@ class Revision(object):
             'uuid': self.uuid,
             'timestamp': self.timestamp,
             'parent': self.parent,
-            'stats': self.stats}
+            'stats': self.stats,
+            'tag': self.tag}
         with SafeWritableFile(self.info_filename) as f:
             d = json.dumps(metadata)
             f.write(d.encode('utf-8'))
@@ -87,6 +93,8 @@ class Revision(object):
             os.unlink(path+'/'+name)
         os.symlink(os.path.relpath(self.info_filename, path), path+'/'+name)
 
-    def remove(self):
-        for file in glob.glob(self.filename+'*'):
-            os.unlink(file)
+    def remove(self, simulate=False):
+        if not simulate:
+            for file in glob.glob(self.filename+'*'):
+                os.unlink(file)
+        self.backup.revision_history.remove(self)

@@ -84,6 +84,15 @@ Perform maintenance: remove old backups according to schedule.
     p.set_defaults(func='maintenance')
     p.add_argument('-k', '--keep', default=1, type=int)
 
+    # SCHEDULE SIMULATION
+    p = subparsers.add_parser(
+        'schedule',
+        help="""\
+Simulate the schedule.
+""")
+    p.set_defaults(func='schedule')
+    p.add_argument('days', type=int)
+
     args = parser.parse_args()
 
     init_logging(args.verbose)
@@ -92,8 +101,8 @@ Perform maintenance: remove old backups according to schedule.
         parser.print_usage()
         sys.exit(0)
 
-    backup = backy.backup.Backup(args.backupdir)
-    func = getattr(backup, args.func)
+    commands = backy.backup.Commands(args.backupdir)
+    func = getattr(commands, args.func)
 
     # Pass over to function
     func_args = dict(args._get_kwargs())

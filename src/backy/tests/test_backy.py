@@ -44,7 +44,7 @@ def test_smoketest_internal(tmpdir):
 
     # Assert that nothing happened: 24 hours interval by default
     backup._scan_revisions()
-    assert len(backup.revisions) == 1
+    assert len(backup.revision_history) == 1
 
     # Set interval to 0 to let tests continue
     backup.INTERVAL = 0

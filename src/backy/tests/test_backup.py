@@ -27,7 +27,6 @@ def test_empty_revisions(simple_file_config):
     backup = simple_file_config
 
     backup._scan_revisions()
-    assert backup.revisions == {}
     assert backup.revision_history == []
 
 
@@ -40,7 +39,6 @@ def test_load_revisions(simple_file_config, tmpdir):
         f.write(b'{"uuid": "124-124", "timestamp": 2, "parent": "123-123"}')
 
     backup._scan_revisions()
-    assert set(backup.revisions.keys()) == set(["123-123", "124-124"])
     assert [x.uuid for x in backup.revision_history] == ["123-123", "124-124"]
 
     assert backup.revision_history[1].uuid == "124-124"

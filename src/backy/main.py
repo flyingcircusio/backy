@@ -55,6 +55,9 @@ Initialize backup for a <source> in the backup directory.
         help="""\
 Perform a backup.
 """)
+    p.add_argument(
+        '-f', '--force', action='store_true',
+        help='Force backup even if not required by schedule.')
     p.set_defaults(func='backup')
 
     # RESTORE

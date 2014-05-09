@@ -108,13 +108,13 @@ def test_call_backup(capsys, caplog, argv, monkeypatch):
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
-(<backy.backup.Backup object at 0x...>,)
+(<backy.backup.Backup object at 0x...>, False)
 {}
 """) == out
     assert "" == err
     assert Ellipsis("""\
 backup.py                  ... DEBUG    Backup(".../backy")
-main.py                    ... DEBUG    backup.backup(**{})
+main.py                    ... DEBUG    backup.backup(**{'force': False})
 """) == caplog.text()
 
 

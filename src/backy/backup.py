@@ -49,8 +49,8 @@ class Commands(object):
         print("{} data (estimated)".format(
             format_bytes_flexible(total_bytes)))
 
-    def backup(self):
-        self._backup.backup()
+    def backup(self, force=False):
+        self._backup.backup(force)
 
     def restore(self, revision, target):
         self._backup.restore(revision, target)
@@ -158,7 +158,7 @@ class Backup(object):
         self.config = None
         self._configure()
 
-    def backup(self):
+    def backup(self, force=False):
         self._lock()
 
         self._scan_revisions()
@@ -177,8 +177,12 @@ class Backup(object):
         due = self.schedule.next_due()
         if due > 0:
             logger.info('{} seconds left until next backup.'.format(due))
-            return
-        logger.info('Backup due since {} seconds.'.format(due))
+            if force:
+                logger.info('Force flag set. Performing backup anyway.')
+            else:
+                return
+        else:
+            logger.info('Backup due since {} seconds.'.format(due))
 
         new_revision = Revision.create(self)
         new_revision.materialize()

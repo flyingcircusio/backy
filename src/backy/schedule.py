@@ -66,6 +66,8 @@ class Schedule(object):
                     continue
             revision = self.backup.revision_history[-1]
             revision.tag = tag
+            if not simulate:
+                revision.write_info()
             if level_history:
                 # XXX i think this is superfluous by now
                 previous = level_history[-1]

@@ -3,6 +3,7 @@ from backy.schedule import simulate, Schedule
 from backy.sources import select_source
 from backy.utils import SafeWritableFile, format_bytes_flexible, safe_copy
 from glob import glob
+from prettytable import PrettyTable
 import datetime
 import fcntl
 import json
@@ -10,6 +11,7 @@ import logging
 import os
 import os.path
 import time
+
 
 logger = logging.getLogger(__name__)
 
@@ -30,16 +32,18 @@ class Commands(object):
     def status(self):
         total_bytes = 0
 
-        print("== Revisions")
+        t = PrettyTable(["Date", "ID", "Size", "Duration", "Tag"])
+
         for r in self._backup.revision_history:
             total_bytes += r.stats.get('bytes_written', 0)
-            print("{0}\t{1}\t{2}\t{3:d}s".format(
-                format_timestamp(r.timestamp),
-                r.uuid,
-                format_bytes_flexible(r.stats.get('bytes_written', 0)),
-                int(r.stats.get('duration', 0))))
+            t.add_row([format_timestamp(r.timestamp),
+                       r.uuid,
+                       format_bytes_flexible(r.stats.get('bytes_written', 0)),
+                       int(r.stats.get('duration', 0)),
+                       r.tag])
 
-        print()
+        print(t)
+
         print("== Summary")
         print("{} revisions".format(len(self._backup.revision_history)))
         print("{} data (estimated)".format(

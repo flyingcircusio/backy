@@ -31,7 +31,7 @@ class Report(object):
                     diffed = d.compare([line[2]], [line[1]])
                     diffed = [x.rstrip('\n') for x in diffed]
                     result.extend(diffed)
-        result = filter(str.strip, result)
+        result = list(filter(str.strip, result))
         return result
 
     @property

@@ -17,6 +17,7 @@ setup(
     version='2.0a1dev',
     install_requires=[
         'setuptools',
+        'prettytable',
         'fallocate',
     ],
     extras_require={

@@ -138,12 +138,15 @@ Restoring img_state2.img from level 2. Done.
 Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 3. Done.
 Diffing restore_state1.img against img_state1.img. Success.
-== Revisions
-... 511.99 kiB        0s
-... 511.99 kiB        0s
-... 511.99 kiB        0s
-... 511.99 kiB        0s
-
++---------------------+--------------------------------------+------------+----------+-----+
+|         Date        |                  ID                  |    Size    | \
+Duration | Tag |
++---------------------+--------------------------------------+------------+----------+-----+
+| ... | ... | 511.99 kiB |    0     |     |
+| ... | ... | 511.99 kiB |    0     |     |
+| ... | ... | 511.99 kiB |    0     |     |
+| ... | ... | 511.99 kiB |    0     |     |
++---------------------+--------------------------------------+------------+----------+-----+
 == Summary
 4 revisions
 2.00 MiB data (estimated)

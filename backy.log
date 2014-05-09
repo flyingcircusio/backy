@@ -112,3 +112,6 @@ Traceback (most recent call last):
 AttributeError: 'Backup' object has no attribute '_schedule'
 2014-05-08 13:31:12,479 backy.main   DEBUG    bin/backy
 2014-05-08 13:32:02,562 backy.main   DEBUG    bin/backy
+2014-05-09 09:24:03,302 backy.main   DEBUG    bin/backy status
+2014-05-09 09:24:03,303 backy.backup DEBUG    Backup("/Users/ctheune/Code/backy")
+2014-05-09 09:24:03,304 backy.main   DEBUG    backup.status(**{})

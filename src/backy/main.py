@@ -10,13 +10,13 @@ import sys
 logger = logging.getLogger(__name__)
 
 
-def init_logging(verbose=False):
+def init_logging(backupdir, verbose=False):
     if verbose:
         level = logging.DEBUG
     else:
         level = logging.INFO
     logging.basicConfig(
-        filename='backy.log',
+        filename=os.path.join(backupdir, 'backy.log'),
         format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
         level=logging.DEBUG)
 
@@ -75,15 +75,6 @@ Show backup status. Show inventory and summary information.
 """)
     p.set_defaults(func='status')
 
-    # MAINTENANCE
-    p = subparsers.add_parser(
-        'maintenance',
-        help="""\
-Perform maintenance: remove old backups according to schedule.
-""")
-    p.set_defaults(func='maintenance')
-    p.add_argument('-k', '--keep', default=1, type=int)
-
     # SCHEDULE SIMULATION
     p = subparsers.add_parser(
         'schedule',
@@ -95,7 +86,7 @@ Simulate the schedule.
 
     args = parser.parse_args()
 
-    init_logging(args.verbose)
+    init_logging(args.backupdir, args.verbose)
 
     if not hasattr(args, 'func'):
         parser.print_usage()

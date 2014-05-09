@@ -12,17 +12,17 @@ cd ${BACKUP}/backup
 
 # $BACKY init file ../original
 cat > config <<EOF
-{"source": {"filename": "../original"}, "source-type": "file", "interval": 0}
+{"source": {"filename": "../original"}, "source-type": "file", "schedule": {"": {"interval": "1s", "keep": 7}}}
 EOF
 
 echo "Using ${BACKUP} as workspace."
 
 echo -n "Generating Test Data"
-dd if=/dev/urandom of=$BACKUP/img_state1.img bs=1048576 count=5 2>/dev/null
+dd if=/dev/urandom of=$BACKUP/img_state1.img bs=104856 count=5 2>/dev/null
 echo -n "."
-dd if=/dev/urandom of=$BACKUP/img_state2.img bs=1048576 count=5 2>/dev/null
+dd if=/dev/urandom of=$BACKUP/img_state2.img bs=104856 count=5 2>/dev/null
 echo -n "."
-dd if=/dev/urandom of=$BACKUP/img_state3.img bs=1048576 count=5 2>/dev/null
+dd if=/dev/urandom of=$BACKUP/img_state3.img bs=104856 count=5 2>/dev/null
 echo " Done."
 
 echo -n "Backing up img_state1.img. "
@@ -49,6 +49,7 @@ rm $BACKUP/restore_*
 
 echo -n "Backing up img_state2.img. "
 ln -sf img_state2.img ../original
+sleep 3
 $BACKY backup
 echo "Done."
 
@@ -85,6 +86,7 @@ rm $BACKUP/restore_*
 
 echo -n "Backing up img_state2.img again. "
 ln -sf img_state2.img ../original
+sleep 3
 $BACKY backup
 echo "Done."
 
@@ -136,6 +138,7 @@ rm $BACKUP/restore_*
 
 echo -n "Backing up img_state3.img. "
 ln -sf img_state3.img ../original
+sleep 3
 $BACKY backup
 echo "Done."
 
@@ -192,10 +195,6 @@ else
     echo "ERROR: $res"
     exit 2
 fi
-
-$BACKY status
-
-$BACKY maintenance
 
 $BACKY status
 

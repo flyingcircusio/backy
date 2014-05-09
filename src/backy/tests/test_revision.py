@@ -18,8 +18,21 @@ def test_revision_base():
 
 def test_revision_create():
     backup = mock.Mock()
+    backup.now = time.time
+    backup.revision_history = []
     r = Revision.create(backup)
     assert r.uuid is not None
+    assert time.time() - r.timestamp < 10
+    assert r.backup is backup
+
+
+def test_revision_create_child():
+    backup = mock.Mock()
+    backup.now = time.time
+    backup.revision_history = [Revision('asdf', backup)]
+    r = Revision.create(backup)
+    assert r.uuid is not None
+    assert r.parent == 'asdf'
     assert time.time() - r.timestamp < 10
     assert r.backup is backup
 
@@ -62,4 +75,5 @@ def test_store_revision_data(tmpdir):
         "parent": "asdf",
         "uuid": "asdf2",
         "stats": {},
+        "tag": "",
         "timestamp": 25}

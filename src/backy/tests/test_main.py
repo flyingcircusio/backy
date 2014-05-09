@@ -21,7 +21,7 @@ def test_display_usage(capsys, argv):
     out, err = capsys.readouterr()
     assert """\
 usage: py.test [-h] [-v] [-b BACKUPDIR]
-               {init,backup,restore,status,maintenance} ...
+               {init,backup,restore,status,schedule} ...
 """ == out
     assert err == ""
 
@@ -34,7 +34,7 @@ def test_display_help(capsys, argv):
     out, err = capsys.readouterr()
     assert Ellipsis("""\
 usage: py.test [-h] [-v] [-b BACKUPDIR]
-               {init,backup,restore,status,maintenance} ...
+               {init,backup,restore,status,schedule} ...
 
 Backup and restore for block devices.
 
@@ -60,7 +60,7 @@ def print_args(*args, **kw):
 
 
 def test_call_status(capsys, caplog, argv, monkeypatch):
-    monkeypatch.setattr(backy.backup.Backup, 'status', print_args)
+    monkeypatch.setattr(backy.backup.Commands, 'status', print_args)
     argv.append('-v')
     argv.append('status')
     with pytest.raises(SystemExit) as exit:
@@ -68,7 +68,7 @@ def test_call_status(capsys, caplog, argv, monkeypatch):
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
-(<backy.backup.Backup object at 0x...>,)
+(<backy.backup.Commands object at 0x...>,)
 {}
 """) == out
     assert err == ""
@@ -79,7 +79,7 @@ main.py                    ... DEBUG    backup.status(**{})
 
 
 def test_call_init(capsys, caplog, argv, monkeypatch):
-    monkeypatch.setattr(backy.backup.Backup, 'init', print_args)
+    monkeypatch.setattr(backy.backup.Commands, 'init', print_args)
     argv.append('-v')
     argv.append('init')
     argv.append('ceph-rbd')
@@ -89,7 +89,7 @@ def test_call_init(capsys, caplog, argv, monkeypatch):
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
-(<backy.backup.Backup object at ...>,)
+(<backy.backup.Commands object at ...>,)
 {'source': 'test/test04', 'type': 'ceph-rbd'}
 """) == out
     assert err == ""
@@ -118,29 +118,10 @@ main.py                    ... DEBUG    backup.backup(**{})
 """) == caplog.text()
 
 
-def test_call_maintenance(capsys, caplog, argv, monkeypatch):
-    monkeypatch.setattr(backy.backup.Backup, 'maintenance', print_args)
-    argv.append('-v')
-    argv.append('maintenance')
-    with pytest.raises(SystemExit) as exit:
-        backy.main.main()
-    assert exit.value.code == 0
-    out, err = capsys.readouterr()
-    assert Ellipsis("""\
-(<backy.backup.Backup object at 0x...>,)
-{'keep': 1}
-""") == out
-    assert "" == err
-    assert Ellipsis("""\
-backup.py                  ... DEBUG    Backup(".../backy")
-main.py                    ... DEBUG    backup.maintenance(**{'keep': 1})
-""") == caplog.text()
-
-
 def test_call_unexpected_exception(capsys, caplog, argv, monkeypatch):
     def do_raise(*args, **kw):
         raise RuntimeError("test")
-    monkeypatch.setattr(backy.backup.Backup, 'status', do_raise)
+    monkeypatch.setattr(backy.backup.Commands, 'status', do_raise)
     import os
     monkeypatch.setattr(os, '_exit', lambda x: None)
     import logging

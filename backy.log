@@ -1,0 +1,114 @@
+2014-05-01 13:09:56,008 backy.main   DEBUG    bin/backy
+2014-05-01 13:10:01,114 backy.main   DEBUG    bin/backy schedule 10
+2014-05-01 13:10:01,115 backy.backup DEBUG    Backup("/Users/ctheune/Code/backy")
+2014-05-01 13:10:01,115 backy.main   DEBUG    backup.schedule(**{'days': 10})
+2014-05-01 13:10:01,115 backy.main   ERROR    Unexpected exception
+2014-05-01 13:10:01,115 backy.main   ERROR    schedule() got an unexpected keyword argument 'days'
+Traceback (most recent call last):
+  File "/Users/ctheune/Code/backy/src/backy/main.py", line 115, in main
+    func(**func_args)
+TypeError: schedule() got an unexpected keyword argument 'days'
+2014-05-01 13:10:15,563 backy.main   DEBUG    bin/backy schedule 10
+2014-05-01 13:10:15,563 backy.backup DEBUG    Backup("/Users/ctheune/Code/backy")
+2014-05-01 13:10:15,563 backy.main   DEBUG    backup.schedule(**{'days': 10})
+2014-05-01 13:10:15,563 backy.main   ERROR    Unexpected exception
+2014-05-01 13:10:15,563 backy.main   ERROR    simulate() takes 1 positional argument but 2 were given
+Traceback (most recent call last):
+  File "/Users/ctheune/Code/backy/src/backy/main.py", line 115, in main
+    func(**func_args)
+  File "/Users/ctheune/Code/backy/src/backy/backup.py", line 173, in schedule
+    simulate(self, days)
+TypeError: simulate() takes 1 positional argument but 2 were given
+2014-05-01 13:13:33,542 backy.main   DEBUG    bin/backy schedule 10
+2014-05-01 13:13:33,543 backy.backup DEBUG    Backup("/Users/ctheune/Code/backy")
+2014-05-01 13:13:33,543 backy.main   DEBUG    backup.schedule(**{'days': 10})
+2014-05-01 13:13:33,546 backy.main   ERROR    Unexpected exception
+2014-05-01 13:13:33,546 backy.main   ERROR    'Schedule' object has no attribute 'revisions'
+Traceback (most recent call last):
+  File "/Users/ctheune/Code/backy/src/backy/main.py", line 115, in main
+    func(**func_args)
+  File "/Users/ctheune/Code/backy/src/backy/backup.py", line 173, in schedule
+    simulate(self, days)
+  File "/Users/ctheune/Code/backy/src/backy/schedule.py", line 59, in simulate
+    curses.wrapper(simulate_main, schedule, days)
+  File "/usr/local/Cellar/python3/3.3.2/Frameworks/Python.framework/Versions/3.3/lib/python3.3/curses/__init__.py", line 94, in wrapper
+    return func(stdscr, *args, **kwds)
+  File "/Users/ctheune/Code/backy/src/backy/schedule.py", line 76, in simulate_main
+    schedule.maintenance(simulate=True)
+  File "/Users/ctheune/Code/backy/src/backy/schedule.py", line 13, in maintenance
+    if len(self.revisions) >= 2:
+AttributeError: 'Schedule' object has no attribute 'revisions'
+2014-05-01 13:13:56,928 backy.main   DEBUG    bin/backy schedule 10
+2014-05-01 13:13:56,929 backy.backup DEBUG    Backup("/Users/ctheune/Code/backy")
+2014-05-01 13:13:56,929 backy.main   DEBUG    backup.schedule(**{'days': 10})
+2014-05-01 13:13:56,932 backy.main   ERROR    Unexpected exception
+2014-05-01 13:13:56,932 backy.main   ERROR    'Backup' object has no attribute 'revisions'
+Traceback (most recent call last):
+  File "/Users/ctheune/Code/backy/src/backy/main.py", line 115, in main
+    func(**func_args)
+  File "/Users/ctheune/Code/backy/src/backy/backup.py", line 173, in schedule
+    simulate(self, days)
+  File "/Users/ctheune/Code/backy/src/backy/schedule.py", line 59, in simulate
+    curses.wrapper(simulate_main, schedule, days)
+  File "/usr/local/Cellar/python3/3.3.2/Frameworks/Python.framework/Versions/3.3/lib/python3.3/curses/__init__.py", line 94, in wrapper
+    return func(stdscr, *args, **kwds)
+  File "/Users/ctheune/Code/backy/src/backy/schedule.py", line 76, in simulate_main
+    schedule.maintenance(simulate=True)
+  File "/Users/ctheune/Code/backy/src/backy/schedule.py", line 13, in maintenance
+    if len(self.backup.revisions) >= 2:
+AttributeError: 'Backup' object has no attribute 'revisions'
+2014-05-01 13:15:15,374 backy.main   DEBUG    bin/backy schedule 10
+2014-05-01 13:15:15,374 backy.backup DEBUG    Backup("/Users/ctheune/Code/backy")
+2014-05-01 13:15:15,374 backy.main   DEBUG    backup.schedule(**{'days': 10})
+2014-05-01 13:15:15,377 backy.main   ERROR    Unexpected exception
+2014-05-01 13:15:15,377 backy.main   ERROR    'Backup' object has no attribute 'revision_history'
+Traceback (most recent call last):
+  File "/Users/ctheune/Code/backy/src/backy/main.py", line 115, in main
+    func(**func_args)
+  File "/Users/ctheune/Code/backy/src/backy/backup.py", line 173, in schedule
+    simulate(self, days)
+  File "/Users/ctheune/Code/backy/src/backy/schedule.py", line 59, in simulate
+    curses.wrapper(simulate_main, schedule, days)
+  File "/usr/local/Cellar/python3/3.3.2/Frameworks/Python.framework/Versions/3.3/lib/python3.3/curses/__init__.py", line 94, in wrapper
+    return func(stdscr, *args, **kwds)
+  File "/Users/ctheune/Code/backy/src/backy/schedule.py", line 76, in simulate_main
+    schedule.maintenance(simulate=True)
+  File "/Users/ctheune/Code/backy/src/backy/schedule.py", line 13, in maintenance
+    if len(self.backup.revision_history) >= 2:
+AttributeError: 'Backup' object has no attribute 'revision_history'
+2014-05-01 13:16:05,362 backy.main   DEBUG    bin/backy schedule 10
+2014-05-01 13:16:05,362 backy.backup DEBUG    Backup("/Users/ctheune/Code/backy")
+2014-05-01 13:16:05,362 backy.main   DEBUG    backup.schedule(**{'days': 10})
+2014-05-01 13:16:05,366 backy.main   ERROR    Unexpected exception
+2014-05-01 13:16:05,366 backy.main   ERROR    'function' object has no attribute 'items'
+Traceback (most recent call last):
+  File "/Users/ctheune/Code/backy/src/backy/main.py", line 115, in main
+    func(**func_args)
+  File "/Users/ctheune/Code/backy/src/backy/backup.py", line 174, in schedule
+    simulate(self, days)
+  File "/Users/ctheune/Code/backy/src/backy/schedule.py", line 59, in simulate
+    curses.wrapper(simulate_main, schedule, days)
+  File "/usr/local/Cellar/python3/3.3.2/Frameworks/Python.framework/Versions/3.3/lib/python3.3/curses/__init__.py", line 94, in wrapper
+    return func(stdscr, *args, **kwds)
+  File "/Users/ctheune/Code/backy/src/backy/schedule.py", line 76, in simulate_main
+    schedule.maintenance(simulate=True)
+  File "/Users/ctheune/Code/backy/src/backy/schedule.py", line 42, in maintenance
+    for tag, args in self.schedule.items():
+AttributeError: 'function' object has no attribute 'items'
+2014-05-01 13:19:21,098 backy.main   DEBUG    bin/backy schedule 10
+2014-05-01 13:19:21,098 backy.backup DEBUG    Backup("/Users/ctheune/Code/backy")
+2014-05-01 13:19:21,098 backy.main   DEBUG    backup.schedule(**{'days': 10})
+2014-05-01 13:19:21,098 backy.main   ERROR    Unexpected exception
+2014-05-01 13:19:21,099 backy.main   ERROR    'Backup' object has no attribute '_schedule'
+Traceback (most recent call last):
+  File "/Users/ctheune/Code/backy/src/backy/main.py", line 115, in main
+    func(**func_args)
+  File "/Users/ctheune/Code/backy/src/backy/backup.py", line 174, in schedule
+    simulate(self, days)
+  File "/Users/ctheune/Code/backy/src/backy/schedule.py", line 57, in simulate
+    schedule = Schedule(backup)
+  File "/Users/ctheune/Code/backy/src/backy/schedule.py", line 9, in __init__
+    self.schedule = backup._schedule
+AttributeError: 'Backup' object has no attribute '_schedule'
+2014-05-08 13:31:12,479 backy.main   DEBUG    bin/backy
+2014-05-08 13:32:02,562 backy.main   DEBUG    bin/backy

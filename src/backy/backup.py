@@ -22,16 +22,16 @@ class Commands(object):
     """Proxy between CLI calls and actual backup code."""
 
     def __init__(self, path):
-        self.backup = Backup(path)
+        self._backup = Backup(path)
 
     def init(self, type, source):
-        self.backup.init(type, source)
+        self._backup.init(type, source)
 
     def status(self):
         total_bytes = 0
 
         print("== Revisions")
-        for r in self.backup.revision_history:
+        for r in self._backup.revision_history:
             total_bytes += r.stats.get('bytes_written', 0)
             print("{0}\t{1}\t{2}\t{3:d}s".format(
                 format_timestamp(r.timestamp),
@@ -41,23 +41,25 @@ class Commands(object):
 
         print()
         print("== Summary")
-        print("{} revisions".format(len(self.backup.revision_history)))
+        print("{} revisions".format(len(self._backup.revision_history)))
         print("{} data (estimated)".format(
             format_bytes_flexible(total_bytes)))
 
     def backup(self):
-        self.backup.backup()
+        self._backup.backup()
 
     def restore(self, revision, target):
-        self.backup.restore(revision, target)
+        self._backup.restore(revision, target)
 
     def schedule(self, days):
-        simulate(self.backup, days)
+        simulate(self._backup, days)
 
 
 class Backup(object):
 
     config = None
+    # Allow overriding in tests and simulation mode.
+    now = time.time
 
     def __init__(self, path):
         self.path = os.path.realpath(path)
@@ -80,8 +82,12 @@ class Backup(object):
 
     def _scan_revisions(self):
         self.revision_history = []
+        seen_uuids = set()
         for file in glob(self.path + '/*.rev'):
             r = Revision.load(file, self)
+            if r.uuid in seen_uuids:
+                continue
+            seen_uuids.add(r.uuid)
             self.revision_history.append(r)
         self.revision_history.sort(key=lambda r: r.timestamp)
 
@@ -126,9 +132,6 @@ class Backup(object):
             result = [self.find_revision(spec)]
         return result
 
-    # Allow overriding in tests and simulation mode.
-    now = time.time
-
     def init(self, type, source):
         # Allow re-configuration in this case.
         if self.config != {}:
@@ -171,7 +174,7 @@ class Backup(object):
         if due > 0:
             logger.info('{} seconds left until next backup.'.format(due))
             return
-        logger.info('Backup due since {} seconds. '.format(due))
+        logger.info('Backup due since {} seconds.'.format(due))
 
         new_revision = Revision.create(self)
         new_revision.materialize()
@@ -180,37 +183,7 @@ class Backup(object):
         new_revision.set_link('last')
         new_revision.stats['duration'] = self.now() - start
         new_revision.write_info()
-
-        self.schedule.expire()
-
-        self._lock()
-
-        self._scan_revisions()
-
-        start = self.now()
-
-        # Clean-up incomplete revisions
-        for revision in self.revision_history:
-            if 'duration' not in revision.stats:
-                logger.info('Removing incomplete revision {}'.
-                            format(revision.uuid))
-                revision.remove()
-
-        self._scan_revisions()
-
-        due = self.schedule.next_due()
-        if due > 0:
-            logger.info('{} seconds left until next backup.'.format(due))
-            return
-        logger.info('Backup due since {} seconds. '.format(due))
-
-        new_revision = Revision.create(self)
-        new_revision.materialize()
-
-        self.source.backup(new_revision)
-        new_revision.set_link('last')
-        new_revision.stats['duration'] = self.now() - start
-        new_revision.write_info()
+        self.revision_history.append(new_revision)
 
         self.schedule.expire()
 

@@ -2,7 +2,6 @@ from backy.tests import Ellipsis
 import backy.backup
 import os
 import subprocess
-import time
 
 
 def generate_test_data(target, size):
@@ -14,7 +13,7 @@ def generate_test_data(target, size):
     f.close()
 
 
-def test_smoketest_internal(tmpdir):
+def test_smoketest_internal(tmpdir, mocked_now):
     # These copies of data are intended to be different versions of the same
     # file.
     source1 = str(tmpdir / 'image1.qemu')
@@ -46,10 +45,10 @@ def test_smoketest_internal(tmpdir):
     backup._scan_revisions()
     assert len(backup.revision_history) == 1
 
-    # Set interval to 0 to let tests continue
-    backup.INTERVAL = 0
-    time.sleep(1)
+    # Advance time to allow a new backup
+    mocked_now.now += 24*60*60
     backup.backup()
+    assert len(backup.revision_history) == 2
 
     # Restore second state from level 0
     backup.restore(0, restore_target)
@@ -60,9 +59,10 @@ def test_smoketest_internal(tmpdir):
     assert open(source1, 'rb').read() == open(restore_target, 'rb').read()
 
     # Backup second state again
-    time.sleep(1)
+    mocked_now.now += 24*60*60
     backup.source.filename = source2
     backup.backup()
+    assert len(backup.revision_history) == 3
 
     # Restore image2 from level 0 again
     backup.restore(0, restore_target)
@@ -78,7 +78,9 @@ def test_smoketest_internal(tmpdir):
 
     # Backup third state
     backup.source.filename = source3
+    mocked_now.now += 24*60*60
     backup.backup()
+    assert len(backup.revision_history) == 4
 
     # Restore image3 from level 0
     backup.restore(0, restore_target)
@@ -105,17 +107,18 @@ def test_smoketest_external():
     assert Ellipsis("""\
 Using /... as workspace.
 Generating Test Data.. Done.
-Backing up img_state1.img. Done.
+Backing up img_state1.img. Backup due since 0 seconds.
+Done.
 Restoring img_state1.img from level 0. Done.
 Diffing restore_state1.img against img_state1.img. Success.
-Backing up img_state2.img. Backup due since .... Starting.
+Backing up img_state2.img. Backup due since ... seconds.
 Performing non-COW copy: ...
 Done.
 Restoring img_state2.img from level 0. Done.
 Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 1. Done.
 Diffing restore_state1.img against img_state1.img. Success.
-Backing up img_state2.img again. Backup due since .... Starting.
+Backing up img_state2.img again. Backup due since ... seconds.
 Performing non-COW copy: ...
 Done.
 Restoring img_state2.img from level 0. Done.
@@ -124,7 +127,7 @@ Restoring img_state2.img from level 1. Done.
 Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 2. Done.
 Diffing restore_state1.img against img_state1.img. Success.
-Backing up img_state3.img. Backup due since .... Starting.
+Backing up img_state3.img. Backup due since ... seconds.
 Performing non-COW copy: ...
 Done.
 Restoring img_state3.img from level 0. Done.
@@ -136,21 +139,12 @@ Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 3. Done.
 Diffing restore_state1.img against img_state1.img. Success.
 == Revisions
-... 5.00 MiB        0s
-... 5.00 MiB        0s
-... 5.00 MiB        0s
-... 5.00 MiB        0s
+... 511.99 kiB        0s
+... 511.99 kiB        0s
+... 511.99 kiB        0s
+... 511.99 kiB        0s
 
 == Summary
 4 revisions
-20.00 MiB data (estimated)
-Removing revision ...
-Removing revision ...
-Removing revision ...
-== Revisions
-... 5.00 MiB ... 0s
-
-== Summary
-1 revisions
-5.00 MiB data (estimated)
+2.00 MiB data (estimated)
 """) == output

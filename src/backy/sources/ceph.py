@@ -207,7 +207,7 @@ class CephRBD(object):
 
             elif data[0] == 'data':
                 target.seek(data[1])
-                # XXX make constant consumption
+                # XXX make constant memory consumption
                 target.write(data[3])
                 self.revision.stats['bytes_written'] += data[2]
 

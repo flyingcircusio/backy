@@ -75,5 +75,5 @@ def test_store_revision_data(tmpdir):
         "parent": "asdf",
         "uuid": "asdf2",
         "stats": {},
-        "tag": "",
+        "tags": [],
         "timestamp": 25}

@@ -79,7 +79,13 @@ def test_init_ceph(tmpdir):
     config = json.loads(config)
     assert config == {
         "source-type": "ceph-rbd",
-        "source": {"image": "test04", "pool": "test"}}
+        "source": {"image": "test04", "pool": "test"},
+        "schedule": {"daily": {"interval": "1d",
+                               "keep": 9},
+                     "weekly": {"interval": "7d",
+                                "keep": 5},
+                     "monthly": {"interval": "30d",
+                                 "keep": 4}}}
 
 
 def test_init_file(tmpdir):
@@ -90,7 +96,13 @@ def test_init_file(tmpdir):
     config = json.loads(config)
     assert config == {
         "source-type": "file",
-        "source": {"filename": "/dev/foo"}}
+        "source": {"filename": "/dev/foo"},
+        "schedule": {"daily": {"interval": "1d",
+                               "keep": 9},
+                     "weekly": {"interval": "7d",
+                                "keep": 5},
+                     "monthly": {"interval": "30d",
+                                 "keep": 4}}}
 
 
 def test_init_creates_directory(tmpdir):

@@ -37,46 +37,29 @@ class Schedule(object):
         self.schedule = self.backup.config.get('schedule', {})
 
     def next_due(self):
-        """Time until the next backup (with tag '') is due (>0) or
-        since it has been due (<0) in seconds.
+        """Return dict when each tag of this schedule is due next.
         """
-        if not self.backup.revision_history:
-            return 0  # never backed up before
-        last = self.backup.revision_history[-1].timestamp
-        interval = self.schedule.get('', {}).get('interval', '1d')
-        next_backup_due = last + parse_duration(interval)
-        return next_backup_due - self.backup.now()
+        due = set()
+        for tag, args in self.schedule.items():
+            tag_history = self.backup.find_revisions('tag:{}'.format(tag))
+            if not tag_history:
+                # Never made a backup with this tag before, so it's due
+                # by default.
+                due.add(tag)
+            else:
+                last = tag_history[-1].timestamp
+                if ((last + parse_duration(args['interval']))
+                        <= self.backup.now()):
+                    due.add(tag)
+        return due
 
     def expire(self, simulate=False):
         """Remove old revisions according to the backup schedule.
         """
-        if not self.backup.revision_history:
-            return
-        for tag, args in sorted(self.schedule.items(),
-                                key=lambda x: parse_duration(x[1]['interval']),
-                                reverse=True):
-            if not tag:
-                # The untagged level is used for generating backups
-                continue
-            level_history = self.backup.find_revisions('tag:'+tag)
-            if level_history:
-                newest_level = level_history[-1]
-                newest_age = self.backup.now() - newest_level.timestamp
-                if newest_age < parse_duration(args['interval']):
-                    continue
-            revision = self.backup.revision_history[-1]
-            revision.tag = tag
-            if not simulate:
-                revision.write_info()
-            if level_history:
-                # XXX i think this is superfluous by now
-                previous = level_history[-1]
-                previous.parent = revision.uuid
-            break
-
         # Clean out old backups: keep at least a certain number of copies
         # (keep) and ensure that we don't throw away copies that are newer
         # than keep * interval for this tag.
+        # Phase 1: remove tags that are expired
         for tag, args in self.schedule.items():
             revisions = self.backup.find_revisions('tag:'+tag)
             keep = args['keep']
@@ -87,7 +70,12 @@ class Schedule(object):
                 if old_revision.timestamp > (
                         now - (keep * parse_duration(args['interval']))):
                     continue
-                old_revision.remove(simulate)
+                old_revision.tags.remove(tag)
+
+        # Phase 2: delete revisions that have no tags any more.
+        for revision in self.backup.revision_history:
+            if not revision.tags:
+                revision.remove(simulate)
 
 
 def format_timestamp(ts):
@@ -126,8 +114,10 @@ def simulate_main(stdscr, schedule, days):
         revision_log.clear()
 
         # Simulate a new backup
-        if schedule.next_due() <= 0:
+        tags = schedule.next_due()
+        if tags:
             r = Revision.create(schedule.backup)
+            r.tags = list(tags)
             schedule.backup.revision_history.append(r)
 
         schedule.expire(simulate=True)
@@ -140,8 +130,8 @@ def simulate_main(stdscr, schedule, days):
         for i, r in enumerate(revisions[-15:]):
             time_readable = format_timestamp(r.timestamp)
             revision_log.addstr(
-                "{1} | {0.uuid} | {0.tag:10s}\n".
-                format(r, time_readable))
+                "{1} | {0.uuid} | {2:20s}\n".
+                format(r, time_readable, ', '.join(r.tags)))
 
         revisions_by_day = {}
         for revision in schedule.backup.revision_history:
@@ -156,7 +146,7 @@ def simulate_main(stdscr, schedule, days):
             if r is None:
                 ch = ' '
             else:
-                ch = r.tag[0] if r.tag else '.'
+                ch = r.tags[0][0] if r.tags else '.'
             hist_data.append(ch)
             hist_now += datetime.timedelta(days=1)
         hist_data = ''.join(hist_data)

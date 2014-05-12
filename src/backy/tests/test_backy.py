@@ -107,19 +107,16 @@ def test_smoketest_external():
     assert Ellipsis("""\
 Using /... as workspace.
 Generating Test Data.. Done.
-Backing up img_state1.img. Backup due since 0 seconds.
-Done.
+Backing up img_state1.img. Done.
 Restoring img_state1.img from level 0. Done.
 Diffing restore_state1.img against img_state1.img. Success.
-Backing up img_state2.img. Backup due since ... seconds.
-Performing non-COW copy: ...
+Backing up img_state2.img. Performing non-COW copy: ...
 Done.
 Restoring img_state2.img from level 0. Done.
 Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 1. Done.
 Diffing restore_state1.img against img_state1.img. Success.
-Backing up img_state2.img again. Backup due since ... seconds.
-Performing non-COW copy: ...
+Backing up img_state2.img again. Performing non-COW copy: ...
 Done.
 Restoring img_state2.img from level 0. Done.
 Diffing restore_state2.img against img_state2.img. Success.
@@ -127,8 +124,7 @@ Restoring img_state2.img from level 1. Done.
 Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 2. Done.
 Diffing restore_state1.img against img_state1.img. Success.
-Backing up img_state3.img. Backup due since ... seconds.
-Performing non-COW copy: ...
+Backing up img_state3.img. Performing non-COW copy: ...
 Done.
 Restoring img_state3.img from level 0. Done.
 Diffing restore_state3.img against img_state3.img. Success.
@@ -138,15 +134,15 @@ Restoring img_state2.img from level 2. Done.
 Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 3. Done.
 Diffing restore_state1.img against img_state1.img. Success.
-+---------------------+--------------------------------------+------------+----------+-----+
++---------------------+--------------------------------------+------------+----------+------+
 |         Date        |                  ID                  |    Size    | \
-Duration | Tag |
-+---------------------+--------------------------------------+------------+----------+-----+
-| ... | ... | 511.99 kiB |    0     |     |
-| ... | ... | 511.99 kiB |    0     |     |
-| ... | ... | 511.99 kiB |    0     |     |
-| ... | ... | 511.99 kiB |    0     |     |
-+---------------------+--------------------------------------+------------+----------+-----+
+Duration | Tags |
++---------------------+--------------------------------------+------------+----------+------+
+| ... | ... | 511.99 kiB |    0     |      |
+| ... | ... | 511.99 kiB |    0     |      |
+| ... | ... | 511.99 kiB |    0     |      |
+| ... | ... | 511.99 kiB |    0     |      |
++---------------------+--------------------------------------+------------+----------+------+
 == Summary
 4 revisions
 2.00 MiB data (estimated)

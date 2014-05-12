@@ -32,7 +32,7 @@ class Commands(object):
     def status(self):
         total_bytes = 0
 
-        t = PrettyTable(["Date", "ID", "Size", "Duration", "Tag"])
+        t = PrettyTable(["Date", "ID", "Size", "Duration", "Tags"])
 
         for r in self._backup.revision_history:
             total_bytes += r.stats.get('bytes_written', 0)
@@ -40,7 +40,7 @@ class Commands(object):
                        r.uuid,
                        format_bytes_flexible(r.stats.get('bytes_written', 0)),
                        int(r.stats.get('duration', 0)),
-                       r.tag])
+                       ', '.join(r.tags)])
 
         print(t)
 
@@ -69,7 +69,6 @@ class Backup(object):
         self.path = os.path.realpath(path)
         logger.debug('Backup("{}")'.format(self.path))
         self._configure()
-        self.schedule = Schedule(self)
         self._scan_revisions()
 
     def _configure(self):
@@ -83,6 +82,7 @@ class Backup(object):
             open(self.path + '/config', 'r', encoding='utf-8'))
         self.source = select_source(
             self.config['source-type'])(self.config['source'])
+        self.schedule = Schedule(self)
 
     def _scan_revisions(self):
         self.revision_history = []
@@ -129,7 +129,7 @@ class Backup(object):
         if isinstance(spec, str) and spec.startswith('tag:'):
             tag = spec.replace('tag:', '')
             result = [r for r in self.revision_history
-                      if r.tag == tag]
+                      if tag in r.tags]
         elif spec == 'all':
             result = self.revision_history[:]
         else:
@@ -150,7 +150,13 @@ class Backup(object):
 
         with SafeWritableFile(self.path+'/config') as f:
             d = json.dumps({'source': source_config,
-                            'source-type': type})
+                            'source-type': type,
+                            'schedule': {'daily': {'interval': '1d',
+                                                   'keep': 9},
+                                         'weekly': {'interval': '7d',
+                                                    'keep': 5},
+                                         'monthly': {'interval': '30d',
+                                                     'keep': 4}}})
             d = d.encode('utf-8')
             f.write(d)
 
@@ -158,7 +164,7 @@ class Backup(object):
         self.config = None
         self._configure()
 
-    def backup(self, force=False):
+    def backup(self, force=None):
         self._lock()
 
         self._scan_revisions()
@@ -174,18 +180,17 @@ class Backup(object):
 
         self._scan_revisions()
 
-        due = self.schedule.next_due()
-        if due > 0:
-            logger.info('{} seconds left until next backup.'.format(due))
-            if force:
-                logger.info('Force flag set. Performing backup anyway.')
-            else:
-                return
-        else:
-            logger.info('Backup due since {} seconds.'.format(due))
+        tags = self.schedule.next_due()
+        if force:
+            tags.add(force)
+        if not tags:
+            logger.info('No backup due yet.')
+            return
 
         new_revision = Revision.create(self)
         new_revision.materialize()
+        new_revision.tags = tags
+        new_revision.write_info()
 
         self.source.backup(new_revision)
         new_revision.set_link('last')

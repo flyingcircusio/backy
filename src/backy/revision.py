@@ -27,7 +27,7 @@ class Revision(object):
     timestamp = None
     parent = None
     stats = None
-    tag = ''
+    tags = ()
 
     def __init__(self, uuid, backup):
         self.uuid = uuid
@@ -51,7 +51,11 @@ class Revision(object):
         r.timestamp = metadata['timestamp']
         r.parent = metadata['parent']
         r.stats = metadata.get('stats', {})
-        r.tag = metadata.get('tag', '')
+        r.tags = metadata.get('tags', '')
+        # XXX turn into a better "upgrade" method and start versioning
+        # data files.
+        if 'tag' in metadata:
+            r.tags = [metadata['tag']]
         return r
 
     @property
@@ -77,7 +81,7 @@ class Revision(object):
             'timestamp': self.timestamp,
             'parent': self.parent,
             'stats': self.stats,
-            'tag': self.tag}
+            'tags': list(self.tags)}
         with SafeWritableFile(self.info_filename) as f:
             d = json.dumps(metadata)
             f.write(d.encode('utf-8'))

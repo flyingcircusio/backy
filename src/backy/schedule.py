@@ -66,9 +66,9 @@ class Schedule(object):
             if len(revisions) < keep:
                 continue
             now = self.backup.now()
+            keep_threshold = now - keep * parse_duration(args['interval'])
             for old_revision in revisions[:-keep]:
-                if old_revision.timestamp > (
-                        now - (keep * parse_duration(args['interval']))):
+                if old_revision.timestamp >= keep_threshold:
                     continue
                 old_revision.tags.remove(tag)
 

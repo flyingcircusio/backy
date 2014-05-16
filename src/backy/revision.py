@@ -39,7 +39,7 @@ class Revision(object):
         r = Revision(str(uuid.uuid4()), backup)
         r.timestamp = backup.now()
         if backup.revision_history:
-            # validate that this parent is a cutally a good parent. need
+            # XXX validate that this parent is a actually a good parent. need
             # to contact the source for this ...
             r.parent = backup.revision_history[-1].uuid
         return r
@@ -74,6 +74,7 @@ class Revision(object):
 
         parent = self.backup.find_revision(self.parent)
         cp_reflink(parent.filename, self.filename)
+        self.writable()
 
     def write_info(self):
         metadata = {
@@ -102,3 +103,11 @@ class Revision(object):
             for file in glob.glob(self.filename+'*'):
                 os.unlink(file)
         self.backup.revision_history.remove(self)
+
+    def writable(self):
+        os.chmod(self.filename, 0o640)
+        os.chmod(self.info_filename, 0o640)
+
+    def readonly(self):
+        os.chmod(self.filename, 0o440)
+        os.chmod(self.info_filename, 0o440)

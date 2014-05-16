@@ -188,14 +188,15 @@ class Backup(object):
             return
 
         new_revision = Revision.create(self)
-        new_revision.materialize()
         new_revision.tags = tags
-        new_revision.write_info()
+        new_revision.materialize()
 
         self.source.backup(new_revision)
+
         new_revision.set_link('last')
         new_revision.stats['duration'] = self.now() - start
         new_revision.write_info()
+        new_revision.readonly()
         self.revision_history.append(new_revision)
 
         self.schedule.expire()

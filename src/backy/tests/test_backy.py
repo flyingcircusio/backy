@@ -1,6 +1,7 @@
 from backy.tests import Ellipsis
 import backy.backup
 import os
+import pytest
 import subprocess
 
 
@@ -35,6 +36,9 @@ def test_smoketest_internal(tmpdir, mocked_now):
     # Restore first state from level 0
     restore_target = str(tmpdir / 'image1.restore')
     backup.restore(0, restore_target)
+    with pytest.raises(PermissionError):
+        open(backup.revision_history[-1].filename, 'wb')
+        open(backup.revision_history[-1].info_filename, 'wb')
     assert open(source1, 'rb').read() == open(restore_target, 'rb').read()
 
     # Backup second state

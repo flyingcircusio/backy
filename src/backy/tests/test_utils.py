@@ -12,6 +12,7 @@ def test_ellipsis():
     assert Ellipsis('a...c') == 'abc'
     assert Ellipsis('a...d') != 'abc'
     assert Ellipsis('a...c...g') == 'abcdefg'
+    assert not Ellipsis('') == 'asdf'
     with pytest.raises(Exception):
         assert Ellipsis('') == 'abcdefg'
 

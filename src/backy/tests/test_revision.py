@@ -74,6 +74,6 @@ def test_store_revision_data(tmpdir):
     assert json.loads(info.decode('utf-8')) == {
         "parent": "asdf",
         "uuid": "asdf2",
-        "stats": {},
+        "stats": {"bytes_written": 0},
         "tags": [],
         "timestamp": 25}

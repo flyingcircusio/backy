@@ -1,4 +1,4 @@
-from backy.utils import safe_copy
+from backy.utils import safe_copy, compare_files
 
 
 class File(object):
@@ -10,10 +10,27 @@ class File(object):
     def config_from_cli(spec):
         return dict(filename=spec)
 
-    def backup(self, revision):
-        target = open(revision.filename, 'wb')
-        source = open(self.filename, 'rb')
+    def __call__(self, revision):
+        self.revision = revision
+        return self
 
-        revision.stats['bytes_written'] = 0
-        for chunk in safe_copy(source, target):
-            revision.stats['bytes_written'] += len(chunk)
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
+        pass
+
+    def backup(self):
+        t = open(self.revision.filename, 'wb')
+        s = open(self.filename, 'rb')
+
+        with s as source, t as target:
+            bytes = safe_copy(source, target)
+        self.revision.stats['bytes_written'] = bytes
+
+    def verify(self):
+        s = open(self.filename, 'rb')
+        t = open(self.revision.filename, 'rb')
+
+        with s as source, t as target:
+            return compare_files(source, target)

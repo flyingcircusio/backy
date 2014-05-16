@@ -6,23 +6,24 @@ import tempfile
 class SafeWritableFile():
 
     def __init__(self, filename, rename=True, write_protect=False,
-                 encoding=None):
+                 encoding=None, mode='wb'):
         self.filename = filename
         self.rename = rename
         self.write_protect = write_protect
         self.encoding = encoding
+        self.mode = mode
 
     def __enter__(self):
         if self.rename:
             self.f = tempfile.NamedTemporaryFile(
-                'wb',
+                self.mode,
                 encoding=self.encoding,
                 dir=os.path.dirname(self.filename),
                 delete=False)
         else:
             if self.write_protect and os.path.exists(self.filename):
                 os.chmod(self.filename, 0o640)
-            self.f = open(self.filename, 'wb', encoding=self.encoding)
+            self.f = open(self.filename, self.mode, encoding=self.encoding)
         return self.f
 
     def __exit__(self, exc_type, exc_info, exc_tb):
@@ -38,7 +39,6 @@ class SafeWritableFile():
             os.chmod(self.filename, 0o440)
 
 
-# XXX duplicated from unit.py
 Bytes = 1.0
 kiB = Bytes * 1024
 MiB = kiB * 1024
@@ -68,9 +68,22 @@ def safe_copy(source, target):
         chunk = source.read(4*1024**2)
         if not chunk:
             break
-        yield chunk
         target.write(chunk)
+    target.truncate()
+    size = target.tell()
     target.flush()
     os.fsync(target)
     target.close()
     source.close()
+    return size
+
+
+def compare_files(a, b):
+    while True:
+        chunk_a = a.read(4*1024**2)
+        chunk_b = b.read(4*1024**2)
+        if chunk_a != chunk_b:
+            return False
+        if not chunk_a:
+            break
+    return True

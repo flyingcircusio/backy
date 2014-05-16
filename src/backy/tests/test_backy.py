@@ -38,6 +38,7 @@ def test_smoketest_internal(tmpdir, mocked_now):
     backup.restore(0, restore_target)
     with pytest.raises(PermissionError):
         open(backup.revision_history[-1].filename, 'wb')
+    with pytest.raises(PermissionError):
         open(backup.revision_history[-1].info_filename, 'wb')
     assert open(source1, 'rb').read() == open(restore_target, 'rb').read()
 

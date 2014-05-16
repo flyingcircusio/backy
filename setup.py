@@ -29,12 +29,12 @@ setup(
             backy = backy.main:main
 
         [backy.sources]
-            ceph-rbd = backy.sources.ceph:CephRBD
+            ceph-rbd = backy.sources.ceph.source:CephRBD
             file = backy.sources.file:File
 
     """,
-    author='Daniel Kraft <daniel.kraft@d9t.de>, Christian Theune <ct@gocept.com>',
-    author_email='daniel.kraft@d9t.de',
+    author='Christian Theune <ct@gocept.com>, Daniel Kraft <daniel.kraft@d9t.de>',
+    author_email='ct@gocept.com',
     license='GPL 3',
     url='https://bitbucket.org/ctheune/backy/',
     keywords='backup',

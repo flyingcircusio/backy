@@ -99,8 +99,6 @@ class Ellipsis(object):
         return report
 
     def __eq__(self, other):
-        if not self.patterns and other:
-            return False
         assert isinstance(other, str)
         report = self.compare(other)
         return report.is_ok

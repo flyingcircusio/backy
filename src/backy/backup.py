@@ -166,7 +166,6 @@ class Backup(object):
 
     def backup(self, force=None):
         self._lock()
-
         self._scan_revisions()
 
         start = self.now()
@@ -177,8 +176,6 @@ class Backup(object):
                 logger.info('Removing incomplete revision {}'.
                             format(revision.uuid))
                 revision.remove()
-
-        self._scan_revisions()
 
         tags = self.schedule.next_due()
         if force:
@@ -191,7 +188,12 @@ class Backup(object):
         new_revision.tags = tags
         new_revision.materialize()
 
-        self.source.backup(new_revision)
+        with self.source(new_revision) as source:
+            source.backup()
+            if not source.verify():
+                logger.error('New revision does not match source '
+                             '- removing it.')
+                new_revision.remove()
 
         new_revision.set_link('last')
         new_revision.stats['duration'] = self.now() - start
@@ -208,5 +210,4 @@ class Backup(object):
         r = self.find_revision(revision)
         source = open(r.filename, 'rb')
         target = open(target, 'wb')
-        for chunk in safe_copy(source, target):
-            pass
+        safe_copy(source, target)

@@ -32,7 +32,7 @@ class Revision(object):
     def __init__(self, uuid, backup):
         self.uuid = uuid
         self.backup = backup
-        self.stats = {}
+        self.stats = {'bytes_written': 0}
 
     @classmethod
     def create(cls, backup):
@@ -102,7 +102,8 @@ class Revision(object):
         if not simulate:
             for file in glob.glob(self.filename+'*'):
                 os.unlink(file)
-        self.backup.revision_history.remove(self)
+        if self in self.backup.revision_history:
+            self.backup.revision_history.remove(self)
 
     def writable(self):
         os.chmod(self.filename, 0o640)

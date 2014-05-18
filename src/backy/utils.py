@@ -78,7 +78,7 @@ def safe_copy(source, target):
     return size
 
 
-def compare_files(a, b):
+def files_are_equal(a, b):
     while True:
         chunk_a = a.read(4*1024**2)
         chunk_b = b.read(4*1024**2)

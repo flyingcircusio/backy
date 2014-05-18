@@ -1,7 +1,6 @@
 from .rbd import RBDClient
-from backy.utils import safe_copy, SafeWritableFile, compare_files
+from backy.utils import safe_copy, SafeWritableFile, files_are_equal
 import logging
-
 
 logger = logging.getLogger(__name__)
 
@@ -72,4 +71,4 @@ class CephRBD(object):
             self.pool, self.image, self.revision.uuid))
         t = open(self.revision.filename, 'rb')
         with s as source, t as target:
-            return compare_files(source, target)
+            return files_are_equal(source, target)

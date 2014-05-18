@@ -1,4 +1,4 @@
-from backy.utils import safe_copy, compare_files
+from backy.utils import safe_copy, files_are_equal
 
 
 class File(object):
@@ -33,4 +33,4 @@ class File(object):
         t = open(self.revision.filename, 'rb')
 
         with s as source, t as target:
-            return compare_files(source, target)
+            return files_are_equal(source, target)

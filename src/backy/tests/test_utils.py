@@ -1,5 +1,7 @@
 from backy.tests import Ellipsis
+from backy.utils import files_are_equal
 import backy.backup
+import os
 import pytest
 
 
@@ -57,3 +59,33 @@ dsdfblablafooobar
 def test_ellipsis_escaping():
     obj = (object(),)
     assert Ellipsis('(<object object at ...>,)') == repr(obj)
+
+
+def test_compare_files_same(tmpdir):
+    os.chdir(str(tmpdir))
+    with open('a', 'wb') as f:
+        f.write(b'asdf')
+    with open('b', 'wb') as f:
+        f.write(b'asdf')
+
+    assert files_are_equal(open('a', 'rb'), open('b', 'rb'))
+
+
+def test_compare_files_different_content(tmpdir):
+    os.chdir(str(tmpdir))
+    with open('a', 'wb') as f:
+        f.write(b'asdf')
+    with open('b', 'wb') as f:
+        f.write(b'bsdf')
+
+    assert not files_are_equal(open('a', 'rb'), open('b', 'rb'))
+
+
+def test_compare_files_different_length(tmpdir):
+    os.chdir(str(tmpdir))
+    with open('a', 'wb') as f:
+        f.write(b'asdf1')
+    with open('b', 'wb') as f:
+        f.write(b'bsdf')
+
+    assert not files_are_equal(open('a', 'rb'), open('b', 'rb'))

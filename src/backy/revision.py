@@ -1,4 +1,4 @@
-from backy.utils import SafeWritableFile
+from backy.utils import SafeFile
 from subprocess import check_output
 import glob
 import json
@@ -83,9 +83,9 @@ class Revision(object):
             'parent': self.parent,
             'stats': self.stats,
             'tags': list(self.tags)}
-        with SafeWritableFile(self.info_filename) as f:
-            d = json.dumps(metadata)
-            f.write(d.encode('utf-8'))
+        with SafeFile(self.info_filename, encoding='utf-8') as f:
+            f.open_new('wb')
+            f.write(json.dumps(metadata))
 
     def set_link(self, name):
         path = self.backup.path

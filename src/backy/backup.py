@@ -1,7 +1,7 @@
 from backy.revision import Revision
 from backy.schedule import simulate, Schedule
 from backy.sources import select_source
-from backy.utils import SafeWritableFile, format_bytes_flexible, safe_copy
+from backy.utils import SafeFile, format_bytes_flexible, safe_copy
 from glob import glob
 from prettytable import PrettyTable
 import datetime
@@ -148,7 +148,8 @@ class Backup(object):
         source_factory = select_source(type)
         source_config = source_factory.config_from_cli(source)
 
-        with SafeWritableFile(self.path+'/config') as f:
+        with SafeFile(self.path+'/config', encoding='utf-8') as f:
+            f.open_new('wb')
             d = json.dumps({'source': source_config,
                             'source-type': type,
                             'schedule': {'daily': {'interval': '1d',
@@ -157,7 +158,6 @@ class Backup(object):
                                                     'keep': 5},
                                          'monthly': {'interval': '30d',
                                                      'keep': 4}}})
-            d = d.encode('utf-8')
             f.write(d)
 
         # Allow re-configuring after initialization.

@@ -1,5 +1,5 @@
 from .rbd import RBDClient
-from backy.utils import safe_copy, SafeWritableFile, files_are_equal
+from backy.utils import safe_copy, SafeFile, files_are_equal
 import logging
 
 logger = logging.getLogger(__name__)
@@ -50,8 +50,10 @@ class CephRBD(object):
     def diff(self):
         logger.info('Performing differential backup ...')
         d = self.rbd.export_diff()
-        t = SafeWritableFile(self.revision.filename, rename=False, mode='r+b')
+        t = SafeFile(self.revision.filename)
         with d as diff, t as target:
+            t.use_write_protection()
+            t.open_inplace()
             bytes = diff.integrate(target)
         self.revision.stats['bytes_written'] = bytes
 

@@ -1,6 +1,12 @@
 from .diff import RBDDiffV1
 import contextlib
 import json
+import subprocess
+
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class RBDClient(object):
@@ -13,24 +19,43 @@ class RBDClient(object):
             rbd.append('--format json')
 
         rbd.extend(cmd)
-        result = cmd(' '.join(rbd), shell=True)
+
+        logger.debug(' '.join(rbd))
+        result = subprocess.check_output(' '.join(rbd), shell=True)
 
         if format == 'json':
             result = json.loads(result.decode('utf-8'))
 
         return result
 
-    def snap_ls(self):
-        return self._rbd_cmd('snap ls {image_name}', format='json')
+    def exists(self, image):
+        try:
+            return self._rbd(['info', image], format='json')
+        except subprocess.CalledProcessError as e:
+            if e.returncode == 2:
+                return False
+            raise
 
     def map(self, image, readonly=False):
-        self._rbd(['map', '--readonly' if readonly else '', image])
-        # XXX return mapping dict. can this be read without using
-        # showmapped, directly from the map command?
+        self._rbd(['--read-only' if readonly else '', 'map', image])
+
+        mappings = self._rbd(['showmapped'], format='json')
+        for mapping in mappings.values():
+            if image == '{pool}/{name}@{snap}'.format(**mapping):
+                return mapping
+        raise RuntimeError('Map not found in mapping list.')
+
+    def unmape(self, device):
+        self._rbd(['unmap', device])
 
     def snap_create(self, image):
-        # XXX handle existing snapshots
         self._rbd(['snap', 'create', image])
+
+    def snap_ls(self, image):
+        return self._rbd(['snap', 'ls', image], format='json')
+
+    def snap_rm(self, image):
+        return self._rbd(['snap', 'rm', image])
 
     def export_diff(self, new, old, target):
         self._rbd(['export-diff',
@@ -46,6 +71,6 @@ class RBDClient(object):
         try:
             yield source
         finally:
-            if not source.closed():
+            if not source.closed:
                 source.close()
             self.unmap(mapped['device'])

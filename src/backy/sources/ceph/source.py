@@ -49,14 +49,16 @@ class CephRBD(object):
 
     def diff(self):
         logger.info('Performing differential backup ...')
-        d = self.rbd.export_diff(self._image_name+'@backy-'+self.revision.uuid,
-                                 'backy-'+self.revision.parent,
+        snap_from = 'backy-' + self.revision.parent
+        snap_to = 'backy-' + self.revision.uuid
+        d = self.rbd.export_diff(self._image_name+'@'+snap_to,
+                                 snap_from,
                                  self.revision.filename+'.rbddiff')
         t = SafeFile(self.revision.filename)
-        with d as diff, t as target:
+        with t as target:
             t.use_write_protection()
-            t.open_inplace()
-            bytes = diff.integrate(target)
+            t.open_inplace('r+b')
+            bytes = d.integrate(target, snap_from, snap_to)
         self.revision.stats['bytes_written'] = bytes
 
     def full(self):
@@ -73,5 +75,6 @@ class CephRBD(object):
         s = self.rbd.image_reader('{}/{}@backy-{}'.format(
             self.pool, self.image, self.revision.uuid))
         t = open(self.revision.filename, 'rb')
-        with s as source, t as target:
-            return files_are_equal(source, target)
+        with s as source:
+            with t as target:
+                return files_are_equal(source, target)

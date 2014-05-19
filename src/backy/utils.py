@@ -120,6 +120,9 @@ class SafeFile(object):
     def seek(self, *args, **kw):
         return self.f.seek(*args, **kw)
 
+    def truncate(self, *args, **kw):
+        return self.f.truncate(*args, **kw)
+
 
 Bytes = 1.0
 kiB = Bytes * 1024

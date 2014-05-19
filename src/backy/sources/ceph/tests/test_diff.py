@@ -144,6 +144,60 @@ def test_integrate_sample_data(sample_diff, tmpdir):
     assert integrated[209:500] == b'\1'*291
 
 
+def test_integrate_stops_on_broken_metadata_record(tmpdir):
+    filename = str(tmpdir / 'sample.rbddiff')
+    with open(filename, 'wb') as f:
+        f.write(b'rbd diff v1\n')
+        # from snap
+        f.write(b'f')
+        f.write(struct.pack(b'<i', len(b'fromsnapshot')))
+        f.write(b'fromsnapshot')
+
+        # broken record
+        f.write(b'0')
+
+    diff = RBDDiffV1(filename)
+
+    target = open(str(tmpdir/'target'), 'wb')
+    target.write(b'\1'*600)
+    target.seek(0)
+    with pytest.raises(ValueError) as e:
+        with target:
+            diff.integrate(target, 'fromsnapshot', 'tosnapshot')
+
+    assert (e.value.args[0] ==
+            'Got invalid record type "0". Previous record: f')
+
+
+def test_integrate_stops_on_broken_data_record(tmpdir):
+    filename = str(tmpdir / 'sample.rbddiff')
+    with open(filename, 'wb') as f:
+        f.write(b'rbd diff v1\n')
+        # from snap
+        f.write(b'f')
+        f.write(struct.pack(b'<i', len(b'fromsnapshot')))
+        f.write(b'fromsnapshot')
+
+        # zero
+        f.write(b'z')
+        f.write(struct.pack(b'<QQ', 50, 100))
+
+        # broken record
+        f.write(b'0')
+
+    diff = RBDDiffV1(filename)
+
+    target = open(str(tmpdir/'target'), 'wb')
+    target.write(b'\1'*600)
+    target.seek(0)
+    with pytest.raises(ValueError) as e:
+        with target:
+            diff.integrate(target, 'fromsnapshot', 'tosnapshot')
+
+    assert (e.value.args[0] ==
+            'Got invalid record type "0". Previous record: z')
+
+
 def test_read_zero_first_data_record(tmpdir):
     filename = str(tmpdir / 'sample.rbddiff')
     with open(filename, 'wb') as f:

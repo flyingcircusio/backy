@@ -42,8 +42,6 @@ class RBDDiffV1(object):
         self.phase = 'metadata'
 
     def read_record(self):
-        if self.phase == 'end':
-            raise StopIteration()
         self.last_record_type = self.record_type
         self.record_type = self.f.read(1).decode('ascii')
         if self.record_type not in ['f', 't', 's', 'w', 'z', 'e']:
@@ -127,10 +125,6 @@ class RBDDiffV1(object):
     def read_data(self):
         if self.phase == 'end':
             raise StopIteration()
-        elif self.phase != 'data':
-            raise RuntimeError("Not in data phase, yet.")
-        if not self.first_data_record:
-            return
         yield self.first_data_record
         while True:
             yield self.read_record()
@@ -151,8 +145,6 @@ class RBDDiffV1(object):
                 assert record.snapshot == snapshot_from
             elif isinstance(record, ToSnap):
                 assert record.snapshot == snapshot_to
-            else:
-                raise ValueError('Unexpected record {0!r}'.format(record))
 
         for record in self.read_data():
             target.seek(record.start)
@@ -162,8 +154,6 @@ class RBDDiffV1(object):
             elif isinstance(record, Data):
                 for chunk in record.stream():
                     target.write(chunk)
-            else:
-                raise ValueError('Unexpected record {0!r}'.format(record))
             bytes += record.length
 
         if clean:

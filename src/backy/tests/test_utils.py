@@ -206,3 +206,15 @@ def test_safe_edit_read_write_encoded(tmpdir):
         f.write('asdf')
 
     assert open('asdf', 'rb').read() == b'csdfasdf'
+
+
+def test_safe_edit_truncate(tmpdir):
+    os.chdir(str(tmpdir))
+    open('asdf', 'wb').write(b'csdf')
+    with SafeFile('asdf', encoding='utf-8') as f:
+        f.open_inplace('r+b')
+        assert f.read() == 'csdf'
+        f.seek(0)
+        f.truncate()
+
+    assert open('asdf', 'rb').read() == b''

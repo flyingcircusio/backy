@@ -1,7 +1,8 @@
-from backy.sources.ceph.diff import unpack_from, RBDDiffV1
-from backy.sources.ceph.diff import FromSnap, ToSnap, SnapSize
 from backy.sources.ceph.diff import Data, Zero
+from backy.sources.ceph.diff import FromSnap, ToSnap, SnapSize
+from backy.sources.ceph.diff import unpack_from, RBDDiffV1
 import io
+import os
 import pytest
 import struct
 
@@ -174,3 +175,13 @@ def test_read_detects_wrong_record_type(tmpdir):
         diff.read_record()
     assert e.value.args[0] == (
         'Got invalid record type "a". Previous record: None')
+
+
+def test_read_empty_diff(tmpdir):
+    diff = RBDDiffV1(os.path.dirname(__file__)+'/nodata.rbddiff')
+    target = open(str(tmpdir/'foo'), 'wb')
+    diff.integrate(
+        target,
+        'backy-ed968696-5ab0-4fe0-af1c-14cadab44661',
+        'backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802',
+        clean=False)

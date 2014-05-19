@@ -42,7 +42,8 @@ class RBDDiffV1(object):
         self.phase = 'metadata'
 
     def read_record(self):
-        assert self.phase in ['metadata', 'data']
+        if self.phase == 'end':
+            raise StopIteration()
         self.last_record_type = self.record_type
         self.record_type = self.f.read(1).decode('ascii')
         if self.record_type not in ['f', 't', 's', 'w', 'z', 'e']:
@@ -50,8 +51,6 @@ class RBDDiffV1(object):
                 'Got invalid record type "{}". '
                 'Previous record: {}'.format(
                     self.record_type, self.last_record_type))
-        if self.record_type == 'e':
-            raise StopIteration
         method = getattr(self, 'read_{}'.format(self.record_type))
         return method()
 
@@ -76,6 +75,10 @@ class RBDDiffV1(object):
         "size"
         assert self.phase == 'metadata'
         return SnapSize(unpack_from('<Q', self.f)[0])
+
+    def read_e(self):
+        self.phase = 'end'
+        raise StopIteration()
 
     def read_w(self):
         "updated data"
@@ -122,7 +125,9 @@ class RBDDiffV1(object):
             yield record
 
     def read_data(self):
-        if self.phase != 'data':
+        if self.phase == 'end':
+            raise StopIteration()
+        elif self.phase != 'data':
             raise RuntimeError("Not in data phase, yet.")
         if not self.first_data_record:
             return

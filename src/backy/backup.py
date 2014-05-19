@@ -164,7 +164,7 @@ class Backup(object):
         self.config = None
         self._configure()
 
-    def backup(self, force=None):
+    def backup(self, force=''):
         self._lock()
         self._scan_revisions()
 
@@ -178,8 +178,7 @@ class Backup(object):
                 revision.remove()
 
         tags = self.schedule.next_due()
-        if force:
-            tags.add(force)
+        tags.update(filter(None, force.split(',')))
         if not tags:
             logger.info('No backup due yet.')
             return

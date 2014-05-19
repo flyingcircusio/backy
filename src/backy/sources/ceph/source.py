@@ -38,18 +38,20 @@ class CephRBD(object):
                 self.rbd.snap_rm(self._image_name+'@'+snapshot['name'])
 
     def backup(self):
+        backup = self.diff
         try:
             parent = self.revision.backup.find_revision(self.revision.parent)
             if not self.rbd.exists(self._image_name+'@backy-'+parent.uuid):
                 raise KeyError()
         except KeyError:
-                self.full()
-        else:
-            self.diff()
+            backup = self.full
+        backup()
 
     def diff(self):
         logger.info('Performing differential backup ...')
-        d = self.rbd.export_diff()
+        d = self.rbd.export_diff(self._image_name+'@backy-'+self.revision.uuid,
+                                 'backy-'+self.revision.parent,
+                                 self.revision.filename+'.rbddiff')
         t = SafeWritableFile(self.revision.filename, rename=False, mode='r+b')
         with d as diff, t as target:
             bytes = diff.integrate(target)
@@ -65,7 +67,6 @@ class CephRBD(object):
         self.revision.stats['bytes_written'] = bytes
 
     def verify(self):
-        return
         logger.info('Performing full verification ...')
         s = self.rbd.image_reader('{}/{}@backy-{}'.format(
             self.pool, self.image, self.revision.uuid))

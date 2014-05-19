@@ -45,7 +45,7 @@ class RBDClient(object):
                 return mapping
         raise RuntimeError('Map not found in mapping list.')
 
-    def unmape(self, device):
+    def unmap(self, device):
         self._rbd(['unmap', device])
 
     def snap_create(self, image):

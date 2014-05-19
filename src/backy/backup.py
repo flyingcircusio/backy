@@ -102,6 +102,9 @@ class Backup(object):
     # Internal API
 
     def find_revision(self, spec):
+        if spec is None:
+            raise KeyError(spec)
+
         if spec in ['last', 'latest']:
             spec = 0
 
@@ -194,12 +197,12 @@ class Backup(object):
                 logger.error('New revision does not match source '
                              '- removing it.')
                 new_revision.remove()
-
-        new_revision.set_link('last')
-        new_revision.stats['duration'] = self.now() - start
-        new_revision.write_info()
-        new_revision.readonly()
-        self.revision_history.append(new_revision)
+            else:
+                new_revision.set_link('last')
+                new_revision.stats['duration'] = self.now() - start
+                new_revision.write_info()
+                new_revision.readonly()
+                self.revision_history.append(new_revision)
 
         self.schedule.expire()
 

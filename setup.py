@@ -39,11 +39,11 @@ setup(
     url='https://bitbucket.org/ctheune/backy/',
     keywords='backup',
     classifiers="""\
-License :: OSI Approved :: GPL
+License :: OSI Approved :: GNU General Public License v3 (GPLv3)
 Programming Language :: Python
 Programming Language :: Python :: 3
+Programming Language :: Python :: 3.2
 Programming Language :: Python :: 3.3
-Programming Language :: Python :: 3 :: Only
 """[:-1].split('\n'),
     description=__doc__.strip(),
     long_description='\n\n'.join(open(project_path(name)).read() for name in (

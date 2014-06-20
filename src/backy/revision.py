@@ -1,24 +1,25 @@
 from backy.utils import SafeFile
-from subprocess import check_output
 import glob
 import json
 import logging
 import os
-import sys
+import subprocess
 import uuid
 
 logger = logging.getLogger(__name__)
-cmd = check_output
+cmd = subprocess.check_output
 
 
-if sys.platform == 'linux2':
-    def cp_reflink(source, target):
-        cmd('cp --reflink=always {} {}'.
-            format(source, target), shell=True)
-else:
-    def cp_reflink(source, target):
+def cp_reflink(source, target):
+    # We can't tell if reflink is really supported. It depends on the
+    # filesystem.
+    try:
+        cmd(['cp', '--reflink=always', source, target],
+            stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
         logger.warn('Performing non-COW copy: {} -> {}'.format(source, target))
-        cmd('cp {} {}'. format(source, target), shell=True)
+        os.unlink(target)
+        cmd(['cp', source, target])
 
 
 class Revision(object):

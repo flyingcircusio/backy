@@ -78,10 +78,6 @@ the schedule.
 
 If no backup is needed, just exit silently.
 
-### Scrub sub-command
-
-Check consistency of specified revisions.
-
 ### Status sub-command
 
 Show backup inventory and provide summary information about backup health.

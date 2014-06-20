@@ -18,7 +18,6 @@ setup(
     install_requires=[
         'setuptools',
         'prettytable',
-        'fallocate',
     ],
     extras_require={
         'test': [
@@ -33,17 +32,24 @@ setup(
             file = backy.sources.file:File
 
     """,
-    author='Christian Theune <ct@gocept.com>, Daniel Kraft <daniel.kraft@d9t.de>',
+    author=('Christian Theune <ct@gocept.com>, '
+            'Daniel Kraft <daniel.kraft@d9t.de>'),
     author_email='ct@gocept.com',
-    license='GPL 3',
+    license='GPL-3',
     url='https://bitbucket.org/ctheune/backy/',
     keywords='backup',
     classifiers="""\
+Development Status :: 4 - Beta
+Environment :: Console
+Intended Audience :: System Administrators
 License :: OSI Approved :: GNU General Public License v3 (GPLv3)
+Operating System :: POSIX
 Programming Language :: Python
 Programming Language :: Python :: 3
 Programming Language :: Python :: 3.2
 Programming Language :: Python :: 3.3
+Programming Language :: Python :: 3.4
+Topic :: System :: Archiving :: Backup
 """[:-1].split('\n'),
     description=__doc__.strip(),
     long_description='\n\n'.join(open(project_path(name)).read() for name in (

@@ -2,10 +2,14 @@
 Changelog
 =========
 
-2.0a1 (unreleased)
+2.0b1 (unreleased)
 ==================
 
 - More or less complete rewrite expecting a copy-on-write filesystem as the
   target.
+
+- Flexible backup scheduling using free-form tags.
+
+- Compatible with Python 3.2-3.4.
 
 - Initial open source import as provided by Daniel Kraft (D9T).

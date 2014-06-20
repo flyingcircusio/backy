@@ -14,7 +14,7 @@ def project_path(*names):
 
 setup(
     name='backy',
-    version='2.0a1dev',
+    version='2.0b1dev',
     install_requires=[
         'setuptools',
         'prettytable',

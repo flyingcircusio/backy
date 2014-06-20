@@ -14,8 +14,8 @@ def cp_reflink(source, target):
     # We can't tell if reflink is really supported. It depends on the
     # filesystem.
     try:
-        cmd(['cp', '--reflink=always', source, target],
-            stderr=subprocess.DEVNULL)
+        with open('/dev/null', 'wb') as devnull:
+            cmd(['cp', '--reflink=always', source, target], stderr=devnull)
     except subprocess.CalledProcessError:
         logger.warn('Performing non-COW copy: {} -> {}'.format(source, target))
         os.unlink(target)

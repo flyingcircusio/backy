@@ -36,9 +36,9 @@ def test_smoketest_internal(tmpdir, mocked_now):
     # Restore first state from level 0
     restore_target = str(tmpdir / 'image1.restore')
     backup.restore(0, restore_target)
-    with pytest.raises(PermissionError):
+    with pytest.raises(IOError):
         open(backup.revision_history[-1].filename, 'wb')
-    with pytest.raises(PermissionError):
+    with pytest.raises(IOError):
         open(backup.revision_history[-1].info_filename, 'wb')
     assert open(source1, 'rb').read() == open(restore_target, 'rb').read()
 

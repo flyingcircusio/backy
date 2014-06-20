@@ -148,7 +148,7 @@ def test_safe_writable_rename_writeprotect(tmpdir):
 
     assert open('asdf', 'rb').read() == b'asdf'
 
-    with pytest.raises(PermissionError):
+    with pytest.raises(IOError):
         open('asdf', 'wb')
 
 
@@ -165,7 +165,7 @@ def test_safe_edit_copy_with_write_protection(tmpdir):
 
     assert open('asdf', 'rb').read() == b'asdf'
 
-    with pytest.raises(PermissionError):
+    with pytest.raises(IOError):
         open('asdf', 'wb')
 
 
@@ -182,8 +182,7 @@ def test_safe_edit_inplace_with_write_protection(tmpdir):
         f.write(b'asdf')
 
     assert open('asdf', 'rb').read() == b'asdf'
-
-    with pytest.raises(PermissionError):
+    with pytest.raises(IOError):
         open('asdf', 'wb')
 
 

@@ -36,7 +36,7 @@ class Revision(object):
 
     @classmethod
     def create(cls, backup):
-        r = Revision(str(uuid.uuid4()), backup)
+        r = Revision(str(uuid.uuid1()), backup)
         r.timestamp = backup.now()
         if backup.revision_history:
             # XXX validate that this parent is a actually a good parent. need

@@ -18,3 +18,4 @@ report.xml
 src/backy.egg-info/
 vagrant/.vagrant
 local/
+tags

@@ -26,6 +26,15 @@ def test_revision_create():
     assert r.backup is backup
 
 
+def test_revision_uuids_sort_lexicographically_by_time():
+    backup = mock.Mock()
+    backup.now = time.time
+    backup.revision_history = []
+    rev = [Revision.create(backup) for _ in range(3)]
+    for i in range(len(rev) - 1):
+        assert str(rev[i].uuid) < str(rev[i + 1].uuid)
+
+
 def test_revision_create_child():
     backup = mock.Mock()
     backup.now = time.time

@@ -1,6 +1,6 @@
 syntax: glob
 
-*.pyc
+*.py[co]
 *.sublime*
 .cache
 .coverage
@@ -17,3 +17,4 @@ lib64
 report.xml
 src/backy.egg-info/
 vagrant/.vagrant
+local/

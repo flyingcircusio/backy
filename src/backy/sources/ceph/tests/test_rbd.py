@@ -11,13 +11,13 @@ def test_rbd_command_wrapper(check_output):
     client = RBDClient()
 
     client._rbd(['foo'])
-    check_output.assert_called_with('rbd --no-progress foo', shell=True)
+    check_output.assert_called_with(['rbd', '--no-progress', 'foo'])
 
     check_output.return_value = b'{"asdf": 1}'
     result = client._rbd(['foo'], format='json')
     assert result == {'asdf': 1}
     check_output.assert_called_with(
-        'rbd --no-progress --format json foo', shell=True)
+        ['rbd', '--no-progress', '--format=json', 'foo'])
 
 
 @pytest.fixture

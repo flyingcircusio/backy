@@ -16,12 +16,12 @@ class RBDClient(object):
         rbd = ['rbd', '--no-progress']
 
         if format == 'json':
-            rbd.append('--format json')
+            rbd.append('--format=json')
 
         rbd.extend(cmd)
 
         logger.debug(' '.join(rbd))
-        result = subprocess.check_output(' '.join(rbd), shell=True)
+        result = subprocess.check_output(rbd)
 
         if format == 'json':
             result = json.loads(result.decode('utf-8'))

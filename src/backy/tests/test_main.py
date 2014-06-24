@@ -75,6 +75,9 @@ def test_call_status(capsys, caplog, argv, monkeypatch):
     assert Ellipsis("""\
 backup.py                  ... DEBUG    Backup(".../backy")
 main.py                    ... DEBUG    backup.status(**{})
+main.py                    ... INFO     \
+
+
 """) == caplog.text()
 
 
@@ -96,6 +99,9 @@ def test_call_init(capsys, caplog, argv, monkeypatch):
     assert Ellipsis("""\
 backup.py                  ... DEBUG    Backup(".../backy")
 main.py                    ... DEBUG    backup.init(**{...ceph-rbd...})
+main.py                    ... INFO     \
+
+
 """) == caplog.text()
 
 
@@ -115,6 +121,9 @@ def test_call_backup(capsys, caplog, argv, monkeypatch):
     assert Ellipsis("""\
 backup.py                  ... DEBUG    Backup(".../backy")
 main.py                    ... DEBUG    backup.backup(**{'force': ''})
+main.py                    ... INFO     \
+
+
 """) == caplog.text()
 
 
@@ -143,4 +152,7 @@ Traceback (most recent call last):
   File ".../src/backy/tests/test_main.py", line ..., in do_raise
     raise RuntimeError("test")
 RuntimeError: test
+main.py                    ... INFO     \
+
+
 """) == caplog.text()

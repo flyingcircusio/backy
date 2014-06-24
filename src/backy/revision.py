@@ -18,7 +18,8 @@ def cp_reflink(source, target):
             cmd(['cp', '--reflink=always', source, target], stderr=devnull)
     except subprocess.CalledProcessError:
         logger.warn('Performing non-COW copy: {} -> {}'.format(source, target))
-        os.unlink(target)
+        if os.path.exists(target):
+            os.unlink(target)
         cmd(['cp', source, target])
 
 

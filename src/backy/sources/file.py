@@ -1,4 +1,7 @@
 from backy.utils import safe_copy, files_are_equal
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class File(object):
@@ -21,6 +24,7 @@ class File(object):
         pass
 
     def backup(self):
+        logger.info('Performing full backup')
         t = open(self.revision.filename, 'wb')
         s = open(self.filename, 'rb')
 
@@ -29,6 +33,7 @@ class File(object):
         self.revision.stats['bytes_written'] = bytes
 
     def verify(self):
+        logger.info('Performing full verification')
         s = open(self.filename, 'rb')
         t = open(self.revision.filename, 'rb')
 

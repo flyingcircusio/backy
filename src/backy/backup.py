@@ -50,7 +50,18 @@ class Commands(object):
             format_bytes_flexible(total_bytes)))
 
     def backup(self, force=False):
-        self._backup.backup(force)
+        try:
+            self._backup.backup(force)
+        except BlockingIOError as e:
+            # Mac OS X
+            if e.errno != 35:
+                raise
+            logger.info('Backup already in progress.')
+        except IOError as e:
+            # Linux
+            if e.errno != 11:
+                raise
+            logger.info('Backup already in progress.')
 
     def restore(self, revision, target):
         self._backup.restore(revision, target)
@@ -183,7 +194,7 @@ class Backup(object):
         tags = self.schedule.next_due()
         tags.update(filter(None, force.split(',')))
         if not tags:
-            logger.info('No backup due yet.')
+            logger.warning('No backup due yet.')
             return
 
         new_revision = Revision.create(self)

@@ -14,17 +14,17 @@ def init_logging(backupdir, verbose=False):
     if verbose:
         level = logging.DEBUG
     else:
-        level = logging.INFO
+        level = logging.WARNING
     logging.basicConfig(
         filename=os.path.join(backupdir, 'backy.log'),
-        format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
-        level=logging.DEBUG)
+        format='%(asctime)s [%(process)d] %(message)s',
+        level=logging.INFO)
 
     console = logging.StreamHandler(sys.stdout)
     console.setLevel(level)
     logging.getLogger('').addHandler(console)
 
-    logger.debug(' '.join(sys.argv))
+    logger.info('$ ' + ' '.join(sys.argv))
 
 
 def main():
@@ -112,3 +112,5 @@ Simulate the schedule.
         logger.error('Unexpected exception')
         logger.exception(e)
         os._exit(1)
+    finally:
+        logger.info('\n')

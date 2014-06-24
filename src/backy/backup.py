@@ -5,6 +5,7 @@ from backy.utils import SafeFile, format_bytes_flexible, safe_copy
 from glob import glob
 from prettytable import PrettyTable
 import datetime
+import errno
 import fcntl
 import json
 import logging
@@ -52,14 +53,8 @@ class Commands(object):
     def backup(self, force=False):
         try:
             self._backup.backup(force)
-        except BlockingIOError as e:
-            # Mac OS X
-            if e.errno != 35:
-                raise
-            logger.info('Backup already in progress.')
         except IOError as e:
-            # Linux
-            if e.errno != 11:
+            if e.errno not in [errno.EDEADLK, errno.EAGAIN]:
                 raise
             logger.info('Backup already in progress.')
 

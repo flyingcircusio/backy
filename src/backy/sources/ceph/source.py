@@ -1,6 +1,8 @@
 from .rbd import RBDClient
-from backy.utils import safe_copy, SafeFile, files_are_equal
+from backy.utils import safe_copy, SafeFile
+from backy.utils import files_are_equal, files_are_roughly_equal
 import logging
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +61,7 @@ class CephRBD(object):
             t.use_write_protection()
             t.open_inplace('r+b')
             bytes = d.integrate(target, snap_from, snap_to)
+
         self.revision.stats['bytes_written'] = bytes
 
     def full(self):
@@ -71,10 +74,14 @@ class CephRBD(object):
         self.revision.stats['bytes_written'] = bytes
 
     def verify(self):
-        logger.info('Performing full verification ...')
         s = self.rbd.image_reader('{}/{}@backy-{}'.format(
             self.pool, self.image, self.revision.uuid))
         t = open(self.revision.filename, 'rb')
-        with s as source:
-            with t as target:
+        with s as source, t as target:
+            chance = random.randint(1, 10)
+            if chance == 10:
+                logger.info('Performing full verification ...')
                 return files_are_equal(source, target)
+            else:
+                logger.info('Performing partial verification ...')
+                return files_are_roughly_equal(source, target)

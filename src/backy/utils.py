@@ -1,5 +1,6 @@
-import os.path
 import os
+import os.path
+import random
 import tempfile
 
 
@@ -124,7 +125,7 @@ class SafeFile(object):
         return self.f.truncate(*args, **kw)
 
 
-Bytes = 1.0
+Bytes = 1
 kiB = Bytes * 1024
 MiB = kiB * 1024
 GiB = MiB * 1024
@@ -163,10 +164,26 @@ def safe_copy(source, target):
 
 def files_are_equal(a, b):
     while True:
-        chunk_a = a.read(4*1024**2)
-        chunk_b = b.read(4*1024**2)
+        chunk_a = a.read(4*MiB)
+        chunk_b = b.read(4*MiB)
         if chunk_a != chunk_b:
             return False
         if not chunk_a:
             break
     return True
+
+
+def files_are_roughly_equal(a, b, sample=0.1, blocksize=4*MiB):
+    a.seek(0, 2)
+    size = a.tell()
+    blocks = size // blocksize
+    sample = range(0, blocks)
+    sample = random.sample(sample, int(0.1 * blocks))
+    for block in sample:
+        a.seek(block * blocksize)
+        b.seek(block * blocksize)
+        if not a.read(blocksize) == b.read(blocksize):
+            break
+    else:
+        return True
+    return False

@@ -1,6 +1,6 @@
 from backy.tests import Ellipsis
-from backy.utils import files_are_equal, format_bytes_flexible
-from backy.utils import SafeFile
+from backy.utils import files_are_equal, files_are_roughly_equal
+from backy.utils import SafeFile, format_bytes_flexible
 import backy.backup
 import os
 import pytest
@@ -217,3 +217,32 @@ def test_safe_edit_truncate(tmpdir):
         f.truncate()
 
     assert open('asdf', 'rb').read() == b''
+
+
+def test_roughly_compare_files_same(tmpdir):
+    os.chdir(str(tmpdir))
+    with open('a', 'wb') as f:
+        f.write(b'asdf'*100)
+    with open('b', 'wb') as f:
+        f.write(b'asdf'*100)
+
+    for x in range(20):
+        assert files_are_roughly_equal(
+            open('a', 'rb'), open('b', 'rb'), blocksize=10)
+
+
+def test_roughly_compare_files_1_changed_block(tmpdir):
+    os.chdir(str(tmpdir))
+    with open('a', 'wb') as f:
+        f.write(b'asdf'*100)
+        f.seek(100)
+        f.write(b'bsdf')
+    with open('b', 'wb') as f:
+        f.write(b'asdf'*100)
+
+    detected = 0
+    for x in range(20):
+        detected += files_are_roughly_equal(
+            open('a', 'rb'), open('b', 'rb'), blocksize=10)
+
+    assert detected > 0 and detected < 20

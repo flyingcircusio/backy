@@ -107,10 +107,10 @@ Simulate the schedule.
     try:
         logger.debug('backup.{0}(**{1!r})'.format(args.func, func_args))
         func(**func_args)
+        logger.info('Backup complete.\n')
         sys.exit(0)
     except Exception as e:
         logger.error('Unexpected exception')
         logger.exception(e)
+        logger.info('Backup failed.\n')
         os._exit(1)
-    finally:
-        logger.info('\n')

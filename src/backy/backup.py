@@ -196,6 +196,9 @@ class Backup(object):
         new_revision.tags = tags
         new_revision.materialize()
 
+        logger.info('New revision {} [{}]'.format(
+                    new_revision.uuid, ','.join(new_revision.tags)))
+
         with self.source(new_revision) as source:
             source.backup()
             if not source.verify():

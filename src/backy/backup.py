@@ -36,6 +36,7 @@ class Commands(object):
         t = PrettyTable(["Date", "ID", "Size", "Duration", "Tags"])
         t.align = 'l'
         t.align['Size'] = 'r'
+        t.align['Duration'] = 'r'
 
         for r in self._backup.revision_history:
             total_bytes += r.stats.get('bytes_written', 0)

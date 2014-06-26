@@ -203,12 +203,15 @@ class Backup(object):
                              '- removing it.')
                 new_revision.remove()
             else:
+                logger.info('Revision {} verification OK.'.format(
+                    new_revision.uuid))
                 new_revision.set_link('last')
                 new_revision.stats['duration'] = self.now() - start
                 new_revision.write_info()
                 new_revision.readonly()
                 self.revision_history.append(new_revision)
 
+        logger.info('Expiring old revisions ...')
         self.schedule.expire()
 
     def restore(self, revision, target):

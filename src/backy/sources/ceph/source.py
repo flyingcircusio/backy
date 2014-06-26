@@ -8,6 +8,12 @@ logger = logging.getLogger(__name__)
 
 
 class CephRBD(object):
+    """The Ceph RBD source.
+
+    Manages snapshots corresponding to revisions and provides a verification
+    that tries to balance reliability and performance.
+
+    """
 
     def __init__(self, config):
         self.pool = config['pool']
@@ -32,11 +38,19 @@ class CephRBD(object):
         return '{}/{}'.format(self.pool, self.image)
 
     def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
+        # Clean up all snapshots except the one for the most recent valid
+        # revision.
+        # Previously we used to remove all snapshots but the one for this
+        # revision - which is wrong: broken new revisions would always cause
+        # full backups instead of new deltas based on the most recent valid
+        # one.
+        keep_snapshot_revision = self.revision.backup.revision_history[-1]
         for snapshot in self.rbd.snap_ls(self._image_name):
             if not snapshot['name'].startswith('backy-'):
+                # Do not touch non-backy snapshots
                 continue
             uuid = snapshot['name'].replace('backy-', '')
-            if uuid != self.revision.uuid:
+            if uuid != keep_snapshot_revision.uuid:
                 self.rbd.snap_rm(self._image_name+'@'+snapshot['name'])
 
     def backup(self):
@@ -46,6 +60,7 @@ class CephRBD(object):
             if not self.rbd.exists(self._image_name+'@backy-'+parent.uuid):
                 raise KeyError()
         except KeyError:
+            logger.info('Could not find snapshot for previous revision.')
             backup = self.full
         backup()
 
@@ -78,6 +93,8 @@ class CephRBD(object):
             self.pool, self.image, self.revision.uuid))
         t = open(self.revision.filename, 'rb')
         with s as source, t as target:
+            # XXX This should probably not be stochastic but
+            # really every ten times or so.
             chance = random.randint(1, 10)
             if chance == 10:
                 logger.info('Performing full verification ...')

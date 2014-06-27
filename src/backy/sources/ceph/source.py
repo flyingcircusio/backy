@@ -2,7 +2,6 @@ from .rbd import RBDClient
 from backy.utils import safe_copy, SafeFile
 from backy.utils import files_are_equal, files_are_roughly_equal
 import logging
-import random
 
 logger = logging.getLogger(__name__)
 
@@ -92,11 +91,15 @@ class CephRBD(object):
         s = self.rbd.image_reader('{}/{}@backy-{}'.format(
             self.pool, self.image, self.revision.uuid))
         t = open(self.revision.filename, 'rb')
+
+        mode = 'full'
+        for revision in self.revision.backup.history[-10:]:
+            if revision.stats.get('ceph-verification', '') == 'full':
+                mode = 'partial'
+        self.revision.stats['ceph-verification'] = mode
+
         with s as source, t as target:
-            # XXX This should probably not be stochastic but
-            # really every ten times or so.
-            chance = random.randint(1, 10)
-            if chance == 10:
+            if mode == 'full':
                 logger.info('Performing full verification ...')
                 return files_are_equal(source, target)
             else:

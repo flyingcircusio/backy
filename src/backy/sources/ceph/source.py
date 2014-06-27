@@ -93,7 +93,7 @@ class CephRBD(object):
         t = open(self.revision.filename, 'rb')
 
         mode = 'full'
-        for revision in self.revision.backup.history[-10:]:
+        for revision in self.revision.backup.revision_history[-10:]:
             if revision.stats.get('ceph-verification', '') == 'full':
                 mode = 'partial'
         self.revision.stats['ceph-verification'] = mode

@@ -173,12 +173,12 @@ def files_are_equal(a, b):
     return True
 
 
-def files_are_roughly_equal(a, b, sample=0.1, blocksize=4*MiB):
+def files_are_roughly_equal(a, b, samplesize=0.05, blocksize=4*MiB):
     a.seek(0, 2)
     size = a.tell()
     blocks = size // blocksize
     sample = range(0, blocks)
-    sample = random.sample(sample, int(0.1 * blocks))
+    sample = random.sample(sample, int(samplesize * blocks))
     for block in sample:
         a.seek(block * blocksize)
         b.seek(block * blocksize)

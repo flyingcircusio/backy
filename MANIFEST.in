@@ -1,0 +1,5 @@
+recursive-include src/backy *
+include *
+exclude .*
+exclude report.xml
+global-exclude *.pyc __pycache__

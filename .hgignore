@@ -1,21 +1,22 @@
 syntax: glob
 
-*.py[co]
-*.sublime*
+bin/
 .cache
 .coverage
-.DS_Store
-.installed.cfg
-.Python
-bin/
 develop-eggs/
+dist/
+.DS_Store
 eggs/
 htmlcov/
 include/
+.installed.cfg
 lib/
 lib64
+local/
+*.py[co]
+.Python
 report.xml
 src/backy.egg-info/
-vagrant/.vagrant
-local/
+*.sublime*
 tags
+vagrant/.vagrant

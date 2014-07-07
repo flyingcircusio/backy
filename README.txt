@@ -1,3 +1,7 @@
+=====
+Backy
+=====
+
 **This is work in progress. Parts of this file are currently fiction.**
 
 Backy is a block-based backup utility for virtual machines (i.e. volume files).
@@ -15,25 +19,31 @@ To achieve this, we rely on:
 * using a snapshot-capable main storage for our volumes (e.g.
   Ceph, LVM, ...) that allows easy extraction of changes between snapshots
 * leverage proven, existing low-level tools
-* keep the code-base small, simple, and well-tested
+* keep the code-base small, simple, and well-tested.
 
-## Synopsis
+Synopsis
+========
 
     backy --help
+
     backy [-b <backupdir>] init
+
     backy [-b <backupdir>] backup
+
     backy [-b <backupdir>] status
 
-## Disaster recovery / full restore
+
+Disaster recovery / full restore
+================================
 
 The most important question is: I screwed up - how do I get my data back?
 
-Here's the fast answer to make a full restore of the most recent backup:
+Here's the fast answer to make a full restore of the most recent backup::
 
     $ cd /srv/backy/my-virtual-machine
     $ dd if=latest of=/srv/kvm/my-virtual-machine bs=4048000
 
-If you like to pick a specific version, it's only a little more effort:
+If you like to pick a specific version, it's only a little more effort::
 
     $ cd /srv/backy/my-virtual-machine
     $ backy status
@@ -46,9 +56,12 @@ If you like to pick a specific version, it's only a little more effort:
     20.02 GiB data (estimated)
     $ dd if=96d8b001-0ffc-4149-8c35-cf003f5638d6 of=/srv/kvm/my-virtual-machine bs=4048000
 
-## Restoring individual files
 
-The image files are exact copies of the data from the virtual disks. You can use regular Linux tools to interact with them:
+Restoring individual files
+==========================
+
+The image files are exact copies of the data from the virtual disks. You can use
+regular Linux tools to interact with them::
 
     $ cd /srv/backy/my-virtual-machine
     $ ls -lah latest
@@ -61,14 +74,14 @@ The image files are exact copies of the data from the virtual disks. You can use
     $ ls
     bin  boot  dev  etc  home  lib  lost+found  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
 
-To clean up:
+To clean up::
 
     $ cd /srv/backy/my-virtual-machine
     $ umount /root/restore
     $ kpartx -av d95e4f6c-cfef-48ee-aec2-d7c9e91c1bec
 
-
-### Backup sub-command
+Backup sub-command
+------------------
 
 Do a backup.
 
@@ -78,11 +91,13 @@ the schedule.
 
 If no backup is needed, just exit silently.
 
-### Status sub-command
+Status sub-command
+------------------
 
 Show backup inventory and provide summary information about backup health.
 
-## Revision specifications
+Revision specifications
+-----------------------
 
 If a command expects a single revision, you can specify full UUIDs, or numbers.
 Numbers specify the N-th newest revision (0 being the the newest, 1 the
@@ -91,29 +106,38 @@ previous revision, and so on).
 If multiple revisions may be given you can pass a single revision (as described
 above) or the world 'all' to match all existing revisions.
 
-## Examples
+Examples
+--------
 
-XXX
+(TBD)
 
-## Exit status
 
-    0: Command worked properly.
-    1: An error occured.
+Exit status
+===========
 
-## Authors
+*   0: Command worked properly.
+*   1: An error occured.
+
+
+Authors
+=======
 
 * Daniel Kraft <daniel.kraft@d9t.de>
 * Christian Theune <ct@gocept.com>
 
-## License
+
+License
+=======
 
 GPLv3
 
-## Hacking
+
+Hacking
+=======
 
 Backy is intended to be compatible with Python 3.2 and 3.3. It is expected to
 work properly on Linux and Mac OS X, even though specific backends may not be
-avaible on some platforms.
+avaible on some platforms::
 
     $ hg clone https://bitbucket.org/ctheune/backy
     $ cd backy

@@ -11,6 +11,12 @@ import os.path
 def project_path(*names):
     return os.path.join(os.path.dirname(__file__), *names)
 
+def long_desc():
+    parts = []
+    for name in ('README.txt', 'CHANGES.txt'):
+        with open(project_path(name)) as f:
+            parts.append(f.read())
+    return '\n\n'.join(parts)
 
 setup(
     name='backy',
@@ -52,10 +58,7 @@ Programming Language :: Python :: 3.4
 Topic :: System :: Archiving :: Backup
 """[:-1].split('\n'),
     description=__doc__.strip(),
-    long_description='\n\n'.join(open(project_path(name)).read() for name in (
-        'README.md',
-        'CHANGES.txt',
-        )),
+    long_description=long_desc(),
     packages=find_packages('src'),
     package_dir={'': 'src'},
     include_package_data=True,

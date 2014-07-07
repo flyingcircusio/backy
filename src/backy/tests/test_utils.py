@@ -245,4 +245,4 @@ def test_roughly_compare_files_1_changed_block(tmpdir):
         detected += files_are_roughly_equal(
             open('a', 'rb'), open('b', 'rb'), blocksize=10)
 
-    assert detected > 0 and detected < 20
+    assert detected > 0 and detected <= 20

@@ -104,7 +104,7 @@ Numbers specify the N-th newest revision (0 being the the newest, 1 the
 previous revision, and so on).
 
 If multiple revisions may be given you can pass a single revision (as described
-above) or the world 'all' to match all existing revisions.
+above) or the word `all` to match all existing revisions.
 
 Examples
 --------

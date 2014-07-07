@@ -20,7 +20,7 @@ def long_desc():
 
 setup(
     name='backy',
-    version='2.0b1',
+    version='2.0b2.dev0',
     install_requires=[
         'setuptools',
         'prettytable',

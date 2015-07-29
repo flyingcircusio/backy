@@ -1,0 +1,5 @@
+#!/bin/bash
+set -e
+pip install zc.buildout==2.4.0 --use-mirrors
+buildout
+bin/py.test

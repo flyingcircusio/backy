@@ -25,7 +25,8 @@ setup(
     install_requires=[
         'setuptools',
         'prettytable',
-        'PyYaml'
+        'PyYaml',
+        'shortuuid'
     ],
     extras_require={
         'test': [

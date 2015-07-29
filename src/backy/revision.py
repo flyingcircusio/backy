@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import subprocess
-import uuid
+import shortuuid
 
 logger = logging.getLogger(__name__)
 cmd = subprocess.check_output
@@ -38,7 +38,7 @@ class Revision(object):
 
     @classmethod
     def create(cls, backup):
-        r = Revision(str(uuid.uuid1()), backup)
+        r = Revision(shortuuid.uuid(), backup)
         r.timestamp = backup.now()
         if backup.revision_history:
             # XXX validate that this parent is a actually a good parent. need
@@ -80,7 +80,8 @@ class Revision(object):
 
     def defrag(self):
         try:
-            cmd(['btrfs', 'filesystem', 'defrag', self.filename])
+            cmd(['btrfs', 'filesystem', 'defrag',
+                 os.path.dirname(self.filename) + '/*'])
         except FileNotFoundError:
             logger.warn('btrfs utilities not found.')
         except subprocess.CalledProcessError:

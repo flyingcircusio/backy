@@ -48,8 +48,8 @@ class Schedule(object):
                 due.add(tag)
             else:
                 last = tag_history[-1].timestamp
-                if ((last + parse_duration(args['interval']))
-                        <= self.backup.now()):
+                next = last + parse_duration(args['interval'])
+                if next <= self.backup.now():
                     due.add(tag)
         return due
 

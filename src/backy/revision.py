@@ -78,6 +78,14 @@ class Revision(object):
         cp_reflink(parent.filename, self.filename)
         self.writable()
 
+    def defrag(self):
+        try:
+            cmd(['btrfs', 'filesystem', 'defrag', self.filename])
+        except FileNotFoundError:
+            logger.warn('btrfs utilities not found.')
+        except subprocess.CalledProcessError:
+            logger.exception('Could not btrfs defrag. Is this a btrfs volume?')
+
     def write_info(self):
         metadata = {
             'uuid': self.uuid,
@@ -91,18 +99,19 @@ class Revision(object):
 
     def set_link(self, name):
         path = self.backup.path
-        if os.path.exists(path+'/'+name):
-            os.unlink(path+'/'+name)
-        os.symlink(os.path.relpath(self.filename, path), path+'/'+name)
+        if os.path.exists(path + '/' + name):
+            os.unlink(path + '/' + name)
+        os.symlink(os.path.relpath(self.filename, path), path + '/' + name)
 
         name = name + '.rev'
-        if os.path.exists(path+'/'+name):
-            os.unlink(path+'/'+name)
-        os.symlink(os.path.relpath(self.info_filename, path), path+'/'+name)
+        if os.path.exists(path + '/' + name):
+            os.unlink(path + '/' + name)
+        os.symlink(os.path.relpath(self.info_filename, path),
+                   path + '/' + name)
 
     def remove(self, simulate=False):
         if not simulate:
-            for file in glob.glob(self.filename+'*'):
+            for file in glob.glob(self.filename + '*'):
                 os.unlink(file)
         if self in self.backup.revision_history:
             self.backup.revision_history.remove(self)

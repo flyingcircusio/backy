@@ -8,6 +8,9 @@ Changelog
 - Turn the configuration format into YAML. Old files are still compatible.
   New configs will be generated as YAML.
 
+- Performance: defrag all new files automatically to avoid btrfs degrading
+  extent performance. It appears this doesn't completely duplicate all CoW
+  data. Will have to monitor this in the future.
 
 2.0b1 (2014-07-07)
 ==================

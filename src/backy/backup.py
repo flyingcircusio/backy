@@ -211,6 +211,7 @@ class Backup(object):
             else:
                 logger.info('Revision {} verification OK.'.format(
                     new_revision.uuid))
+                new_revision.defrag()
                 new_revision.set_link('last')
                 new_revision.stats['duration'] = self.now() - start
                 new_revision.write_info()

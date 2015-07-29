@@ -123,7 +123,7 @@ Authors
 =======
 
 * Daniel Kraft <daniel.kraft@d9t.de>
-* Christian Theune <ct@gocept.com>
+* Christian Theune <ct@flyingcircus.io>
 
 
 License
@@ -135,13 +135,13 @@ GPLv3
 Hacking
 =======
 
-Backy is intended to be compatible with Python 3.2 and 3.3. It is expected to
+Backy is intended to be compatible with Python 3.3 and 3.4. It is expected to
 work properly on Linux and Mac OS X, even though specific backends may not be
 avaible on some platforms::
 
     $ hg clone https://bitbucket.org/ctheune/backy
     $ cd backy
-    $ virtualenv --python=python3.3 .
-    $ bin/python bootstrap.py
+    $ virtualenv --python=python3.4 .
+    $ bin/pip install zc.buildout
     $ bin/buildout
     $ bin/py.test

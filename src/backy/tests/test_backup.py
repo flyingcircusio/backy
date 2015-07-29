@@ -1,6 +1,6 @@
 from backy.backup import Backup
 from backy.sources.file import File
-import json
+import yaml
 import os.path
 import pytest
 import shutil
@@ -75,8 +75,8 @@ def test_find_revision_empty(simple_file_config):
 def test_init_ceph(tmpdir):
     backup = Backup(str(tmpdir))
     backup.init('ceph-rbd', 'test/test04')
-    config = open(str(tmpdir/'config')).read()
-    config = json.loads(config)
+    config = open(str(tmpdir / 'config'))
+    config = yaml.load(config)
     assert config == {
         "source-type": "ceph-rbd",
         "source": {"image": "test04", "pool": "test"},
@@ -92,11 +92,30 @@ def test_init_file(tmpdir):
     backup = Backup(str(tmpdir))
     backup.init('file', '/dev/foo')
 
-    config = open(str(tmpdir/'config')).read()
-    config = json.loads(config)
+    config = open(str(tmpdir / 'config')).read()
+    config = yaml.load(config)
     assert config == {
         "source-type": "file",
         "source": {"filename": "/dev/foo"},
+        "schedule": {"daily": {"interval": "1d",
+                               "keep": 9},
+                     "weekly": {"interval": "7d",
+                                "keep": 5},
+                     "monthly": {"interval": "30d",
+                                 "keep": 4}}}
+
+
+def test_init_old_json_format(tmpdir):
+    with open(str(tmpdir / 'config'), 'w') as f:
+        f.write("""{"source": {"image": "litdev01.root", "pool": "litdev"}, \
+"source-type": "ceph-rbd", "schedule": {"monthly": {"interval": "30d", \
+"keep": 4}, "daily": {"interval": "1d", "keep": 9}, "weekly": \
+{"interval": "7d", "keep": 5}}}""")
+
+    backup = Backup(str(tmpdir))
+    assert backup.config == {
+        "source-type": "ceph-rbd",
+        "source": {"image": "litdev01.root", "pool": "litdev"},
         "schedule": {"daily": {"interval": "1d",
                                "keep": 9},
                      "weekly": {"interval": "7d",
@@ -117,10 +136,10 @@ def test_init_refused_with_existing_config(tmpdir):
     existing_config = b"""\
 {"source-type": "file", "source": {"filename": "asdf"}, "marker": 1}\
 """
-    with open(str(tmpdir/'config'), 'wb') as f:
+    with open(str(tmpdir / 'config'), 'wb') as f:
         f.write(existing_config)
     backup = Backup(str(tmpdir))
     with pytest.raises(RuntimeError):
         backup.init('file', '/dev/foo')
-    with open(str(tmpdir/'config'), 'rb') as f:
+    with open(str(tmpdir / 'config'), 'rb') as f:
         assert f.read() == existing_config

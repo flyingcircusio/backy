@@ -11,6 +11,7 @@ import os.path
 def project_path(*names):
     return os.path.join(os.path.dirname(__file__), *names)
 
+
 def long_desc():
     parts = []
     for name in ('README.txt', 'CHANGES.txt'):
@@ -24,6 +25,7 @@ setup(
     install_requires=[
         'setuptools',
         'prettytable',
+        'PyYaml'
     ],
     extras_require={
         'test': [

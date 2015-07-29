@@ -7,11 +7,11 @@ from prettytable import PrettyTable
 import datetime
 import errno
 import fcntl
-import json
 import logging
 import os
 import os.path
 import time
+import yaml
 
 
 logger = logging.getLogger(__name__)
@@ -87,8 +87,8 @@ class Backup(object):
         self.config = {}
         if not os.path.exists(self.path + '/config'):
             return
-        self.config = json.load(
-            open(self.path + '/config', 'r', encoding='utf-8'))
+        f = open(self.path + '/config', 'r', encoding='utf-8')
+        self.config = yaml.load(f)
         self.source = select_source(
             self.config['source-type'])(self.config['source'])
         self.schedule = Schedule(self)
@@ -105,7 +105,7 @@ class Backup(object):
         self.revision_history.sort(key=lambda r: r.timestamp)
 
     def _lock(self):
-        self._lock_file = open(self.path+'/config', 'rb')
+        self._lock_file = open(self.path + '/config', 'rb')
         fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     # Internal API
@@ -130,7 +130,7 @@ class Backup(object):
                 raise KeyError(spec)
         else:
             try:
-                return self.revision_history[-spec-1]
+                return self.revision_history[-spec - 1]
             except IndexError:
                 raise KeyError(spec)
 
@@ -160,16 +160,16 @@ class Backup(object):
         source_factory = select_source(type)
         source_config = source_factory.config_from_cli(source)
 
-        with SafeFile(self.path+'/config', encoding='utf-8') as f:
+        with SafeFile(self.path + '/config', encoding='utf-8') as f:
             f.open_new('wb')
-            d = json.dumps({'source': source_config,
-                            'source-type': type,
-                            'schedule': {'daily': {'interval': '1d',
-                                                   'keep': 9},
-                                         'weekly': {'interval': '7d',
-                                                    'keep': 5},
-                                         'monthly': {'interval': '30d',
-                                                     'keep': 4}}})
+            d = yaml.dump({'source': source_config,
+                           'source-type': type,
+                           'schedule': {'daily': {'interval': '1d',
+                                                  'keep': 9},
+                                        'weekly': {'interval': '7d',
+                                                   'keep': 5},
+                                        'monthly': {'interval': '30d',
+                                                    'keep': 4}}})
             f.write(d)
 
         # Allow re-configuring after initialization.

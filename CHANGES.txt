@@ -5,16 +5,22 @@ Changelog
 2.0b2 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Turn the configuration format into YAML. Old files are still compatible.
+  New configs will be generated as YAML.
 
 
 2.0b1 (2014-07-07)
 ==================
 
 - Clean up docs.
+
 - Add classifiers in setup.py.
+
 - More or less complete rewrite expecting a copy-on-write filesystem as the
   target.
+
 - Flexible backup scheduling using free-form tags.
+
 - Compatible with Python 3.2-3.4.
+
 - Initial open source import as provided by Daniel Kraft (D9T).

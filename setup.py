@@ -26,7 +26,8 @@ setup(
         'setuptools',
         'prettytable',
         'PyYaml',
-        'shortuuid'
+        'shortuuid',
+        'consulate'
     ],
     extras_require={
         'test': [

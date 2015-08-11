@@ -149,7 +149,7 @@ def format_bytes_flexible(number):
     return '%s %s' % (format % (number / factor), label)
 
 
-ZEROES_PAT = b'\x00' * 1024
+ZEROES_PAT = b'\x00' * 1024 * 4
 
 
 def safe_copy(source, target):
@@ -158,13 +158,16 @@ def safe_copy(source, target):
         if not chunk:
             break
         # Search for zeroes that we can make sparse.
-        while chunk:
-            pat, chunk = chunk[:1024], chunk[1024:]
-            if pat == ZEROES_PAT:
-                target.seek(1024, 1)
+        pat_offset = 0
+        pat_size = 4*1024
+        while True:
+            if chunk[pat_offset:pat_offset+pat_size] == ZEROES_PAT:
+                target.seek(pat_size, 1)
             else:
-                target.write(pat)
-        target.write(chunk)
+                target.write(chunk[pat_offset:pat_offset+pat_size])
+            pat_offset += pat_size
+            if pat_offset > len(chunk):
+                break
     target.truncate()
     size = target.tell()
     target.flush()

@@ -36,7 +36,7 @@ class CephRBD(object):
     def _image_name(self):
         return '{}/{}'.format(self.pool, self.image)
 
-    def __exit__(self, exc_type=None, selfexc_val=None, exc_tb=None):
+    def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
         # Clean up all snapshots except the one for the most recent valid
         # revision.
         # Previously we used to remove all snapshots but the one for this
@@ -56,7 +56,7 @@ class CephRBD(object):
                 self.rbd.snap_rm(self._image_name + '@' + snapshot['name'])
 
     def _create_snapshot(self, name):
-        self.rbd.snap_create(self._image_name + '@backy-' + self.revision.uuid)
+        self.rbd.snap_create(self._image_name + '@' + name)
 
     def backup(self):
         backup = self.diff

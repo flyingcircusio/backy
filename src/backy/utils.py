@@ -164,12 +164,12 @@ def safe_copy(source, target):
             break
         # Search for zeroes that we can make sparse.
         pat_offset = 0
-        pat_size = 4*1024
+        pat_size = 4 * 1024
         while True:
-            if chunk[pat_offset:pat_offset+pat_size] == ZEROES_PAT:
+            if chunk[pat_offset:pat_offset + pat_size] == ZEROES_PAT:
                 target.seek(pat_size, 1)
             else:
-                target.write(chunk[pat_offset:pat_offset+pat_size])
+                target.write(chunk[pat_offset:pat_offset + pat_size])
             pat_offset += pat_size
             if pat_offset > len(chunk):
                 break
@@ -188,10 +188,12 @@ def files_are_equal(a, b):
         chunk_a = a.read(chunk_size)
         chunk_b = b.read(chunk_size)
         if chunk_a != chunk_b:
-            logger.error("Chunk A ({}, {}) != Chunk B ({}, {}) at position {}".format(
-                repr(chunk_a), hashlib.md5(chunk_a).hexdigest(),
-                repr(chunk_b), hashlib.md5(chunk_b).hexdigest(),
-                position))
+            logger.error(
+                "Chunk A ({}, {}) != Chunk B ({}, {}) "
+                "at position {}".format(
+                    repr(chunk_a), hashlib.md5(chunk_a).hexdigest(),
+                    repr(chunk_b), hashlib.md5(chunk_b).hexdigest(),
+                    position))
             errors += 1
         if not chunk_a:
             break

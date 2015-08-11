@@ -44,7 +44,8 @@ class CephRBD(object):
         # full backups instead of new deltas based on the most recent valid
         # one.
         if self.revision.backup.revision_history:
-            keep_snapshot_revision = self.revision.backup.revision_history[-1].uuid
+            keep_snapshot_revision = self.revision.backup.revision_history[-1]
+            keep_snapshot_revision = keep_snapshot_revision.uuid
         else:
             keep_snapshot_revision = None
         for snapshot in self.rbd.snap_ls(self._image_name):

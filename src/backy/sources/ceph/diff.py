@@ -149,7 +149,6 @@ class RBDDiffV1(object):
         for record in self.read_data():
             target.seek(record.start)
             if isinstance(record, Zero):
-                # XXX use fallocate (Linux only :-( ) for hole punching
                 target.write(b'\0'*record.length)
             elif isinstance(record, Data):
                 for chunk in record.stream():

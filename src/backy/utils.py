@@ -149,11 +149,21 @@ def format_bytes_flexible(number):
     return '%s %s' % (format % (number / factor), label)
 
 
+ZEROES_PAT = b'\x00' * 1024
+
+
 def safe_copy(source, target):
     while True:
-        chunk = source.read(4*1024**2)
+        chunk = source.read(4 * 1024 ** 2)
         if not chunk:
             break
+        # Search for zeroes that we can make sparse.
+        while chunk:
+            pat, chunk = chunk[:1024], chunk[1024:]
+            if pat == ZEROES_PAT:
+                target.seek(1024, 1)
+            else:
+                target.write(pat)
         target.write(chunk)
     target.truncate()
     size = target.tell()
@@ -164,8 +174,8 @@ def safe_copy(source, target):
 
 def files_are_equal(a, b):
     while True:
-        chunk_a = a.read(4*MiB)
-        chunk_b = b.read(4*MiB)
+        chunk_a = a.read(4 * MiB)
+        chunk_b = b.read(4 * MiB)
         if chunk_a != chunk_b:
             return False
         if not chunk_a:
@@ -173,7 +183,7 @@ def files_are_equal(a, b):
     return True
 
 
-def files_are_roughly_equal(a, b, samplesize=0.05, blocksize=4*MiB):
+def files_are_roughly_equal(a, b, samplesize=0.05, blocksize=4 * MiB):
     a.seek(0, 2)
     size = a.tell()
     blocks = size // blocksize

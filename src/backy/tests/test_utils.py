@@ -1,6 +1,6 @@
 from backy.tests import Ellipsis
 from backy.utils import files_are_equal, files_are_roughly_equal
-from backy.utils import SafeFile, format_bytes_flexible
+from backy.utils import SafeFile, format_bytes_flexible, safe_copy
 import backy.backup
 import os
 import pytest
@@ -225,9 +225,9 @@ def test_safe_edit_truncate(tmpdir):
 def test_roughly_compare_files_same(tmpdir):
     os.chdir(str(tmpdir))
     with open('a', 'wb') as f:
-        f.write(b'asdf'*100)
+        f.write(b'asdf' * 100)
     with open('b', 'wb') as f:
-        f.write(b'asdf'*100)
+        f.write(b'asdf' * 100)
 
     for x in range(20):
         assert files_are_roughly_equal(
@@ -237,11 +237,11 @@ def test_roughly_compare_files_same(tmpdir):
 def test_roughly_compare_files_1_changed_block(tmpdir):
     os.chdir(str(tmpdir))
     with open('a', 'wb') as f:
-        f.write(b'asdf'*100)
+        f.write(b'asdf' * 100)
         f.seek(100)
         f.write(b'bsdf')
     with open('b', 'wb') as f:
-        f.write(b'asdf'*100)
+        f.write(b'asdf' * 100)
 
     detected = 0
     for x in range(20):
@@ -249,3 +249,24 @@ def test_roughly_compare_files_1_changed_block(tmpdir):
             open('a', 'rb'), open('b', 'rb'), blocksize=10)
 
     assert detected > 0 and detected <= 20
+
+
+def test_safe_copy_correctly_makes_sparse_file(tmpdir):
+    # Create a test file that contains random data, then we insert
+    # 1024 byte long blocks of zeroes. safe_copy will not break them
+    # and will make the file sparse.
+    source_name = str(tmpdir / 'input')
+    with open(source_name, 'wb') as f:
+        f.write(b'12345' * 1024 * 100)
+        f.seek(1024)
+        f.write(b'\x00' * 1024 * 3)
+    source = open(source_name, 'rb')
+    target_name = str(tmpdir / 'output')
+    target = open(target_name, 'wb')
+    safe_copy(source, target)
+    source.close()
+    target.close()
+    source_current = open(source_name, 'rb').read()
+    target_current = open(target_name, 'rb').read()
+    assert (source_current == target_current)
+    assert os.stat(source_name).st_blocks > os.stat(target_name).st_blocks

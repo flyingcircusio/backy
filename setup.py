@@ -23,11 +23,12 @@ setup(
     name='backy',
     version='2.0b2.dev0',
     install_requires=[
-        'setuptools',
+        'consulate',
+        'fallocate',
         'prettytable',
         'PyYaml',
-        'shortuuid',
-        'consulate'
+        'setuptools',
+        'shortuuid'
     ],
     extras_require={
         'test': [

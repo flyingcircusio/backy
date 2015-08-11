@@ -80,8 +80,8 @@ class Revision(object):
 
     def defrag(self):
         try:
-            cmd(['btrfs', 'filesystem', 'defrag',
-                 os.path.dirname(self.filename) + '/*'])
+            cmd('btrfs filesystem defragment {}/*'.format(
+                 os.path.dirname(self.filename)), shell=True)
         except FileNotFoundError:
             logger.warn('btrfs utilities not found.')
         except subprocess.CalledProcessError:

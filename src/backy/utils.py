@@ -2,6 +2,11 @@ import os
 import os.path
 import random
 import tempfile
+import logging
+import hashlib
+
+
+logger = logging.getLogger(__name__)
 
 
 class SafeFile(object):
@@ -163,14 +168,22 @@ def safe_copy(source, target):
 
 
 def files_are_equal(a, b):
+    chunk_size = 50
+    position = 0
+    errors = 0
     while True:
-        chunk_a = a.read(4*MiB)
-        chunk_b = b.read(4*MiB)
+        chunk_a = a.read(chunk_size)
+        chunk_b = b.read(chunk_size)
         if chunk_a != chunk_b:
-            return False
+            logger.error("Chunk A ({}, {}) != Chunk B ({}, {}) at position {}".format(
+                repr(chunk_a), hashlib.md5(chunk_a).hexdigest(),
+                repr(chunk_b), hashlib.md5(chunk_b).hexdigest(),
+                position))
+            errors += 1
         if not chunk_a:
             break
-    return True
+        position += chunk_size
+    return not errors
 
 
 def files_are_roughly_equal(a, b, samplesize=0.05, blocksize=4*MiB):

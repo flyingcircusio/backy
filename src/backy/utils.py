@@ -164,7 +164,6 @@ def safe_copy(source, target):
                 target.seek(1024, 1)
             else:
                 target.write(pat)
-        target.write(chunk)
     target.truncate()
     size = target.tell()
     target.flush()

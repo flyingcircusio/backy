@@ -4,6 +4,7 @@ from backy.utils import SafeFile, format_bytes_flexible, safe_copy
 import backy.backup
 import os
 import pytest
+import sys
 import time
 
 
@@ -251,6 +252,8 @@ def test_roughly_compare_files_1_changed_block(tmpdir):
     assert detected > 0 and detected <= 20
 
 
+@pytest.mark.skipif(sys.platform != 'linux2',
+                    reason="requires linux")
 def test_safe_copy_correctly_makes_sparse_file(tmpdir):
     # Create a test file that contains random data, then we insert
     # 1024 byte long blocks of zeroes. safe_copy will not break them
@@ -259,7 +262,8 @@ def test_safe_copy_correctly_makes_sparse_file(tmpdir):
     with open(source_name, 'wb') as f:
         f.write(b'12345' * 1024 * 100)
         f.seek(1024)
-        f.write(b'\x00' * 1024 * 3)
+        # holes are at least 4k. we need
+        f.write(b'\x00' * 1024 * 10)
     source = open(source_name, 'rb')
     target_name = str(tmpdir / 'output')
     target = open(target_name, 'wb')

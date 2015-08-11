@@ -1,6 +1,7 @@
 from collections import namedtuple
 import os
 import struct
+from backy.fallocate import punch_hole
 
 
 def unpack_from(fmt, f):
@@ -97,7 +98,7 @@ class RBDDiffV1(object):
             while remaining:
                 current = self.f.tell()
                 self.f.seek(source_offset)
-                read = min(4*1024**2, remaining)
+                read = min(4 * 1024 ** 2, remaining)
                 chunk = self.f.read(read)
                 remaining = remaining - read
                 source_offset += read
@@ -149,7 +150,7 @@ class RBDDiffV1(object):
         for record in self.read_data():
             target.seek(record.start)
             if isinstance(record, Zero):
-                target.write(b'\0'*record.length)
+                punch_hole(target, target.tell(), record.length)
             elif isinstance(record, Data):
                 for chunk in record.stream():
                     target.write(chunk)

@@ -89,8 +89,12 @@ class Backup(object):
             return
         f = open(self.path + '/config', 'r', encoding='utf-8')
         self.config = yaml.load(f)
-        self.source = select_source(
-            self.config['source-type'])(self.config['source'])
+        try:
+            source_factory = select_source(self.config['source-type'])
+        except IndexError:
+            logger.error("No source type named `{}` exists.".format(
+                self.config['source-type']))
+        self.source = source_factory(self.config['source'])
         self.schedule = Schedule(self)
 
     def _scan_revisions(self):

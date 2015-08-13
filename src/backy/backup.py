@@ -89,7 +89,12 @@ class Backup(object):
         self.config = {}
         self._merge_config('/etc/backy.conf')
         self._merge_config(self.path + '/config')
-        self.source = select_source(self.config['source-type'])(self.config)
+        try:
+            source_factory = select_source(self.config['source-type'])
+        except IndexError:
+            logger.error("No source type named `{}` exists.".format(
+                self.config['source-type']))
+        self.source = source_factory(self.config)
         self.schedule = Schedule(self)
 
     def _merge_config(self, path):

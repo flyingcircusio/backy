@@ -31,6 +31,7 @@ class Commands(object):
         self._backup.init(type, source)
 
     def status(self):
+        self._backup._configure()
         total_bytes = 0
 
         t = PrettyTable(["Date", "ID", "Size", "Duration", "Tags"])
@@ -54,6 +55,7 @@ class Commands(object):
             format_bytes_flexible(total_bytes)))
 
     def backup(self, force=False):
+        self._backup._configure()
         try:
             self._backup.backup(force)
         except IOError as e:
@@ -62,9 +64,11 @@ class Commands(object):
             logger.info('Backup already in progress.')
 
     def restore(self, revision, target):
+        self._backup._configure()
         self._backup.restore(revision, target)
 
     def schedule(self, days):
+        self._backup._configure()
         simulate(self._backup, days)
 
 
@@ -79,13 +83,11 @@ class Backup(object):
     def __init__(self, path):
         self.path = os.path.realpath(path)
         logger.debug('Backup("{}")'.format(self.path))
-        self._configure()
-        self._scan_revisions()
 
     def _configure(self):
         if self.config is not None:
-            raise RuntimeError(
-                "Can not configure backup objects multiple times.")
+            return
+
         self.config = {}
         self._merge_config('/etc/backy.conf')
         self._merge_config(self.path + '/config')
@@ -96,6 +98,7 @@ class Backup(object):
                 self.config['source-type']))
         self.source = source_factory(self.config)
         self.schedule = Schedule(self)
+        self._scan_revisions()
 
     def _merge_config(self, path):
         if not os.path.exists(path):
@@ -160,7 +163,7 @@ class Backup(object):
 
     def init(self, type, source):
         # Allow re-configuration in this case.
-        if self.config != {}:
+        if self.config:
             raise RuntimeError("Can not initialize configured backup objects.")
         if not os.path.exists(self.path):
             os.makedirs(self.path)
@@ -181,10 +184,6 @@ class Backup(object):
                                         'monthly': {'interval': '30d',
                                                     'keep': 4}}})
             f.write(d)
-
-        # Allow re-configuring after initialization.
-        self.config = None
-        self._configure()
 
     def backup(self, force=''):
         self._lock()

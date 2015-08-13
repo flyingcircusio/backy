@@ -7,7 +7,7 @@ import subprocess
 
 def generate_test_data(target, size):
     f = open(target, 'wb')
-    block = 8*1024
+    block = 8 * 1024
     for chunk in range(size // block):
         f.write(os.urandom(block))
     f.write(os.urandom(size % block))
@@ -18,11 +18,11 @@ def test_smoketest_internal(tmpdir, mocked_now):
     # These copies of data are intended to be different versions of the same
     # file.
     source1 = str(tmpdir / 'image1.qemu')
-    generate_test_data(source1, 2*1024**2)
+    generate_test_data(source1, 2 * 1024 ** 2)
     source2 = str(tmpdir / 'image2.qemu')
-    generate_test_data(source2, 2*1024**2)
+    generate_test_data(source2, 2 * 1024 ** 2)
     source3 = str(tmpdir / 'image3.qemu')
-    generate_test_data(source3, 2*1024**2)
+    generate_test_data(source3, 2 * 1024 ** 2)
 
     backup_dir = str(tmpdir / 'image1.backup')
     os.mkdir(backup_dir)
@@ -30,6 +30,7 @@ def test_smoketest_internal(tmpdir, mocked_now):
     backup.init('file', source1)
 
     # Backup first state
+    backup._configure()
     backup.source.filename = source1
     backup.backup()
 
@@ -51,7 +52,7 @@ def test_smoketest_internal(tmpdir, mocked_now):
     assert len(backup.revision_history) == 1
 
     # Advance time to allow a new backup
-    mocked_now.now += 24*60*60
+    mocked_now.now += 24 * 60 * 60
     backup.backup()
     assert len(backup.revision_history) == 2
 
@@ -64,7 +65,7 @@ def test_smoketest_internal(tmpdir, mocked_now):
     assert open(source1, 'rb').read() == open(restore_target, 'rb').read()
 
     # Backup second state again
-    mocked_now.now += 24*60*60
+    mocked_now.now += 24 * 60 * 60
     backup.source.filename = source2
     backup.backup()
     assert len(backup.revision_history) == 3
@@ -83,7 +84,7 @@ def test_smoketest_internal(tmpdir, mocked_now):
 
     # Backup third state
     backup.source.filename = source3
-    mocked_now.now += 24*60*60
+    mocked_now.now += 24 * 60 * 60
     backup.backup()
     assert len(backup.revision_history) == 4
 

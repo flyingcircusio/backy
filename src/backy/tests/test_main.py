@@ -1,6 +1,7 @@
 from backy.tests import Ellipsis
 import backy.backup
 import backy.main
+import os
 import pytest
 import sys
 
@@ -105,7 +106,18 @@ main.py                    ... INFO     Backup complete.\
 """) == caplog.text()
 
 
-def test_call_backup(capsys, caplog, argv, monkeypatch):
+def test_call_backup(tmpdir, capsys, caplog, argv, monkeypatch):
+    os.makedirs(str(tmpdir / 'backy'))
+    os.chdir(str(tmpdir / 'backy'))
+
+    with open(str(tmpdir / 'backy' / 'config'), 'wb') as f:
+        f.write("""
+---
+source-type: file
+source:
+    filename: {}
+""".format(__file__).encode("utf-8"))
+
     monkeypatch.setattr(backy.backup.Backup, 'backup', print_args)
     argv.append('-v')
     argv.append('backup')

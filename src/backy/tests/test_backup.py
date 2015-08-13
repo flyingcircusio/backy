@@ -12,7 +12,9 @@ fixtures = os.path.dirname(__file__) + '/samples'
 @pytest.fixture
 def simple_file_config(tmpdir):
     shutil.copy(fixtures + '/simple_file/config', str(tmpdir))
-    return Backup(str(tmpdir))
+    b = Backup(str(tmpdir))
+    b._configure()
+    return b
 
 
 def test_config(simple_file_config, tmpdir):
@@ -113,6 +115,7 @@ def test_init_old_json_format(tmpdir):
 {"interval": "7d", "keep": 5}}}""")
 
     backup = Backup(str(tmpdir))
+    backup._configure()
     assert backup.config == {
         "source-type": "ceph-rbd",
         "source": {"image": "litdev01.root", "pool": "litdev"},

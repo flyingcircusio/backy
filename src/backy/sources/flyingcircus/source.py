@@ -1,5 +1,5 @@
 from backy.sources.ceph.source import CephRBD
-from backy.timeout import TimeOut, TimeOutError
+from backy.timeout import TimeOut
 import consulate
 import logging
 import uuid
@@ -23,9 +23,11 @@ class FlyingCircusRootDisk(CephRBD):
         return dict(vm=spec)
 
     def _create_snapshot(self, name):
-        consul = consulate.Consul(token=self.config['flyingcircus']['consul_acl_token'])
+        consul = consulate.Consul(
+            token=self.config['flyingcircus']['consul_acl_token'])
         snapshot_key = 'snapshot/{}'.format(str(uuid.uuid4()))
-        logger.info('Requesting consistent snapshot via {} ...'.format(snapshot_key))
+        logger.info('Requesting consistent snapshot via {} ...'.
+                    format(snapshot_key))
         consul.kv[snapshot_key] = {'vm': self.vm, 'snapshot': name}
         try:
             timeout = TimeOut(30, raise_on_timeout=True)

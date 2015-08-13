@@ -5,6 +5,10 @@ Changelog
 2.0b2 (unreleased)
 ==================
 
+- Add consul integration for backing up Flying Circus root disk images
+  with clean snapshots (by asking fc.qemu to use fs-freeze before preparing
+  a Ceph snapshot).
+
 - Switch to shorter UUIDs. Existing files with old UUIDs are compatible.
 
 - Turn the configuration format into YAML. Old files are still compatible.

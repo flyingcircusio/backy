@@ -41,13 +41,15 @@ setup(
         [backy.sources]
             ceph-rbd = backy.sources.ceph.source:CephRBD
             file = backy.sources.file:File
+            flyingcircus = \
+                backy.sources.flyingcircus.source:FlyingCircusRootDisk
 
     """,
-    author=('Christian Theune <ct@gocept.com>, '
+    author=('Christian Theune <ct@flyingcircus.io>, '
             'Daniel Kraft <daniel.kraft@d9t.de>'),
-    author_email='ct@gocept.com',
+    author_email='ct@flyingcircus.io',
     license='GPL-3',
-    url='https://bitbucket.org/ctheune/backy/',
+    url='https://bitbucket.org/flyingcircus/backy/',
     keywords='backup',
     classifiers="""\
 Development Status :: 4 - Beta

@@ -15,8 +15,8 @@ class CephRBD(object):
     """
 
     def __init__(self, config):
-        self.pool = config['pool']
-        self.image = config['image']
+        self.pool = config['source']['pool']
+        self.image = config['source']['image']
         self.rbd = RBDClient()
 
     @staticmethod

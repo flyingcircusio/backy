@@ -3,7 +3,7 @@
 import time
 
 
-class TimeoutError(RuntimeError):
+class TimeOutError(RuntimeError):
     pass
 
 
@@ -31,7 +31,7 @@ class TimeOut(object):
 
         if self.timed_out:
             if self.raise_on_timeout:
-                raise TimeoutError()
+                raise TimeOutError()
             else:
                 return False
 

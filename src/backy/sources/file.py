@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 class File(object):
 
     def __init__(self, config):
-        self.filename = config['filename']
+        self.filename = config['source']['filename']
 
     @staticmethod
     def config_from_cli(spec):

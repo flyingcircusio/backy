@@ -70,6 +70,8 @@ class Commands(object):
 
 class Backup(object):
 
+    SYSTEM_CONFIG = '/etc/backy.conf'
+
     config = None
     # Allow overriding in tests and simulation mode.
     now = time.time
@@ -85,13 +87,16 @@ class Backup(object):
             raise RuntimeError(
                 "Can not configure backup objects multiple times.")
         self.config = {}
-        if not os.path.exists(self.path + '/config'):
-            return
-        f = open(self.path + '/config', 'r', encoding='utf-8')
-        self.config = yaml.load(f)
-        self.source = select_source(
-            self.config['source-type'])(self.config['source'])
+        self._merge_config('/etc/backy.conf')
+        self._merge_config(self.path + '/config')
+        self.source = select_source(self.config['source-type'])(self.config)
         self.schedule = Schedule(self)
+
+    def _merge_config(self, path):
+        if not os.path.exists(path):
+            return
+        f = open(path, 'r', encoding='utf-8')
+        self.config.update(yaml.load(f))
 
     def _scan_revisions(self):
         self.revision_history = []

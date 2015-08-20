@@ -15,8 +15,8 @@ class CephRBD(object):
     """
 
     def __init__(self, config):
-        self.pool = config['source']['pool']
-        self.image = config['source']['image']
+        self.pool = config['pool']
+        self.image = config['image']
         self.rbd = RBDClient()
 
     @staticmethod
@@ -62,7 +62,7 @@ class CephRBD(object):
     def backup(self):
         backup = self.diff
         try:
-            parent = self.revision.backup.find_revision(self.revision.parent)
+            parent = self.revision.archive.find_revision(self.revision.parent)
             if not self.rbd.exists(self._image_name + '@backy-' + parent.uuid):
                 raise KeyError()
         except KeyError:

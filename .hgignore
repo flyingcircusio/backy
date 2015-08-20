@@ -20,3 +20,4 @@ src/backy.egg-info/
 *.sublime*
 tags
 vagrant/.vagrant
+*.swp

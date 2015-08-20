@@ -12,10 +12,9 @@ class FlyingCircusRootDisk(CephRBD):
 
     def __init__(self, config):
         self.config = config
-        s = config['source']
-        self.vm = s['vm']
-        s['pool'] = s['vm'][:-2]
-        s['image'] = s['vm'] + '.root'
+        self.vm = config['vm']
+        config['pool'] = config['vm'][:-2]
+        config['image'] = config['vm'] + '.root'
         super(FlyingCircusRootDisk, self).__init__(config)
 
     @staticmethod
@@ -24,7 +23,7 @@ class FlyingCircusRootDisk(CephRBD):
 
     def _create_snapshot(self, name):
         consul = consulate.Consul(
-            token=self.config['flyingcircus']['consul_acl_token'])
+            token=self.config['consul_acl_token'])
         snapshot_key = 'snapshot/{}'.format(str(uuid.uuid4()))
         logger.info('Requesting consistent snapshot via {} ...'.
                     format(snapshot_key))

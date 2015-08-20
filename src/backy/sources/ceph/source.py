@@ -43,8 +43,8 @@ class CephRBD(object):
         # revision - which is wrong: broken new revisions would always cause
         # full backups instead of new deltas based on the most recent valid
         # one.
-        if self.revision.backup.revision_history:
-            keep_snapshot_revision = self.revision.backup.revision_history[-1]
+        if self.revision.archive.history:
+            keep_snapshot_revision = self.revision.archive.history[-1]
             keep_snapshot_revision = keep_snapshot_revision.uuid
         else:
             keep_snapshot_revision = None
@@ -100,7 +100,7 @@ class CephRBD(object):
         t = open(self.revision.filename, 'rb')
 
         mode = 'full'
-        for revision in self.revision.backup.revision_history[-10:]:
+        for revision in self.revision.archive.history[-10:]:
             if revision.stats.get('ceph-verification', '') == 'full':
                 mode = 'partial'
         self.revision.stats['ceph-verification'] = mode

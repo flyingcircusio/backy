@@ -1,8 +1,10 @@
 from backy.revision import Revision
 import curses
 import datetime
-import time
+import fractions
+import functools
 import logging
+import time
 
 
 logger = logging.getLogger(__name__)
@@ -32,28 +34,55 @@ def parse_duration(duration):
 
 class Schedule(object):
 
-    def __init__(self, backup):
-        self.backup = backup
-        self.schedule = self.backup.config.get('schedule', {})
+    # Allow overriding in tests and simulation mode.
+    now = time.time
 
-    def next_due(self):
-        """Return dict when each tag of this schedule is due next.
+    def __init__(self):
+        self.schedule = {}
+
+    @property
+    def quant(self):
+        """Return quantization for intervals."""
+        return functools.reduce(
+            fractions.gcd,
+            [x['interval'] for x in self.schedule.values()])
+
+    def configure(self, config):
+        self.schedule = config
+        for tag, spec in self.schedule.items():
+            self.schedule[tag]['interval'] = parse_duration(spec['interval'])
+
+    def next(self, relative, spread):
+        next_times = {}
+        for tag, settings in self.schedule.items():
+            interval = settings['interval']
+            t = next_times.setdefault(
+                relative + interval - ((spread + relative) % interval), [])
+            t.append(tag)
+        next_time = list(sorted(next_times))[0]
+        next_tags = next_times[next_time]
+        return datetime.datetime.fromtimestamp(next_time), next_tags
+
+    def next_due(self, archive):
+        """Return a timestamp and a set of tags that are due next.
         """
-        due = set()
+        dues = set()
+        tags = set()
         for tag, args in self.schedule.items():
-            tag_history = self.backup.find_revisions('tag:{}'.format(tag))
+            tag_history = archive.find_revisions('tag:{}'.format(tag))
             if not tag_history:
                 # Never made a backup with this tag before, so it's due
                 # by default.
-                due.add(tag)
+                dues.add(self.now())
+                tags.add(tag)
             else:
                 last = tag_history[-1].timestamp
-                next = last + parse_duration(args['interval'])
-                if next <= self.backup.now():
-                    due.add(tag)
-        return due
+                next = last + args['interval']
+                if next <= self.now():
+                    tags.add(tag)
+        return due, tags
 
-    def expire(self, simulate=False):
+    def expire(self, archive, simulate=False):
         """Remove old revisions according to the backup schedule.
         """
         # Clean out old backups: keep at least a certain number of copies
@@ -61,19 +90,19 @@ class Schedule(object):
         # than keep * interval for this tag.
         # Phase 1: remove tags that are expired
         for tag, args in self.schedule.items():
-            revisions = self.backup.find_revisions('tag:'+tag)
+            revisions = archive.find_revisions('tag:' + tag)
             keep = args['keep']
             if len(revisions) < keep:
                 continue
-            now = self.backup.now()
-            keep_threshold = now - keep * parse_duration(args['interval'])
+            now = self.now()
+            keep_threshold = now - keep * args['interval']
             for old_revision in revisions[:-keep]:
                 if old_revision.timestamp >= keep_threshold:
                     continue
                 old_revision.tags.remove(tag)
 
         # Phase 2: delete revisions that have no tags any more.
-        for revision in self.backup.revision_history:
+        for revision in archive.history:
             if not revision.tags:
                 revision.remove(simulate)
 
@@ -118,11 +147,11 @@ def simulate_main(stdscr, schedule, days):
         if tags:
             r = Revision.create(schedule.backup)
             r.tags = list(tags)
-            schedule.backup.revision_history.append(r)
+            schedule.backup.archive.history.append(r)
 
         schedule.expire(simulate=True)
 
-        revisions = schedule.backup.revision_history
+        revisions = schedule.backup.archive.history
         revision_log.addstr(
             " iteration {} | {} | {} revisions | estimated data: {} GiB\n\n"
             .format(iteration, format_timestamp(now), len(revisions), 0))
@@ -134,7 +163,7 @@ def simulate_main(stdscr, schedule, days):
                 format(r, time_readable, ', '.join(r.tags)))
 
         revisions_by_day = {}
-        for revision in schedule.backup.revision_history:
+        for revision in schedule.backup.archive.history:
             revisions_by_day[
                 datetime.date.fromtimestamp(revision.timestamp)] = revision
         hist_max = datetime.date.fromtimestamp(schedule.backup.now())

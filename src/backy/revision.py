@@ -3,8 +3,10 @@ import glob
 import json
 import logging
 import os
-import subprocess
 import shortuuid
+import subprocess
+import sys
+import time
 
 logger = logging.getLogger(__name__)
 cmd = subprocess.check_output
@@ -31,25 +33,26 @@ class Revision(object):
     stats = None
     tags = ()
 
-    def __init__(self, uuid, backup):
+    def __init__(self, uuid, archive):
         self.uuid = uuid
-        self.backup = backup
+        self.archive = archive
         self.stats = {'bytes_written': 0}
 
     @classmethod
-    def create(cls, backup):
-        r = Revision(shortuuid.uuid(), backup)
-        r.timestamp = backup.now()
-        if backup.revision_history:
+    def create(cls, archive):
+        r = Revision(shortuuid.uuid(), archive)
+        r.timestamp = time.time()
+        if archive.history:
             # XXX validate that this parent is a actually a good parent. need
             # to contact the source for this ...
-            r.parent = backup.revision_history[-1].uuid
+            r.parent = archive.history[-1].uuid
         return r
 
     @classmethod
-    def load(cls, file, backup):
-        metadata = json.load(open(file, 'r', encoding='utf-8'))
-        r = Revision(metadata['uuid'], backup)
+    def load(cls, file, archive):
+        with open(file, 'r', encoding='utf-8') as f:
+            metadata = json.load(f)
+        r = Revision(metadata['uuid'], archive)
         r.timestamp = metadata['timestamp']
         r.parent = metadata['parent']
         r.stats = metadata.get('stats', {})
@@ -62,7 +65,7 @@ class Revision(object):
 
     @property
     def filename(self):
-        return '{}/{}'.format(self.backup.path, self.uuid)
+        return '{}/{}'.format(self.archive.path, self.uuid)
 
     @property
     def info_filename(self):
@@ -74,14 +77,16 @@ class Revision(object):
             open(self.filename, 'wb').close()
             return
 
-        parent = self.backup.find_revision(self.parent)
+        parent = self.archive.find_revision(self.parent)
         cp_reflink(parent.filename, self.filename)
         self.writable()
 
     def defrag(self):
+        if sys.platform == 'darwin':
+            return
         try:
             cmd('btrfs filesystem defragment {}/*'.format(
-                 os.path.dirname(self.filename)), shell=True)
+                os.path.dirname(self.filename)), shell=True)
         except FileNotFoundError:
             logger.warn('btrfs utilities not found.')
         except subprocess.CalledProcessError:
@@ -99,7 +104,7 @@ class Revision(object):
             f.write(json.dumps(metadata))
 
     def set_link(self, name):
-        path = self.backup.path
+        path = self.archive.path
         if os.path.exists(path + '/' + name):
             os.unlink(path + '/' + name)
         os.symlink(os.path.relpath(self.filename, path), path + '/' + name)
@@ -114,8 +119,8 @@ class Revision(object):
         if not simulate:
             for file in glob.glob(self.filename + '*'):
                 os.unlink(file)
-        if self in self.backup.revision_history:
-            self.backup.revision_history.remove(self)
+        if self in self.archive.history:
+            self.archive.history.remove(self)
 
     def writable(self):
         os.chmod(self.filename, 0o640)

@@ -5,6 +5,16 @@ Changelog
 2.0b2 (unreleased)
 ==================
 
+- Introduce scheduler and rework the main backup command. The backy
+  command is now only responsible for dealing with individual backups.
+
+  It does no longer care about scheduling.
+
+  A new daemon and a central configuration file is responsible for that
+  now. However, it simply calls out to the existing backy command
+  so we can still manually interact with the system even if we do not
+  use the daemon.
+
 - Add consul integration for backing up Flying Circus root disk images
   with clean snapshots (by asking fc.qemu to use fs-freeze before preparing
   a Ceph snapshot).

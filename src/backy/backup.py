@@ -1,5 +1,5 @@
 from backy.revision import Revision
-from backy.schedule import simulate, Schedule
+from backy.schedule import Schedule
 from backy.sources import select_source
 from backy.utils import SafeFile, format_bytes_flexible, safe_copy
 from glob import glob
@@ -39,7 +39,7 @@ class Commands(object):
         t.align['Size'] = 'r'
         t.align['Duration'] = 'r'
 
-        for r in self._backup.revision_history:
+        for r in self._backup.archive.history:
             total_bytes += r.stats.get('bytes_written', 0)
             t.add_row([format_timestamp(r.timestamp),
                        r.uuid,
@@ -50,14 +50,14 @@ class Commands(object):
         print(t)
 
         print("== Summary")
-        print("{} revisions".format(len(self._backup.revision_history)))
+        print("{} revisions".format(len(self._backup.archive.history)))
         print("{} data (estimated)".format(
             format_bytes_flexible(total_bytes)))
 
-    def backup(self, force=False):
+    def backup(self, tags):
         self._backup._configure()
         try:
-            self._backup.backup(force)
+            self._backup.backup(tags)
         except IOError as e:
             if e.errno not in [errno.EDEADLK, errno.EAGAIN]:
                 raise
@@ -67,61 +67,37 @@ class Commands(object):
         self._backup._configure()
         self._backup.restore(revision, target)
 
-    def schedule(self, days):
-        self._backup._configure()
-        simulate(self._backup, days)
 
-
-class Backup(object):
-
-    SYSTEM_CONFIG = '/etc/backy.conf'
-
-    config = None
-    # Allow overriding in tests and simulation mode.
-    now = time.time
+class Archive(object):
+    """Keeps track of existing revisions in a backup."""
 
     def __init__(self, path):
         self.path = os.path.realpath(path)
-        logger.debug('Backup("{}")'.format(self.path))
 
-    def _configure(self):
-        if self.config is not None:
-            return
-
-        self.config = {}
-        self._merge_config('/etc/backy.conf')
-        self._merge_config(self.path + '/config')
-        try:
-            source_factory = select_source(self.config['source-type'])
-        except IndexError:
-            logger.error("No source type named `{}` exists.".format(
-                self.config['source-type']))
-        self.source = source_factory(self.config)
-        self.schedule = Schedule(self)
-        self._scan_revisions()
-
-    def _merge_config(self, path):
-        if not os.path.exists(path):
-            return
-        f = open(path, 'r', encoding='utf-8')
-        self.config.update(yaml.load(f))
-
-    def _scan_revisions(self):
-        self.revision_history = []
+    def scan(self):
+        self.history = []
         seen_uuids = set()
         for file in glob(self.path + '/*.rev'):
             r = Revision.load(file, self)
             if r.uuid in seen_uuids:
                 continue
             seen_uuids.add(r.uuid)
-            self.revision_history.append(r)
-        self.revision_history.sort(key=lambda r: r.timestamp)
+            self.history.append(r)
+        self.history.sort(key=lambda r: r.timestamp)
 
-    def _lock(self):
-        self._lock_file = open(self.path + '/config', 'rb')
-        fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-    # Internal API
+    def find_revisions(self, spec):
+        """Get a sorted list of revisions, oldest first, that match the given
+        specification.
+        """
+        if isinstance(spec, str) and spec.startswith('tag:'):
+            tag = spec.replace('tag:', '')
+            result = [r for r in self.history
+                      if tag in r.tags]
+        elif spec == 'all':
+            result = self.history[:]
+        else:
+            result = [self.find_revision(spec)]
+        return result
 
     def find_revision(self, spec):
         if spec is None:
@@ -136,30 +112,45 @@ class Backup(object):
                 raise KeyError("Integer revisions must be positive.")
         except ValueError:
             # spec is a string and represents a UUID
-            for r in self.revision_history:
+            for r in self.history:
                 if r.uuid == spec:
                     return r
             else:
                 raise KeyError(spec)
         else:
             try:
-                return self.revision_history[-spec - 1]
+                return self.history[-spec - 1]
             except IndexError:
                 raise KeyError(spec)
 
-    def find_revisions(self, spec):
-        """Get a sorted list of revisions, oldest first, that match the given
-        specification.
-        """
-        if isinstance(spec, str) and spec.startswith('tag:'):
-            tag = spec.replace('tag:', '')
-            result = [r for r in self.revision_history
-                      if tag in r.tags]
-        elif spec == 'all':
-            result = self.revision_history[:]
-        else:
-            result = [self.find_revision(spec)]
-        return result
+
+class Backup(object):
+
+    config = None
+
+    def __init__(self, path):
+        self.path = os.path.realpath(path)
+        self.archive = Archive(self.path)
+        logger.debug('Backup("{}")'.format(self.path))
+
+    def _configure(self):
+        if self.config is not None:
+            return
+
+        f = open(self.path + '/config', 'r', encoding='utf-8')
+        self.config = yaml.load(f)
+
+        try:
+            source_factory = select_source(self.config['type'])
+        except IndexError:
+            logger.error("No source type named `{}` exists.".format(
+                self.config['type']))
+        self.source = source_factory(self.config)
+        self.archive.scan()
+
+    def _lock(self):
+        self._lock_file = open(self.path + '/config', 'rb')
+        fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     def init(self, type, source):
         # Allow re-configuration in this case.
@@ -172,39 +163,29 @@ class Backup(object):
 
         source_factory = select_source(type)
         source_config = source_factory.config_from_cli(source)
+        source_config['type'] = type
 
         with SafeFile(self.path + '/config', encoding='utf-8') as f:
             f.open_new('wb')
-            d = yaml.dump({'source': source_config,
-                           'source-type': type,
-                           'schedule': {'daily': {'interval': '1d',
-                                                  'keep': 9},
-                                        'weekly': {'interval': '7d',
-                                                   'keep': 5},
-                                        'monthly': {'interval': '30d',
-                                                    'keep': 4}}})
+            d = yaml.dump(source_config)
             f.write(d)
 
-    def backup(self, force=''):
+    def backup(self, tags):
         self._lock()
-        self._scan_revisions()
+        self.archive.scan()
 
-        start = self.now()
+        start = time.time()
 
         # Clean-up incomplete revisions
-        for revision in self.revision_history:
+        for revision in self.archive.history:
             if 'duration' not in revision.stats:
                 logger.info('Removing incomplete revision {}'.
                             format(revision.uuid))
                 revision.remove()
 
-        tags = self.schedule.next_due()
-        tags.update(filter(None, force.split(',')))
-        if not tags:
-            logger.warning('No backup due yet.')
-            return
+        tags = set(tags.split(','))
 
-        new_revision = Revision.create(self)
+        new_revision = Revision.create(self.archive)
         new_revision.tags = tags
         new_revision.materialize()
 
@@ -222,17 +203,14 @@ class Backup(object):
                     new_revision.uuid))
                 new_revision.defrag()
                 new_revision.set_link('last')
-                new_revision.stats['duration'] = self.now() - start
+                new_revision.stats['duration'] = time.time() - start
                 new_revision.write_info()
                 new_revision.readonly()
-                self.revision_history.append(new_revision)
-
-        logger.info('Expiring old revisions ...')
-        self.schedule.expire()
+                self.archive.history.append(new_revision)
 
     def restore(self, revision, target):
         self._lock()
-        self._scan_revisions()
+        self.archive.scan()
 
         r = self.find_revision(revision)
         source = open(r.filename, 'rb')

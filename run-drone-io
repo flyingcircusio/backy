@@ -3,4 +3,4 @@ set -e
 virtualenv --python=python3.3 .
 bin/pip install zc.buildout==2.4.0 --use-mirrors
 bin/buildout
-bin/py.test
+bin/py.test -vv

@@ -82,7 +82,7 @@ class Task(object):
         yield from process.communicate()
 
         # Expire backups
-        # XXX this isn't true async
+        # TODO: this isn't true async, but it works for now.
         self.job.archive.scan()
         self.job.schedule.expire(self.job.archive)
 

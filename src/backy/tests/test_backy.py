@@ -14,7 +14,7 @@ def generate_test_data(target, size):
     f.close()
 
 
-def test_smoketest_internal(tmpdir, mocked_now):
+def test_smoketest_internal(tmpdir):
     # These copies of data are intended to be different versions of the same
     # file.
     source1 = str(tmpdir / 'image1.qemu')
@@ -32,29 +32,21 @@ def test_smoketest_internal(tmpdir, mocked_now):
     # Backup first state
     backup._configure()
     backup.source.filename = source1
-    backup.backup()
+    backup.backup(tags='test')
 
     # Restore first state from level 0
     restore_target = str(tmpdir / 'image1.restore')
     backup.restore(0, restore_target)
     with pytest.raises(IOError):
-        open(backup.revision_history[-1].filename, 'wb')
+        open(backup.archive.history[-1].filename, 'wb')
     with pytest.raises(IOError):
-        open(backup.revision_history[-1].info_filename, 'wb')
+        open(backup.archive.history[-1].info_filename, 'wb')
     assert open(source1, 'rb').read() == open(restore_target, 'rb').read()
 
     # Backup second state
     backup.source.filename = source2
-    backup.backup()
-
-    # Assert that nothing happened: 24 hours interval by default
-    backup._scan_revisions()
-    assert len(backup.revision_history) == 1
-
-    # Advance time to allow a new backup
-    mocked_now.now += 24 * 60 * 60
-    backup.backup()
-    assert len(backup.revision_history) == 2
+    backup.backup(tags='test')
+    assert len(backup.archive.history) == 2
 
     # Restore second state from level 0
     backup.restore(0, restore_target)
@@ -65,10 +57,9 @@ def test_smoketest_internal(tmpdir, mocked_now):
     assert open(source1, 'rb').read() == open(restore_target, 'rb').read()
 
     # Backup second state again
-    mocked_now.now += 24 * 60 * 60
     backup.source.filename = source2
-    backup.backup()
-    assert len(backup.revision_history) == 3
+    backup.backup(tags='test')
+    assert len(backup.archive.history) == 3
 
     # Restore image2 from level 0 again
     backup.restore(0, restore_target)
@@ -84,9 +75,8 @@ def test_smoketest_internal(tmpdir, mocked_now):
 
     # Backup third state
     backup.source.filename = source3
-    mocked_now.now += 24 * 60 * 60
-    backup.backup()
-    assert len(backup.revision_history) == 4
+    backup.backup(tags='test')
+    assert len(backup.archive.history) == 4
 
     # Restore image3 from level 0
     backup.restore(0, restore_target)
@@ -113,20 +103,16 @@ def test_smoketest_external():
     assert Ellipsis("""\
 Using /... as workspace.
 Generating Test Data.. Done.
-Backing up img_state1.img. ...
-...
-Done.
+Backing up img_state1.img. Done.
 Restoring img_state1.img from level 0. Done.
 Diffing restore_state1.img against img_state1.img. Success.
 Backing up img_state2.img. Performing non-COW copy: ...
-...
 Done.
 Restoring img_state2.img from level 0. Done.
 Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 1. Done.
 Diffing restore_state1.img against img_state1.img. Success.
 Backing up img_state2.img again. Performing non-COW copy: ...
-...
 Done.
 Restoring img_state2.img from level 0. Done.
 Diffing restore_state2.img against img_state2.img. Success.
@@ -135,7 +121,6 @@ Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 2. Done.
 Diffing restore_state1.img against img_state1.img. Success.
 Backing up img_state3.img. Performing non-COW copy: ...
-...
 Done.
 Restoring img_state3.img from level 0. Done.
 Diffing restore_state3.img against img_state3.img. Success.
@@ -148,10 +133,10 @@ Diffing restore_state1.img against img_state1.img. Success.
 +---------------------+------------------------+------------+----------+------+
 | Date                | ID                     |       Size | Duration | Tags |
 +---------------------+------------------------+------------+----------+------+
-| ... | ... | 511.99 kiB |        0 |      |
-| ... | ... | 511.99 kiB |        0 |      |
-| ... | ... | 511.99 kiB |        0 |      |
-| ... | ... | 511.99 kiB |        0 |      |
+| ... | ... | 511.99 kiB |        0 | test |
+| ... | ... | 511.99 kiB |        0 | test |
+| ... | ... | 511.99 kiB |        0 | test |
+| ... | ... | 511.99 kiB |        0 | test |
 +---------------------+------------------------+------------+----------+------+
 == Summary
 4 revisions

@@ -113,4 +113,4 @@ Simulate the schedule.
         logger.error('Unexpected exception')
         logger.exception(e)
         logger.info('Backup failed.\n')
-        os._exit(1)
+        sys.exit(1)

@@ -4,7 +4,6 @@ import argparse
 import asyncio
 import datetime
 import os
-import random
 import sys
 import time
 import yaml
@@ -32,6 +31,8 @@ import yaml
 
 
 original_print = print
+
+
 def print(str):
     original_print('{}: {}'.format(datetime.datetime.now().isoformat(), str))
 
@@ -54,9 +55,8 @@ class Task(object):
     # Maybe this should be run in an executor instead?
     @asyncio.coroutine
     def backup(self, future):
-        print ("{}: running backup {}, was due at {}".format(
+        print("{}: running backup {}, was due at {}".format(
             self.job.name, ', '.join(self.tags), self.ideal_start.isoformat()))
-        delay = random.randint(1, 120)
 
         # Update config
         # XXX this isn't true async
@@ -160,7 +160,7 @@ class TaskPool(object):
             if future_deadlines:
                 next_deadline = time.mktime(min(future_deadlines).timetuple())
                 time_to_next_deadline = next_deadline - time.time()
-                next_activation = self.daemon.loop.call_later(
+                self.daemon.loop.call_later(
                     time_to_next_deadline,
                     lambda: self.check_task_activation.set())
 
@@ -268,7 +268,7 @@ class BackyDaemon(object):
         with open(self.config_file, 'r', encoding='utf-8') as f:
             config = yaml.load(f)
         if config != self.config:
-            print ("Config changed - reloading.")
+            print("Config changed - reloading.")
             self.config = config
             self.configure_global()
             self.configure_schedules()

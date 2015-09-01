@@ -10,49 +10,47 @@ SAMPLE_DIR = os.path.join(os.path.dirname(__file__), 'samples')
 
 
 def test_revision_base():
-    backup = mock.Mock()
-    revision = Revision('uuid', backup)
+    archive = mock.Mock()
+    revision = Revision('uuid', archive)
     assert revision.uuid == 'uuid'
-    assert revision.backup is backup
+    assert revision.archive is archive
 
 
 def test_revision_create():
-    backup = mock.Mock()
-    backup.now = time.time
-    backup.revision_history = []
-    r = Revision.create(backup)
+    archive = mock.Mock()
+    archive.history = []
+    r = Revision.create(archive)
     assert r.uuid is not None
     assert time.time() - r.timestamp < 10
-    assert r.backup is backup
+    assert r.archive is archive
 
 
 def test_revision_create_child():
-    backup = mock.Mock()
-    backup.now = time.time
-    backup.revision_history = [Revision('asdf', backup)]
-    r = Revision.create(backup)
+    archive = mock.Mock()
+    archive.history = [Revision('asdf', archive)]
+    r = Revision.create(archive)
     assert r.uuid is not None
     assert r.parent == 'asdf'
     assert time.time() - r.timestamp < 10
-    assert r.backup is backup
+    assert r.archive is archive
 
 
 def test_load_sample1():
-    backup = mock.Mock()
-    r = Revision.load(SAMPLE_DIR + '/sample1.rev', backup)
+    archive = mock.Mock()
+    r = Revision.load(SAMPLE_DIR + '/sample1.rev', archive)
     assert r.uuid == 'asdf'
     assert r.timestamp == 20
     assert r.parent is None
-    assert r.backup is backup
+    assert r.archive is archive
 
 
 def test_load_sample2():
-    backup = mock.Mock()
-    r = Revision.load(SAMPLE_DIR + '/sample2.rev', backup)
+    archive = mock.Mock()
+    r = Revision.load(SAMPLE_DIR + '/sample2.rev', archive)
     assert r.uuid == 'asdf2'
     assert r.timestamp == 21
     assert r.parent == 'asdf'
-    assert r.backup is backup
+    assert r.archive is archive
 
 
 def test_filenames_based_on_uuid_and_backup_dir():

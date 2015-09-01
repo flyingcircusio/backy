@@ -1,9 +1,10 @@
+import hashlib
+import logging
 import os
 import os.path
 import random
 import tempfile
-import logging
-import hashlib
+import time
 
 
 logger = logging.getLogger(__name__)
@@ -215,3 +216,10 @@ def files_are_roughly_equal(a, b, samplesize=0.05, blocksize=4 * MiB):
     else:
         return True
     return False
+
+
+def now():
+    """A monkey-patchable version of 'time.time()' to
+    support unit testing.
+    """
+    return time.time()

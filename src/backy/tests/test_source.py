@@ -5,8 +5,10 @@ from backy.backup import Backup
 def test_configure_ceph_source(tmpdir):
     with open(str(tmpdir / 'config'), "w") as f:
         f.write("""\
-{"source": {"pool": "test", "image": "test04"}, "chunksize": 4096, \
-"source-type": "ceph-rbd"}\
+---
+    type: ceph-rbd
+    pool: test
+    image: test04
 """)
     backup = Backup(str(tmpdir))
     backup._configure()

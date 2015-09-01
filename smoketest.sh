@@ -12,7 +12,9 @@ cd ${BACKUP}/backup
 
 # $BACKY init file ../original
 cat > config <<EOF
-{"source": {"filename": "../original"}, "source-type": "file", "schedule": {"": {"interval": "1s", "keep": 7}}}
+---
+    type: file
+    filename: ../original
 EOF
 
 echo "Using ${BACKUP} as workspace."
@@ -27,7 +29,7 @@ echo " Done."
 
 echo -n "Backing up img_state1.img. "
 ln -sf img_state1.img ../original
-$BACKY backup
+$BACKY backup test
 echo "Done."
 
 echo -n "Restoring img_state1.img from level 0. "
@@ -49,8 +51,7 @@ rm $BACKUP/restore_*
 
 echo -n "Backing up img_state2.img. "
 ln -sf img_state2.img ../original
-sleep 3
-$BACKY backup
+$BACKY backup test
 echo "Done."
 
 echo -n "Restoring img_state2.img from level 0. "
@@ -86,8 +87,7 @@ rm $BACKUP/restore_*
 
 echo -n "Backing up img_state2.img again. "
 ln -sf img_state2.img ../original
-sleep 3
-$BACKY backup
+$BACKY backup test
 echo "Done."
 
 echo -n "Restoring img_state2.img from level 0. "
@@ -138,8 +138,7 @@ rm $BACKUP/restore_*
 
 echo -n "Backing up img_state3.img. "
 ln -sf img_state3.img ../original
-sleep 3
-$BACKY backup
+$BACKY backup test
 echo "Done."
 
 echo -n "Restoring img_state3.img from level 0. "

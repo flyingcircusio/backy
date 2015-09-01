@@ -1,4 +1,5 @@
 from backy.revision import Revision
+import backy.utils
 import curses
 import datetime
 import fractions
@@ -34,9 +35,6 @@ def parse_duration(duration):
 
 class Schedule(object):
 
-    # Allow overriding in tests and simulation mode.
-    now = time.time
-
     def __init__(self):
         self.schedule = {}
 
@@ -63,28 +61,13 @@ class Schedule(object):
         next_tags = next_times[next_time]
         return datetime.datetime.fromtimestamp(next_time), next_tags
 
-    def next_due(self, archive):
-        """Return a timestamp and a set of tags that are due next.
-        """
-        dues = set()
-        tags = set()
-        for tag, args in self.schedule.items():
-            tag_history = archive.find_revisions('tag:{}'.format(tag))
-            if not tag_history:
-                # Never made a backup with this tag before, so it's due
-                # by default.
-                dues.add(self.now())
-                tags.add(tag)
-            else:
-                last = tag_history[-1].timestamp
-                next = last + args['interval']
-                if next <= self.now():
-                    tags.add(tag)
-        return due, tags
-
     def expire(self, archive, simulate=False):
         """Remove old revisions according to the backup schedule.
+
+        Returns list of removed revisions.
+
         """
+        removed = []
         # Clean out old backups: keep at least a certain number of copies
         # (keep) and ensure that we don't throw away copies that are newer
         # than keep * interval for this tag.
@@ -94,8 +77,7 @@ class Schedule(object):
             keep = args['keep']
             if len(revisions) < keep:
                 continue
-            now = self.now()
-            keep_threshold = now - keep * args['interval']
+            keep_threshold = backy.utils.now() - keep * args['interval']
             for old_revision in revisions[:-keep]:
                 if old_revision.timestamp >= keep_threshold:
                     continue
@@ -103,8 +85,12 @@ class Schedule(object):
 
         # Phase 2: delete revisions that have no tags any more.
         for revision in archive.history:
-            if not revision.tags:
-                revision.remove(simulate)
+            if revision.tags:
+                continue
+            removed.append(revision)
+            revision.remove(simulate)
+
+        return removed
 
 
 def format_timestamp(ts):
@@ -119,31 +105,31 @@ def simulate_main(stdscr, schedule, days):
     stdscr.clear()
     stdscr.nodelay(True)
 
-    schedule.backup.now = lambda: now
+    backy.utils.now = lambda: now
 
     now = time.time()
 
     header = curses.newwin(3, curses.COLS, 0, 0)
-    header.addstr("SCHEDULE SIMULATION".center(curses.COLS-1, '='))
+    header.addstr("SCHEDULE SIMULATION".center(curses.COLS - 1, '='))
     header.refresh()
 
     revision_log = curses.newwin(20, curses.COLS, 3, 0)
 
     histogram = curses.newwin(10, 31, 23, 30)
 
-    footer = curses.newwin(1, curses.COLS, curses.LINES-2, 0)
+    footer = curses.newwin(1, curses.COLS, curses.LINES - 2, 0)
 
     days = days - 1
     start_time = now
     iteration = 0
     while now - start_time < days * DAY:
-        now += 1*60*60
+        now += 1 * 60 * 60
         iteration += 1
 
         revision_log.clear()
 
         # Simulate a new backup
-        tags = schedule.next_due()
+        tags = schedule.next()
         if tags:
             r = Revision.create(schedule.backup)
             r.tags = list(tags)

@@ -1,7 +1,7 @@
 import backy.backup
 import backy.main
 import pytest
-import time
+import mock
 
 
 def pytest_assertrepr_compare(op, left, right):
@@ -19,10 +19,11 @@ def wrap_logging(monkeypatch):
 
 
 @pytest.fixture
-def mocked_now(monkeypatch):
+def clock(monkeypatch):
     class Clock(object):
-        now = None
+        now = mock.Mock()
     clock = Clock()
-    clock.now = time.time()
-    monkeypatch.setattr(backy.backup.Backup, 'now', lambda self: clock.now)
+    # 2015-09-01 ~09:15
+    clock.now.return_value = 1441091207.0
+    monkeypatch.setattr(backy.utils, 'now', clock.now)
     return clock

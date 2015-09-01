@@ -28,8 +28,8 @@ def test_config(simple_file_config, tmpdir):
 def test_empty_revisions(simple_file_config):
     backup = simple_file_config
 
-    backup._scan_revisions()
-    assert backup.revision_history == []
+    backup.archive.scan()
+    assert backup.archive.history == []
 
 
 def test_load_revisions(simple_file_config, tmpdir):
@@ -40,38 +40,39 @@ def test_load_revisions(simple_file_config, tmpdir):
     with open(str(tmpdir / '123-124.rev'), 'wb') as f:
         f.write(b'{"uuid": "124-124", "timestamp": 2, "parent": "123-123"}')
 
-    backup._scan_revisions()
-    assert [x.uuid for x in backup.revision_history] == ["123-123", "124-124"]
+    backup.archive.scan()
+    assert [x.uuid for x in backup.archive.history] == ["123-123", "124-124"]
 
-    assert backup.revision_history[1].uuid == "124-124"
-    assert backup.revision_history[1].parent == "123-123"
+    assert backup.archive.history[1].uuid == "124-124"
+    assert backup.archive.history[1].parent == "123-123"
 
-    assert backup.find_revisions("all") == backup.revision_history
+    assert backup.archive.find_revisions("all") == backup.archive.history
 
-    assert backup.find_revision("last").uuid == "124-124"
-    assert backup.find_revision(0).uuid == "124-124"
-    assert backup.find_revision(1).uuid == "123-123"
-    assert backup.find_revision("124-124").uuid == "124-124"
+    assert backup.archive.find_revision("last").uuid == "124-124"
+    assert backup.archive.find_revision(0).uuid == "124-124"
+    assert backup.archive.find_revision(1).uuid == "123-123"
+    assert backup.archive.find_revision("124-124").uuid == "124-124"
 
     with pytest.raises(KeyError):
-        backup.find_revision("125-125")
+        backup.archive.find_revision("125-125")
 
-    assert backup.find_revisions(1) == [backup.find_revision(1)]
+    assert backup.archive.find_revisions(1) == [
+        backup.archive.find_revision(1)]
 
 
 def test_find_revision_empty(simple_file_config):
     backup = simple_file_config
 
-    backup._scan_revisions()
+    backup.archive.scan()
 
     with pytest.raises(KeyError):
-        backup.find_revision(-1)
+        backup.archive.find_revision(-1)
 
     with pytest.raises(KeyError):
-        backup.find_revision("last")
+        backup.archive.find_revision("last")
 
     with pytest.raises(KeyError):
-        backup.find_revision("fdasfdka")
+        backup.archive.find_revision("fdasfdka")
 
 
 def test_init_ceph(tmpdir):
@@ -80,14 +81,9 @@ def test_init_ceph(tmpdir):
     config = open(str(tmpdir / 'config'))
     config = yaml.load(config)
     assert config == {
-        "source-type": "ceph-rbd",
-        "source": {"image": "test04", "pool": "test"},
-        "schedule": {"daily": {"interval": "1d",
-                               "keep": 9},
-                     "weekly": {"interval": "7d",
-                                "keep": 5},
-                     "monthly": {"interval": "30d",
-                                 "keep": 4}}}
+        "type": "ceph-rbd",
+        "image": "test04",
+        "pool": "test"}
 
 
 def test_init_file(tmpdir):
@@ -97,34 +93,8 @@ def test_init_file(tmpdir):
     config = open(str(tmpdir / 'config')).read()
     config = yaml.load(config)
     assert config == {
-        "source-type": "file",
-        "source": {"filename": "/dev/foo"},
-        "schedule": {"daily": {"interval": "1d",
-                               "keep": 9},
-                     "weekly": {"interval": "7d",
-                                "keep": 5},
-                     "monthly": {"interval": "30d",
-                                 "keep": 4}}}
-
-
-def test_init_old_json_format(tmpdir):
-    with open(str(tmpdir / 'config'), 'w') as f:
-        f.write("""{"source": {"image": "litdev01.root", "pool": "litdev"}, \
-"source-type": "ceph-rbd", "schedule": {"monthly": {"interval": "30d", \
-"keep": 4}, "daily": {"interval": "1d", "keep": 9}, "weekly": \
-{"interval": "7d", "keep": 5}}}""")
-
-    backup = Backup(str(tmpdir))
-    backup._configure()
-    assert backup.config == {
-        "source-type": "ceph-rbd",
-        "source": {"image": "litdev01.root", "pool": "litdev"},
-        "schedule": {"daily": {"interval": "1d",
-                               "keep": 9},
-                     "weekly": {"interval": "7d",
-                                "keep": 5},
-                     "monthly": {"interval": "30d",
-                                 "keep": 4}}}
+        "type": "file",
+        "filename": "/dev/foo"}
 
 
 def test_init_creates_directory(tmpdir):

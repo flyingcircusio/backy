@@ -113,30 +113,28 @@ def test_call_backup(tmpdir, capsys, caplog, argv, monkeypatch):
     with open(str(tmpdir / 'backy' / 'config'), 'wb') as f:
         f.write("""
 ---
-source-type: file
-source:
-    filename: {}
+type: file
+filename: {}
 """.format(__file__).encode("utf-8"))
 
     monkeypatch.setattr(backy.backup.Backup, 'backup', print_args)
-    argv.append('-v')
-    argv.append('backup')
+    argv.extend(['-v', 'backup', 'test'])
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
-    assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
-(<backy.backup.Backup object at 0x...>, '')
+(<backy.backup.Backup object at 0x...>, 'test')
 {}
 """) == out
     assert "" == err
     assert Ellipsis("""\
 backup.py                  ... DEBUG    Backup(".../backy")
-main.py                    ... DEBUG    backup.backup(**{'force': ''})
+main.py                    ... DEBUG    backup.backup(**{'tags': 'test'})
 main.py                    ... INFO     Backup complete.\
 
 
 """) == caplog.text()
+    assert exit.value.code == 0
 
 
 def test_call_unexpected_exception(capsys, caplog, argv, monkeypatch):
@@ -149,7 +147,8 @@ def test_call_unexpected_exception(capsys, caplog, argv, monkeypatch):
     monkeypatch.setattr(logging, 'error', print_args)
     monkeypatch.setattr(logging, 'exception', print_args)
     argv.append('status')
-    backy.main.main()
+    with pytest.raises(SystemExit):
+        backy.main.main()
     out, err = capsys.readouterr()
     assert "" == out
     assert "" == err

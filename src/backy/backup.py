@@ -1,5 +1,4 @@
 from backy.revision import Revision
-from backy.schedule import Schedule
 from backy.sources import select_source
 from backy.utils import SafeFile, format_bytes_flexible, safe_copy
 from glob import glob
@@ -73,6 +72,7 @@ class Archive(object):
 
     def __init__(self, path):
         self.path = os.path.realpath(path)
+        self.history = []
 
     def scan(self):
         self.history = []
@@ -212,7 +212,7 @@ class Backup(object):
         self._lock()
         self.archive.scan()
 
-        r = self.find_revision(revision)
+        r = self.archive.find_revision(revision)
         source = open(r.filename, 'rb')
         target = open(target, 'wb')
         safe_copy(source, target)

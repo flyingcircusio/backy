@@ -25,7 +25,8 @@ class Schedule(object):
         next_times = {}
         for tag, interval in self.tags.items():
             t = next_times.setdefault(
-                relative + interval - ((self.spread + relative) % interval), [])
+                relative + interval - ((self.spread + relative) % interval),
+                [])
             t.append(tag)
         self.next_time = list(sorted(next_times))[0]
         self.next_tags = next_times[self.next_time]

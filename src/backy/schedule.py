@@ -2,9 +2,8 @@ from backy.revision import Revision
 import backy.utils
 import curses
 import datetime
-import fractions
-import functools
 import logging
+import pytz
 import time
 
 
@@ -33,33 +32,55 @@ def parse_duration(duration):
     return duration
 
 
+def next_in_interval(relative, interval, spread):
+    return relative + interval - ((spread + relative) % interval)
+
+
 class Schedule(object):
 
     def __init__(self):
         self.schedule = {}
-
-    @property
-    def quant(self):
-        """Return quantization for intervals."""
-        return functools.reduce(
-            fractions.gcd,
-            [x['interval'] for x in self.schedule.values()])
 
     def configure(self, config):
         self.schedule = config
         for tag, spec in self.schedule.items():
             self.schedule[tag]['interval'] = parse_duration(spec['interval'])
 
-    def next(self, relative, spread):
+    def next(self, relative, spread, archive):
+        catchup = self._next_catchup(relative, spread, archive)
+        if catchup[1]:
+            return catchup
+        else:
+            return self._next_ideal(relative, spread)
+
+    def _next_ideal(self, relative, spread):
         next_times = {}
         for tag, settings in self.schedule.items():
-            interval = settings['interval']
             t = next_times.setdefault(
-                relative + interval - ((spread + relative) % interval), [])
+                next_in_interval(relative, settings['interval'], spread), [])
             t.append(tag)
         next_time = min(next_times.keys())
         next_tags = next_times[next_time]
-        return datetime.datetime.fromtimestamp(next_time), next_tags
+        return datetime.datetime.fromtimestamp(next_time, pytz.UTC), next_tags
+
+    def _next_catchup(self, relative, spread, archive):
+        # Catch up based on the spread within the next
+        # 15 minutes.
+        now = backy.utils.now()
+        catchup_tags = []
+        archive.scan()
+        for tag, last in archive.last_by_tag().items():
+            if last > now - self.schedule[tag]['interval']:
+                # We had a valid backup within the interval
+                continue
+            if last < now - self.schedule[tag]['interval'] * 1.5:
+                # Our last valid backup is almost due, we have passed
+                # the 50% mark to the next backup and won't do a
+                # catchup-backup.
+                continue
+            catchup_tags.append(tag)
+        return datetime.datetime.fromtimestamp(
+            next_in_interval(relative, 15*60, spread), pytz.UTC), catchup_tags
 
     def expire(self, archive, simulate=False):
         """Remove old revisions according to the backup schedule.

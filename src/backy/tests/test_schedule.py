@@ -1,14 +1,15 @@
 from backy.backup import Archive
 from backy.schedule import parse_duration, Schedule
 import backy.utils
-import datetime
+from datetime import datetime
 import mock
 import pytest
+import pytz
 import time
 
 
 def time_(*args):
-    dt = datetime.datetime(*args)
+    dt = datetime(*args)
     return time.mktime(dt.timetuple())
 
 
@@ -32,22 +33,73 @@ def schedule():
 
 @pytest.fixture
 def archive(tmpdir):
-    return Archive(str(tmpdir))
+    a = Archive(str(tmpdir))
+    a.scan = lambda: None
+    return a
 
 
-def test_tag_first_interval_after_now(schedule, clock):
-    assert ((datetime.datetime(2015, 9, 1, 23, 59, 59), ['daily']) ==
-            schedule.next(backy.utils.now() + 60, 1))
+def test_tag_first_interval_after_now(schedule, archive, clock):
+    assert ((datetime(2015, 9, 1, 23, 59, 59, tzinfo=pytz.UTC), ['daily']) ==
+            schedule.next(backy.utils.now() + 60, 1, archive))
 
 
-def test_tag_second_interval_after_now(schedule, clock):
-    assert ((datetime.datetime(2015, 9, 2, 23, 59, 59), ['daily']) ==
-            schedule.next(backy.utils.now() + 25 * 60 * 60, 1))
+def test_tag_second_interval_after_now(schedule, archive, clock):
+    assert ((datetime(2015, 9, 2, 23, 59, 59, tzinfo=pytz.UTC), ['daily']) ==
+            schedule.next(backy.utils.now() + 25 * 60 * 60, 1, archive))
 
 
-def test_tag_second_interval_with_different_spread(schedule, clock):
-    assert ((datetime.datetime(2015, 9, 2, 23, 59, 55), ['daily']) ==
-            schedule.next(backy.utils.now() + 25 * 60 * 60, 5))
+def test_tag_second_interval_with_different_spread(schedule, archive, clock):
+    assert ((datetime(2015, 9, 2, 23, 59, 55, tzinfo=pytz.UTC), ['daily']) ==
+            schedule.next(backy.utils.now() + 25 * 60 * 60, 5, archive))
+
+
+def test_tag_catchup_not_needed_for_recent(schedule, archive, clock):
+    # A recent backup does not cause catchup to be triggered.
+    revision = mock.Mock()
+    revision.timestamp = clock.now() - 15
+    revision.tags = ['daily']
+    archive.history.append(revision)
+    assert ((datetime(2015, 9, 1, 7, 14, 59, tzinfo=pytz.UTC), []) ==
+            schedule._next_catchup(clock.now(), 1, archive))
+    # This in turn causes the main next() function to return the regular next
+    # interval.
+
+    assert (
+        (datetime(2015, 9, 1, 23, 59, 59, tzinfo=pytz.UTC), ['daily']) ==
+        schedule.next(clock.now(), 1, archive))
+
+
+def test_tag_catchup_not_needed_for_very_old(schedule, archive, clock):
+    # If a backup has been overdue for too long, we expect the
+    # tag to be scheduled soon anyway and we do not catch up to avoid
+    # overload issues.
+    revision = mock.Mock()
+    revision.timestamp = clock.now() - (24 * 60 * 60) * 1.6
+    revision.tags = ['daily']
+    archive.history.append(revision)
+    assert ((datetime(2015, 9, 1, 7, 14, 59, tzinfo=pytz.UTC), []) ==
+            schedule._next_catchup(clock.now(), 1, archive))
+    # This in turn causes the main next() function to return the regular next
+    # interval.
+    assert (
+        (datetime(2015, 9, 1, 23, 59, 59, tzinfo=pytz.UTC), ['daily']) ==
+        schedule.next(clock.now(), 1, archive))
+
+
+def test_tag_catchup_needed_for_recently_missed(schedule, archive, clock):
+    revision = mock.Mock()
+    # A catchup is needed because the daily backup has been longer than 1 day
+    # but less than 1.5 days.
+    revision.timestamp = clock.now() - (24 * 60 * 60) * 1.2
+    revision.tags = ['daily']
+    archive.history.append(revision)
+    assert ((datetime(2015, 9, 1, 7, 14, 59, tzinfo=pytz.UTC), ['daily']) ==
+            schedule._next_catchup(clock.now(), 1, archive))
+    # This in turn causes the main next() function to also
+    # return this date.
+    assert (
+        (datetime(2015, 9, 1, 7, 14, 59, tzinfo=pytz.UTC), ['daily']) ==
+        schedule.next(clock.now(), 1, archive))
 
 
 def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(

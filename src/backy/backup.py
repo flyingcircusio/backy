@@ -81,6 +81,20 @@ class Archive(object):
             self.history.append(r)
         self.history.sort(key=lambda r: r.timestamp)
 
+    def last_by_tag(self):
+        """Return a dictionary showing the last time each tag was
+        backed up.
+
+        Tags that have never been backed up won't show up here.
+
+        """
+        last_times = {}
+        for revision in self.history:
+            for tag in revision.tags:
+                last_times.setdefault(tag, 0)
+                last_times[tag] = max([last_times[tag], revision.timestamp])
+        return last_times
+
     def find_revisions(self, spec):
         """Get a sorted list of revisions, oldest first, that match the given
         specification.

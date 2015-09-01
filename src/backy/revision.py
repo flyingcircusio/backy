@@ -1,11 +1,11 @@
 from backy.utils import SafeFile
+import backy.utils
 import glob
 import json
 import logging
 import os
 import shortuuid
 import subprocess
-import time
 
 logger = logging.getLogger(__name__)
 cmd = subprocess.check_output
@@ -40,7 +40,7 @@ class Revision(object):
     @classmethod
     def create(cls, archive):
         r = Revision(shortuuid.uuid(), archive)
-        r.timestamp = time.time()
+        r.timestamp = backy.utils.now()
         if archive.history:
             # XXX validate that this parent is a actually a good parent. need
             # to contact the source for this ...

@@ -3,6 +3,7 @@ syntax: glob
 bin/
 .cache
 .coverage
+.coverage.*
 develop-eggs/
 dist/
 .DS_Store

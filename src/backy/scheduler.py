@@ -2,6 +2,7 @@ from backy.backup import Archive
 from backy.schedule import Schedule
 import argparse
 import asyncio
+import backy.utils
 import datetime
 import os
 import sys
@@ -129,11 +130,16 @@ class TaskPool(object):
         print("Starting to process incoming queue")
         while True:
             task = (yield from self.incoming_tasks.get())
-            if task.job.name in self.scheduled_tasks:
-                self.scheduled_tasks[task.name].tags.update(task.tags)
-                continue
-
-            self.scheduled_tasks[task.name] = task
+            if task.job.name not in self.scheduled_tasks:
+                # This is a new task.
+                self.scheduled_tasks[task.name] = task
+            else:
+                # This is a task that has been scheduled already.
+                # Lets update.
+                existing = self.scheduled_tasks[task.name]
+                existing.tags.update(task.tags)
+                existing.ideal_start = min([
+                    task.ideal_start, existing.ideal_start])
             self.check_task_activation.set()
 
     @asyncio.coroutine
@@ -159,7 +165,7 @@ class TaskPool(object):
 
             if future_deadlines:
                 next_deadline = time.mktime(min(future_deadlines).timetuple())
-                time_to_next_deadline = next_deadline - time.time()
+                time_to_next_deadline = next_deadline - backy.utils.now()
                 self.daemon.loop.call_later(
                     time_to_next_deadline,
                     lambda: self.check_task_activation.set())
@@ -212,7 +218,9 @@ class Job(object):
 
     @asyncio.coroutine
     def generate_tasks(self):
-        """Generates tasks based on the ideal next time in the future.
+        """Generates tasks based on the ideal next time in the future
+        and previous tasks to ensure we catch up quickly if the next
+        job in the future is too far away.
 
         This may repetetively submit a task until its time has come and then
         generate other tasks after the ideal next time has switched over.
@@ -221,12 +229,14 @@ class Job(object):
         not. The task pool needs to deal with that.
         """
         while True:
-            relative = time.time()
-            next_time, next_tags = self.schedule.next(relative, self.spread)
+            relative = backy.utils.now()
+            next_time, next_tags = self.schedule.next(
+                relative, self.spread, self.archive)
 
             task = Task(self)
             task.ideal_start = next_time
             task.tags.update(next_tags)
+
             print("{}: submitting task for {}".format(self.name, next_time))
             yield from self.daemon.taskpool.put(task)
 

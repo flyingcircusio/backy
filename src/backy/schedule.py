@@ -57,7 +57,7 @@ class Schedule(object):
             t = next_times.setdefault(
                 relative + interval - ((spread + relative) % interval), [])
             t.append(tag)
-        next_time = list(sorted(next_times))[0]
+        next_time = min(next_times.keys())
         next_tags = next_times[next_time]
         return datetime.datetime.fromtimestamp(next_time), next_tags
 
@@ -91,10 +91,6 @@ class Schedule(object):
             revision.remove(simulate)
 
         return removed
-
-
-def format_timestamp(ts):
-    return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %a %H:%M:%S")
 
 
 def simulate(backup, days):
@@ -140,10 +136,11 @@ def simulate_main(stdscr, schedule, days):
         revisions = schedule.backup.archive.history
         revision_log.addstr(
             " iteration {} | {} | {} revisions | estimated data: {} GiB\n\n"
-            .format(iteration, format_timestamp(now), len(revisions), 0))
+            .format(iteration, backy.utils.format_timestamp(now),
+                    len(revisions), 0))
 
         for i, r in enumerate(revisions[-15:]):
-            time_readable = format_timestamp(r.timestamp)
+            time_readable = backy.utils.format_timestamp(r.timestamp)
             revision_log.addstr(
                 "{1} | {0.uuid} | {2:20s}\n".
                 format(r, time_readable, ', '.join(r.tags)))
@@ -165,7 +162,7 @@ def simulate_main(stdscr, schedule, days):
             hist_data.append(ch)
             hist_now += datetime.timedelta(days=1)
         hist_data = ''.join(hist_data)
-        hist_data = hist_data.rjust(10*31-1, '_')
+        hist_data = hist_data.rjust(10 * 31 - 1, '_')
         histogram.addstr(hist_data)
         histogram.refresh()
         revision_log.refresh()
@@ -179,6 +176,6 @@ def simulate_main(stdscr, schedule, days):
         time.sleep(0.1)
 
     stdscr.nodelay(False)
-    footer.addstr("DONE - PRESS KEY".center(curses.COLS-2, "="))
+    footer.addstr("DONE - PRESS KEY".center(curses.COLS - 2, "="))
     footer.refresh()
     stdscr.getch()

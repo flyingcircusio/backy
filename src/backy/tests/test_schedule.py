@@ -35,18 +35,18 @@ def archive(tmpdir):
     return Archive(str(tmpdir))
 
 
-def test_tag_not_due_if_within_interval(schedule, clock):
+def test_tag_first_interval_after_now(schedule, clock):
     assert ((datetime.datetime(2015, 9, 2, 1, 59, 59), ['daily']) ==
             schedule.next(backy.utils.now() + 60, 1))
 
 
-def test_tag_due_if_after_interval(schedule, clock):
-    assert ((datetime.datetime(2015, 9, 3, 1, 59, 59), ['daily']) ==
+def test_tag_second_interval_after_now(schedule, clock):
+    assert ((datetime.datetime(2015, 9, 2, 23, 59, 59), ['daily']) ==
             schedule.next(backy.utils.now() + 25 * 60 * 60, 1))
 
 
-def test_tag_due_if_after_interval_different_spread(schedule, clock):
-    assert ((datetime.datetime(2015, 9, 3, 1, 59, 55), ['daily']) ==
+def test_tag_second_interval_with_different_spread(schedule, clock):
+    assert ((datetime.datetime(2015, 9, 2, 23, 59, 55), ['daily']) ==
             schedule.next(backy.utils.now() + 25 * 60 * 60, 5))
 
 

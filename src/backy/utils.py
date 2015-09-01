@@ -1,7 +1,9 @@
+import datetime
 import hashlib
 import logging
 import os
 import os.path
+import pytz
 import random
 import tempfile
 import time
@@ -223,3 +225,8 @@ def now():
     support unit testing.
     """
     return time.time()
+
+
+def format_timestamp(ts):
+    return datetime.datetime.fromtimestamp(ts, tz=pytz.utc).strftime(
+        "%Y-%m-%d %H:%M:%S %Z")

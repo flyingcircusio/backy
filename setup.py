@@ -28,7 +28,8 @@ setup(
         'prettytable',
         'PyYaml',
         'setuptools',
-        'shortuuid'
+        'shortuuid',
+        'pytz'
     ],
     extras_require={
         'test': [

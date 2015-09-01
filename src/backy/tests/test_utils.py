@@ -1,7 +1,7 @@
 from backy.tests import Ellipsis
 from backy.utils import files_are_equal, files_are_roughly_equal
 from backy.utils import SafeFile, format_bytes_flexible, safe_copy
-import backy.backup
+from backy.utils import format_timestamp
 import os
 import pytest
 import sys
@@ -9,9 +9,7 @@ import time
 
 
 def test_format_timestamp():
-    os.environ['TZ'] = 'UTC'
-    time.tzset()
-    assert '1970-01-01 00:00:00' == backy.backup.format_timestamp(0)
+    assert '1970-01-01 00:00:00 UTC' == format_timestamp(0)
 
 
 def test_ellipsis():

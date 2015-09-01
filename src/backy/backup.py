@@ -1,9 +1,9 @@
 from backy.revision import Revision
 from backy.sources import select_source
 from backy.utils import SafeFile, format_bytes_flexible, safe_copy
+from backy.utils import format_timestamp
 from glob import glob
 from prettytable import PrettyTable
-import datetime
 import errno
 import fcntl
 import logging
@@ -14,10 +14,6 @@ import yaml
 
 
 logger = logging.getLogger(__name__)
-
-
-def format_timestamp(ts):
-    return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
 
 class Commands(object):

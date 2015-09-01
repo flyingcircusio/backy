@@ -103,16 +103,19 @@ def test_smoketest_external():
     assert Ellipsis("""\
 Using /... as workspace.
 Generating Test Data.. Done.
-Backing up img_state1.img. Done.
+Backing up img_state1.img. btrfs not found.
+Done.
 Restoring img_state1.img from level 0. Done.
 Diffing restore_state1.img against img_state1.img. Success.
 Backing up img_state2.img. Performing non-COW copy: ...
+btrfs not found.
 Done.
 Restoring img_state2.img from level 0. Done.
 Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 1. Done.
 Diffing restore_state1.img against img_state1.img. Success.
 Backing up img_state2.img again. Performing non-COW copy: ...
+btrfs not found.
 Done.
 Restoring img_state2.img from level 0. Done.
 Diffing restore_state2.img against img_state2.img. Success.
@@ -121,6 +124,7 @@ Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 2. Done.
 Diffing restore_state1.img against img_state1.img. Success.
 Backing up img_state3.img. Performing non-COW copy: ...
+btrfs not found.
 Done.
 Restoring img_state3.img from level 0. Done.
 Diffing restore_state3.img against img_state3.img. Success.

@@ -5,7 +5,6 @@ import logging
 import os
 import shortuuid
 import subprocess
-import sys
 import time
 
 logger = logging.getLogger(__name__)
@@ -82,15 +81,16 @@ class Revision(object):
         self.writable()
 
     def defrag(self):
-        if sys.platform == 'darwin':
+        try:
+            cmd('btrfs --help')
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            logger.warn('btrfs not found.')
             return
         try:
             cmd('btrfs filesystem defragment {}/*'.format(
                 os.path.dirname(self.filename)), shell=True)
-        except FileNotFoundError:
-            logger.warn('btrfs utilities not found.')
         except subprocess.CalledProcessError:
-            logger.exception('Could not btrfs defrag. Is this a btrfs volume?')
+            logger.warn('Could not btrfs defrag. Is this a btrfs volume?')
 
     def write_info(self):
         metadata = {

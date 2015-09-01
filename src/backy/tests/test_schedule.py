@@ -36,7 +36,7 @@ def archive(tmpdir):
 
 
 def test_tag_first_interval_after_now(schedule, clock):
-    assert ((datetime.datetime(2015, 9, 2, 1, 59, 59), ['daily']) ==
+    assert ((datetime.datetime(2015, 9, 1, 23, 59, 59), ['daily']) ==
             schedule.next(backy.utils.now() + 60, 1))
 
 

@@ -1,7 +1,8 @@
 from backy.tests import Ellipsis
 from backy.utils import files_are_equal, files_are_roughly_equal
-from backy.utils import SafeFile, format_bytes_flexible, safe_copy
 from backy.utils import format_timestamp
+from backy.utils import SafeFile, format_bytes_flexible, safe_copy
+import backy.utils
 import os
 import pytest
 import sys

@@ -187,6 +187,7 @@ class Job(object):
         It doesn't care whether the tasks have been successfully worked on or
         not. The task pool needs to deal with that.
         """
+        print("{}: started task generator loop".format(self.name))
         while True:
             next_time, next_tags = self.schedule.next(
                 backy.utils.now(), self.spread, self.archive)

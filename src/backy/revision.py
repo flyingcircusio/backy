@@ -1,12 +1,13 @@
 from backy.utils import SafeFile
 import backy.utils
+import datetime
 import glob
-import yaml
 import logging
 import os
+import pytz
 import shortuuid
 import subprocess
-import pytz
+import yaml
 
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,9 @@ class Revision(object):
         with open(file, 'r', encoding='utf-8') as f:
             metadata = yaml.load(f)
         r = Revision(metadata['uuid'], archive)
+        if isinstance(metadata['timestamp'], float):
+            metadata['timestamp'] = datetime.datetime.fromtimestamp(
+                metadata['timestamp'])
         # PyYAML doesn't support round-trip for timezones. :(
         # http://pyyaml.org/ticket/202
         r.timestamp = pytz.UTC.localize(metadata['timestamp'])

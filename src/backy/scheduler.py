@@ -6,7 +6,6 @@ import backy.utils
 import datetime
 import os
 import sys
-import time
 import yaml
 
 
@@ -39,15 +38,17 @@ def print(str):
 
 
 class Task(object):
+    """A single backup task with a specific set of tags to be executed
+    at a specific time.
+    """
 
     ideal_start = None
     tags = None
 
-    activated = False
-
     def __init__(self, job):
         self.job = job
         self.tags = set()
+        self.finished = asyncio.Event()
 
     @property
     def name(self):
@@ -56,11 +57,13 @@ class Task(object):
     # Maybe this should be run in an executor instead?
     @asyncio.coroutine
     def backup(self, future):
+        future.add_done_callback(lambda f: self.finished.set())
+
         print("{}: running backup {}, was due at {}".format(
             self.job.name, ', '.join(self.tags), self.ideal_start.isoformat()))
 
         # Update config
-        # XXX this isn't true async
+        # TODO: this isn't true async, but it works for now.
         backup_dir = os.path.join(
             self.job.daemon.config['global']['base-dir'],
             self.name)
@@ -86,94 +89,49 @@ class Task(object):
         self.job.archive.scan()
         self.job.schedule.expire(self.job.archive)
 
+        print("{}: finished backup.".format(self.job.name))
+
         future.set_result(self)
+
+    @asyncio.coroutine
+    def wait_for_deadline(self):
+        while self.ideal_start > backy.utils.now():
+            remaining_time = backy.utils.now() - self.ideal_start
+            yield from asyncio.sleep(remaining_time.total_seconds())
+
+    @asyncio.coroutine
+    def wait_for_finished(self):
+        yield from self.finished.wait()
 
 
 class TaskPool(object):
-    """The task pool represents a priority queue that keeps
-    a continuously updated set of priorities for the items
-    with weights that are relative to each other, not absolute.
+    """Continuously processes tasks by assigning workers from a limited pool
+    ASAP.
 
-    It also ensures that the tasks are continuously worked on.
+    Chooses the next task based on its relative priority (it's ideal
+    start date).
 
+    Any task inserted into the pool will be worked on ASAP. Tasks are not
+    checked whether their deadline is due.
     """
 
-    def __init__(self, daemon):
-        self.daemon = daemon
-
-        # Incoming tasks are used to consolidate requests that are
-        # already in the queue.
-        self.incoming_tasks = asyncio.Queue()
-
-        # Scheduled tasks are kept in a dictionary and ...
-        self.scheduled_tasks = {}
-        self.check_task_activation = asyncio.Event()
-
-        # inserted into the due_tasks queue when they reach their deadline.
-        self.due_tasks = asyncio.PriorityQueue()
-
+    def __init__(self):
+        self.tasks = asyncio.PriorityQueue()
         self.workers = asyncio.Semaphore(2)
 
     @asyncio.coroutine
     def put(self, task):
         # Insert into a queue first, so that we can retrieve
         # them and order them at the appropriate time.
-        yield from self.incoming_tasks.put(task)
+        yield from self.tasks.put((task.ideal_start, task))
 
     @asyncio.coroutine
     def get(self):
-        priority, task = yield from self.due_tasks.get()
-        return self.scheduled_tasks.pop(task)
-
-    @asyncio.coroutine
-    def process_incoming_queue(self):
-        print("Starting to process incoming queue")
-        while True:
-            task = (yield from self.incoming_tasks.get())
-            if task.job.name not in self.scheduled_tasks:
-                # This is a new task.
-                self.scheduled_tasks[task.name] = task
-            else:
-                # This is a task that has been scheduled already.
-                # Lets update.
-                existing = self.scheduled_tasks[task.name]
-                existing.tags.update(task.tags)
-                existing.ideal_start = min([
-                    task.ideal_start, existing.ideal_start])
-            self.check_task_activation.set()
-
-    @asyncio.coroutine
-    def activate_due_tasks(self):
-        while True:
-            yield from self.check_task_activation.wait()
-            self.check_task_activation.clear()
-
-            future_deadlines = []
-            now = datetime.datetime.now()
-            for task in self.scheduled_tasks.values():
-                if task.activated:
-                    continue
-                elif task.ideal_start <= now:
-                    # The activation switch avoids putting the task
-                    # into the queue multiple times while it awaits
-                    # a free worker slot.
-                    task.activated = True
-                    yield from self.due_tasks.put(
-                        (task.ideal_start, task.name))
-                else:
-                    future_deadlines.append(task.ideal_start)
-
-            if future_deadlines:
-                next_deadline = time.mktime(min(future_deadlines).timetuple())
-                time_to_next_deadline = next_deadline - backy.utils.now()
-                self.daemon.loop.call_later(
-                    time_to_next_deadline,
-                    lambda: self.check_task_activation.set())
+        priority, task = yield from self.tasks.get()
+        return task
 
     @asyncio.coroutine
     def run(self):
-        asyncio.async(self.process_incoming_queue())
-        asyncio.async(self.activate_due_tasks())
         print("Starting to work on queue")
         while True:
             # Ok, lets get a worker slot and a task
@@ -218,7 +176,8 @@ class Job(object):
 
     @asyncio.coroutine
     def generate_tasks(self):
-        """Generates tasks based on the ideal next time in the future
+        """Generate backup tasks for this job.
+         tasks based on the ideal next time in the future
         and previous tasks to ensure we catch up quickly if the next
         job in the future is too far away.
 
@@ -229,20 +188,19 @@ class Job(object):
         not. The task pool needs to deal with that.
         """
         while True:
-            relative = backy.utils.now()
             next_time, next_tags = self.schedule.next(
-                relative, self.spread, self.archive)
+                backy.utils.now(), self.spread, self.archive)
 
             task = Task(self)
             task.ideal_start = next_time
             task.tags.update(next_tags)
 
-            print("{}: submitting task for {}".format(self.name, next_time))
+            print("{}: waiting for task {} to become due at {}".format(
+                self.name, ','.join(task.tags), next_time))
+            yield from task.wait_for_deadline()
+            print("{}: submitting task to workers".format(self.name))
             yield from self.daemon.taskpool.put(task)
-
-            until_next_interval = (
-                time.mktime(next_time.timetuple()) - time.time() + 10)
-            yield from asyncio.sleep(until_next_interval)
+            yield from task.wait_for_finished()
 
     def start(self):
         self.stop()
@@ -267,7 +225,7 @@ class BackyDaemon(object):
         self.config = None
         self.schedules = {}
         self.jobs = {}
-        self.taskpool = TaskPool(self)
+        self.taskpool = TaskPool()
 
     def configure(self):
         # XXX Signal handling to support reload
@@ -340,7 +298,7 @@ def main():
         '-c', '--config', default='/etc/backy.conf')
 
     import logging
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.WARN)
 
     args = parser.parse_args()
 

@@ -1,7 +1,9 @@
 import backy.backup
 import backy.main
-import pytest
+import datetime
 import mock
+import pytest
+import pytz
 
 
 def pytest_assertrepr_compare(op, left, right):
@@ -24,6 +26,7 @@ def clock(monkeypatch):
         now = mock.Mock()
     clock = Clock()
     # 2015-09-01 ~09:15
-    clock.now.return_value = 1441091207.0
+    clock.now.return_value = datetime.datetime(
+        2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC)
     monkeypatch.setattr(backy.utils, 'now', clock.now)
     return clock

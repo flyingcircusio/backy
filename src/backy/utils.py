@@ -6,7 +6,6 @@ import os.path
 import pytz
 import random
 import tempfile
-import time
 
 
 logger = logging.getLogger(__name__)
@@ -204,7 +203,7 @@ def files_are_equal(a, b):
     return not errors
 
 
-def files_are_roughly_equal(a, b, samplesize=0.05, blocksize=4 * MiB):
+def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=4 * MiB):
     a.seek(0, 2)
     size = a.tell()
     blocks = size // blocksize
@@ -221,12 +220,17 @@ def files_are_roughly_equal(a, b, samplesize=0.05, blocksize=4 * MiB):
 
 
 def now():
-    """A monkey-patchable version of 'time.time()' to
+    """A monkey-patchable version of 'datetime.datetime.now()' to
     support unit testing.
+
+    Also, ensure that we'll always use timezone-aware objects.
     """
-    return time.time()
+    return datetime.datetime.now(pytz.UTC)
 
 
-def format_timestamp(ts):
-    return datetime.datetime.fromtimestamp(ts, tz=pytz.utc).strftime(
-        "%Y-%m-%d %H:%M:%S %Z")
+def min_date():
+    return pytz.UTC.localize(datetime.datetime.min)
+
+
+def format_timestamp(dt):
+    return dt.strftime("%Y-%m-%d %H:%M:%S %Z")

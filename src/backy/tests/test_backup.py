@@ -36,9 +36,19 @@ def test_load_revisions(simple_file_config, tmpdir):
     backup = simple_file_config
 
     with open(str(tmpdir / '123-123.rev'), 'wb') as f:
-        f.write(b'{"uuid": "123-123", "timestamp": 1, "parent": null}')
+        f.write(b"""\
+---
+    uuid: 123-123
+    timestamp: 2015-08-29 00:00:00
+    parent:
+""")
     with open(str(tmpdir / '123-124.rev'), 'wb') as f:
-        f.write(b'{"uuid": "124-124", "timestamp": 2, "parent": "123-123"}')
+        f.write(b"""\
+---
+    uuid: 124-124
+    timestamp: 2015-08-30 00:00:00
+    parent: 123-123
+""")
 
     backup.archive.scan()
     assert [x.uuid for x in backup.archive.history] == ["123-123", "124-124"]

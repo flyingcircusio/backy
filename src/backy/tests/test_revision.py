@@ -1,9 +1,11 @@
 from backy.backup import Backup
 from backy.revision import Revision
-import json
+import backy
+import datetime
 import mock
 import os.path
-import time
+import pytz
+import yaml
 
 
 SAMPLE_DIR = os.path.join(os.path.dirname(__file__), 'samples')
@@ -21,7 +23,7 @@ def test_revision_create():
     archive.history = []
     r = Revision.create(archive)
     assert r.uuid is not None
-    assert time.time() - r.timestamp < 10
+    assert (backy.utils.now() - r.timestamp).total_seconds() < 10
     assert r.archive is archive
 
 
@@ -31,7 +33,7 @@ def test_revision_create_child():
     r = Revision.create(archive)
     assert r.uuid is not None
     assert r.parent == 'asdf'
-    assert time.time() - r.timestamp < 10
+    assert (backy.utils.now() - r.timestamp).total_seconds() < 10
     assert r.archive is archive
 
 
@@ -39,7 +41,7 @@ def test_load_sample1():
     archive = mock.Mock()
     r = Revision.load(SAMPLE_DIR + '/sample1.rev', archive)
     assert r.uuid == 'asdf'
-    assert r.timestamp == 20
+    assert r.timestamp == datetime.datetime(2015, 8, 1, 20, 0, tzinfo=pytz.UTC)
     assert r.parent is None
     assert r.archive is archive
 
@@ -48,7 +50,7 @@ def test_load_sample2():
     archive = mock.Mock()
     r = Revision.load(SAMPLE_DIR + '/sample2.rev', archive)
     assert r.uuid == 'asdf2'
-    assert r.timestamp == 21
+    assert r.timestamp == datetime.datetime(2015, 8, 1, 21, 0, tzinfo=pytz.UTC)
     assert r.parent == 'asdf'
     assert r.archive is archive
 
@@ -61,17 +63,17 @@ def test_filenames_based_on_uuid_and_backup_dir():
     assert r.info_filename == '/srv/backup/foo/asdf.rev'
 
 
-def test_store_revision_data(tmpdir):
+def test_store_revision_data(tmpdir, clock):
     backup = Backup(str(tmpdir))
     r = Revision('asdf2', backup)
-    r.timestamp = 25
+    r.timestamp = backy.utils.now()
     r.parent = 'asdf'
     r.backup = backup
     r.write_info()
-    info = open(r.info_filename, 'rb').read()
-    assert json.loads(info.decode('utf-8')) == {
-        "parent": "asdf",
-        "uuid": "asdf2",
-        "stats": {"bytes_written": 0},
-        "tags": [],
-        "timestamp": 25}
+    with open(r.info_filename, 'r', encoding='utf-8') as info:
+        assert yaml.load(info) == {
+            "parent": "asdf",
+            "uuid": "asdf2",
+            "stats": {"bytes_written": 0},
+            "tags": [],
+            "timestamp": datetime.datetime(2015, 9, 1, 7, 6, 47)}

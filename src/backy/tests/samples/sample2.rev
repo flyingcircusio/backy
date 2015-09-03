@@ -1,1 +1,4 @@
-{"uuid": "asdf2", "timestamp": 21, "parent": "asdf"}
+---
+    uuid: asdf2
+    timestamp: 2015-08-01T21:00:00
+    parent: asdf

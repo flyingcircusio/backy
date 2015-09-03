@@ -1,6 +1,6 @@
 from .rbd import RBDClient
 from backy.utils import safe_copy, SafeFile
-from backy.utils import files_are_equal, files_are_roughly_equal
+from backy.utils import files_are_roughly_equal
 import logging
 
 logger = logging.getLogger(__name__)
@@ -106,9 +106,5 @@ class CephRBD(object):
         self.revision.stats['ceph-verification'] = mode
 
         with s as source, t as target:
-            if mode == 'full':
-                logger.info('Performing full verification ...')
-                return files_are_equal(source, target)
-            else:
-                logger.info('Performing partial verification ...')
-                return files_are_roughly_equal(source, target)
+            logger.info('Performing partial verification ...')
+            return files_are_roughly_equal(source, target)

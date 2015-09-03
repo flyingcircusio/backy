@@ -1,7 +1,7 @@
 from backy.revision import Revision
 from backy.sources import select_source
+from backy.utils import format_timestamp, min_date
 from backy.utils import SafeFile, format_bytes_flexible, safe_copy
-from backy.utils import format_timestamp
 from glob import glob
 from prettytable import PrettyTable
 import errno
@@ -11,7 +11,6 @@ import os
 import os.path
 import time
 import yaml
-
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +90,7 @@ class Archive(object):
         last_times = {}
         for revision in self.history:
             for tag in revision.tags:
-                last_times.setdefault(tag, 0)
+                last_times.setdefault(tag, min_date())
                 last_times[tag] = max([last_times[tag], revision.timestamp])
         return last_times
 

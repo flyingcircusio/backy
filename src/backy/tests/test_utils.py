@@ -3,14 +3,15 @@ from backy.utils import files_are_equal, files_are_roughly_equal
 from backy.utils import format_timestamp
 from backy.utils import SafeFile, format_bytes_flexible, safe_copy
 import backy.utils
+import datetime
 import os
 import pytest
+import pytz
 import sys
-import time
 
 
-def test_format_timestamp():
-    assert '1970-01-01 00:00:00 UTC' == format_timestamp(0)
+def test_format_timestamp(clock):
+    assert '2015-09-01 07:06:47 UTC' == format_timestamp(backy.utils.now())
 
 
 def test_ellipsis():
@@ -276,7 +277,7 @@ def test_safe_copy_correctly_makes_sparse_file(tmpdir):
 
 
 def test_unmocked_now_returns_time_time_float():
-    before = time.time()
+    before = datetime.datetime.now(pytz.UTC)
     now = backy.utils.now()
-    after = time.time()
+    after = datetime.datetime.now(pytz.UTC)
     assert before <= now <= after

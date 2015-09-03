@@ -1,9 +1,9 @@
 from backy.revision import Revision
+from datetime import timedelta
 import backy.utils
 import curses
 import datetime
 import logging
-import pytz
 import time
 
 
@@ -29,11 +29,20 @@ def parse_duration(duration):
         duration = int(duration)
     else:
         duration = int(duration)
-    return duration
+    return timedelta(seconds=duration)
 
 
 def next_in_interval(relative, interval, spread):
-    return relative + interval - ((spread + relative) % interval)
+    relative = (relative - backy.utils.min_date()).total_seconds()
+    interval = interval.total_seconds()
+
+    # Damn. I came up with this formular and it works, but really,
+    # I should write down why this works. We're basically creating an
+    # interval-based grid (instead of, like, a daily grid) since
+    # the "dawn of time" and put an offset in based on the spread.
+    next = relative + interval - ((spread + relative) % interval)
+    next = backy.utils.min_date() + datetime.timedelta(seconds=next)
+    return next
 
 
 class Schedule(object):
@@ -57,30 +66,31 @@ class Schedule(object):
         next_times = {}
         for tag, settings in self.schedule.items():
             t = next_times.setdefault(
-                next_in_interval(relative, settings['interval'], spread), [])
-            t.append(tag)
+                next_in_interval(relative, settings['interval'], spread),
+                set())
+            t.add(tag)
         next_time = min(next_times.keys())
         next_tags = next_times[next_time]
-        return datetime.datetime.fromtimestamp(next_time, pytz.UTC), next_tags
+        return next_time, next_tags
 
     def _next_catchup(self, relative, spread, archive):
         # Catch up based on the spread within the next
         # 15 minutes.
         now = backy.utils.now()
-        catchup_tags = []
+        catchup_tags = set(self.schedule.keys())
         archive.scan()
         for tag, last in archive.last_by_tag().items():
             if last > now - self.schedule[tag]['interval']:
                 # We had a valid backup within the interval
-                continue
+                catchup_tags.remove(tag)
             if last < now - self.schedule[tag]['interval'] * 1.5:
                 # Our last valid backup is almost due, we have passed
                 # the 50% mark to the next backup and won't do a
-                # catchup-backup.
-                continue
-            catchup_tags.append(tag)
-        return datetime.datetime.fromtimestamp(
-            next_in_interval(relative, 15*60, spread), pytz.UTC), catchup_tags
+                catchup_tags.remove(tag)
+        # Catchups always happen immediately. There is no point in waiting as
+        # we already have missed originally necessary backups due to
+        # shutdown of the server or such.
+        return (backy.utils.now(), catchup_tags)
 
     def expire(self, archive, simulate=False):
         """Remove old revisions according to the backup schedule.

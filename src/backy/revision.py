@@ -1,11 +1,13 @@
 from backy.utils import SafeFile
 import backy.utils
 import glob
-import json
+import yaml
 import logging
 import os
 import shortuuid
 import subprocess
+import pytz
+
 
 logger = logging.getLogger(__name__)
 cmd = subprocess.check_output
@@ -50,16 +52,14 @@ class Revision(object):
     @classmethod
     def load(cls, file, archive):
         with open(file, 'r', encoding='utf-8') as f:
-            metadata = json.load(f)
+            metadata = yaml.load(f)
         r = Revision(metadata['uuid'], archive)
-        r.timestamp = metadata['timestamp']
+        # PyYAML doesn't support round-trip for timezones. :(
+        # http://pyyaml.org/ticket/202
+        r.timestamp = pytz.UTC.localize(metadata['timestamp'])
         r.parent = metadata['parent']
         r.stats = metadata.get('stats', {})
         r.tags = metadata.get('tags', '')
-        # XXX turn into a better "upgrade" method and start versioning
-        # data files.
-        if 'tag' in metadata:
-            r.tags = [metadata['tag']]
         return r
 
     @property
@@ -101,7 +101,7 @@ class Revision(object):
             'tags': list(self.tags)}
         with SafeFile(self.info_filename, encoding='utf-8') as f:
             f.open_new('wb')
-            f.write(json.dumps(metadata))
+            f.write(yaml.dump(metadata))
 
     def set_link(self, name):
         path = self.archive.path

@@ -1,1 +1,5 @@
-{"uuid": "asdf", "type": "full", "timestamp": 20, "parent": null, "checksum": "6r7tf97ewt", "blocksums": {"0": "asdf", "1": "asdf", "2": "asdf"}, "blocks": 3}
+---
+    uuid: asdf
+    type: full
+    timestamp: 2015-08-01T20:00:00
+    parent:

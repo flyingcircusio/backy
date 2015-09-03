@@ -115,9 +115,9 @@ class TaskPool(object):
     checked whether their deadline is due.
     """
 
-    def __init__(self):
+    def __init__(self, limit=2):
         self.tasks = asyncio.PriorityQueue()
-        self.workers = asyncio.Semaphore(2)
+        self.workers = asyncio.BoundedSemaphore(limit)
 
     @asyncio.coroutine
     def put(self, task):
@@ -226,7 +226,6 @@ class BackyDaemon(object):
         self.config = None
         self.schedules = {}
         self.jobs = {}
-        self.taskpool = TaskPool()
 
     def configure(self):
         # XXX Signal handling to support reload
@@ -248,6 +247,8 @@ class BackyDaemon(object):
         if not c:
             return
         self.worker_limit = c.get('worker-limit', self.worker_limit)
+        # This isn't reload-safe. The semaphore is tricky to update
+        self.taskpool = TaskPool(self.worker_limit)
         print("New worker limit: {}".format(self.worker_limit))
         self.base_dir = c.get('base-dir', self.base_dir)
         print("New backup location: {}".format(self.base_dir))

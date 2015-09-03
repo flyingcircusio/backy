@@ -86,7 +86,7 @@ class Revision(object):
 
     def defrag(self):
         try:
-            cmd('btrfs --help')
+            cmd(['btrfs',  '--help'])
         except (subprocess.CalledProcessError, FileNotFoundError):
             logger.warn('btrfs not found.')
             return

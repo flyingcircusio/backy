@@ -211,10 +211,18 @@ def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=4 * MiB):
     blocks = size // blocksize
     sample = range(0, blocks)
     sample = random.sample(sample, int(samplesize * blocks))
+    sample.sort()
     for block in sample:
         a.seek(block * blocksize)
         b.seek(block * blocksize)
-        if not a.read(blocksize) == b.read(blocksize):
+        chunk_a = a.read(blocksize)
+        chunk_b = b.read(blocksize)
+        if chunk_a != chunk_b:
+            logger.error(
+                "Chunk A (md5: {}) != Chunk B (md5: {}) at position {}".
+                format(hashlib.md5(chunk_a).hexdigest(),
+                       hashlib.md5(chunk_b).hexdigest(),
+                       a.tell()))
             break
     else:
         return True

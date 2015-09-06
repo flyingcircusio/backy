@@ -99,11 +99,7 @@ class CephRBD(object):
             self.pool, self.image, self.revision.uuid))
         t = open(self.revision.filename, 'rb')
 
-        mode = 'full'
-        for revision in self.revision.archive.history[-10:]:
-            if revision.stats.get('ceph-verification', '') == 'full':
-                mode = 'partial'
-        self.revision.stats['ceph-verification'] = mode
+        self.revision.stats['ceph-verification'] = 'partial'
 
         with s as source, t as target:
             logger.info('Performing partial verification ...')

@@ -29,6 +29,7 @@ setup(
         'PyYaml',
         'setuptools',
         'shortuuid',
+        'telnetlib3',
         'pytz'
     ],
     extras_require={

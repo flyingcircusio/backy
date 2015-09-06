@@ -76,6 +76,15 @@ def test_tag_catchup_not_needed_for_recent(schedule, archive, clock):
         schedule.next(clock.now(), 1, archive))
 
 
+def test_tag_catchup_does_not_stumble_on_adhoc_tags_in_archive(
+        schedule, archive, clock):
+    revision = mock.Mock()
+    revision.timestamp = clock.now() - timedelta(seconds=15)
+    revision.tags = {'test'}
+    archive.history.append(revision)
+    schedule._next_catchup(clock.now(), 1, archive)
+
+
 def test_tag_catchup_not_needed_for_very_old(schedule, archive, clock):
     # If a backup has been overdue for too long, we expect the
     # tag to be scheduled soon anyway and we do not catch up to avoid

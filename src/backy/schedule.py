@@ -83,6 +83,9 @@ class Schedule(object):
         catchup_tags = set(self.schedule.keys())
         archive.scan()
         for tag, last in archive.last_by_tag().items():
+            if tag not in self.schedule:
+                # Ignore ad-hoc tags for catching up.
+                continue
             if last > now - self.schedule[tag]['interval']:
                 # We had a valid backup within the interval
                 catchup_tags.remove(tag)

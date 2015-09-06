@@ -4,11 +4,12 @@ import argparse
 import asyncio
 import backy.utils
 import datetime
-import os
-import sys
-import yaml
-import random
 import hashlib
+import os
+import random
+import sys
+import telnetlib3
+import yaml
 
 
 # - rearrange when the global config changes: use a hashing mechanism to
@@ -138,6 +139,7 @@ class Job(object):
     name = None
     source = None
     schedule_name = None
+    status = None
 
     _generator_handle = None
 
@@ -166,6 +168,10 @@ class Job(object):
     def schedule(self):
         return self.daemon.schedules[self.schedule_name]
 
+    def update_status(self, status):
+        self.status = status
+        print('{}: {}'.format(self.name, self.status))
+
     @asyncio.coroutine
     def generate_tasks(self):
         """Generate backup tasks for this job.
@@ -188,11 +194,15 @@ class Job(object):
             task.ideal_start = next_time
             task.tags.update(next_tags)
 
-            print("{}: waiting for task {} to become due at {}".format(
-                self.name, ','.join(task.tags), next_time))
+            id = dict(tags=','.join(task.tags), deadline=next_time)
+
+            self.update_status("waiting ({deadline} -- {tags})".format(**id))
             yield from task.wait_for_deadline()
-            print("{}: submitting task to workers".format(self.name))
+            self.update_status(
+                "submitted to workers ({deadline} -- {tags})".format(**id))
             yield from self.daemon.taskpool.put(task)
+            self.update_status(
+                "waiting for job ({deadline} -- {tags})".format(**id))
             yield from task.wait_for_finished()
 
     def start(self):
@@ -283,7 +293,24 @@ class BackyDaemon(object):
         asyncio.async(self.taskpool.run())
 
 
+class SchedulerShell(telnetlib3.Telsh):
+
+    shell_name = 'backy'
+    shell_ver = '0.2'
+
+    def cmdset_status(self):
+        self.stream.write('# Jobs\r\n')
+        for job in sorted(daemon.jobs):
+            self.stream.write(
+                '{}: {}\r\n'.format(job, daemon.jobs[job].status))
+
+
+daemon = None
+
+
 def main():
+    global daemon
+
     parser = argparse.ArgumentParser(
         description='Daemon that handles scheduling of backy jobs.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -300,6 +327,12 @@ def main():
     daemon = BackyDaemon(loop, args.config)
 
     daemon.start()
+
+    func = loop.create_server(
+        lambda: telnetlib3.TelnetServer(shell=SchedulerShell),
+        'localhost', 6023)
+    loop.run_until_complete(func)
+
     # Blocking call interrupted by loop.stop()
     try:
         loop.run_forever()

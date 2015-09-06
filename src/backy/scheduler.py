@@ -299,10 +299,17 @@ class SchedulerShell(telnetlib3.Telsh):
     shell_ver = '0.2'
 
     def cmdset_status(self):
+        self.stream.write('######################\r\n')
         self.stream.write('# Jobs\r\n')
+        self.stream.write('######################\r\n')
         for job in sorted(daemon.jobs):
             self.stream.write(
                 '{}: {}\r\n'.format(job, daemon.jobs[job].status))
+        self.stream.write('\r\n')
+        self.stream.write('######################\r\n')
+        self.stream.write('# Workers\r\n')
+        self.stream.write('######################\r\n')
+        self.stream.write('{} idle'.format(daemon.taskpool.workers._value+1))
 
 
 daemon = None

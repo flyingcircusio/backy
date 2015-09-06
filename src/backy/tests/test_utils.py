@@ -252,8 +252,6 @@ def test_roughly_compare_files_1_changed_block(tmpdir):
     assert detected > 0 and detected <= 20
 
 
-@pytest.mark.skipif(sys.platform != 'linux2',
-                    reason="requires linux")
 def test_safe_copy_correctly_makes_sparse_file(tmpdir):
     # Create a test file that contains random data, then we insert
     # 1024 byte long blocks of zeroes. safe_copy will not break them
@@ -273,7 +271,10 @@ def test_safe_copy_correctly_makes_sparse_file(tmpdir):
     source_current = open(source_name, 'rb').read()
     target_current = open(target_name, 'rb').read()
     assert (source_current == target_current)
-    assert os.stat(source_name).st_blocks > os.stat(target_name).st_blocks
+    if sys.platform == 'linux2':
+        assert os.stat(source_name).st_blocks > os.stat(target_name).st_blocks
+    else:
+        assert os.stat(source_name).st_blocks >= os.stat(target_name).st_blocks
 
 
 def test_unmocked_now_returns_time_time_float():

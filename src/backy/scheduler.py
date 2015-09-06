@@ -7,28 +7,13 @@ import datetime
 import os
 import sys
 import yaml
+import random
+import hashlib
 
 
-# keep a centralized system config,
-
-# - which backups exist
-# - where are they located (keep the directories data+config+logs as a
-#   bundle for easier relocation)
-# - configure sets of schedules
-# - schedules do not become part of a backup's local config
-# --> but expiry? is expiry part of the scheduler then?
-# - running backy will always create a backup with the given tags
-# - backy then needs to learn lower-level commands like "expire this"?
-# - (expiry really is just deleting the files or updating their tag sets)
-# - schedule when to run a backup
-# - avoid scheduling later and later and accumulating lateness
-# - maximum number of parallel jobs
-# - spread jobs but try to keep their base schedule stable
 # - rearrange when the global config changes: use a hashing mechanism to
 #   select when to run backups for various tags?
-# - individual backups loose their schedule?
 # - simulation moves over to the scheduler?
-
 
 original_print = print
 
@@ -153,7 +138,6 @@ class Job(object):
     name = None
     source = None
     schedule_name = None
-    spread = 0
 
     _generator_handle = None
 
@@ -165,10 +149,18 @@ class Job(object):
     def configure(self, config):
         self.source = config['source']
         self.schedule_name = config['schedule']
-        self.spread = config.get('spread', self.spread)
         self.path = self.daemon.base_dir + '/' + self.name
         self.archive = Archive(self.path)
         self.daemon.loop.call_soon(self.start)
+
+    @property
+    def spread(self):
+        seed = int(hashlib.md5(self.name.encode('utf-8')).hexdigest(), 16)
+        limit = max(x['interval'] for x in self.schedule.schedule.values())
+        limit = limit.total_seconds()
+        generator = random.Random()
+        generator.seed(seed)
+        return generator.randint(0, limit)
 
     @property
     def schedule(self):
@@ -287,7 +279,7 @@ class BackyDaemon(object):
         print("Configured jobs: {}".format(len(self.jobs)))
 
     def start(self):
-        self.loop.call_soon(self.configure)
+        self.configure()
         asyncio.async(self.taskpool.run())
 
 

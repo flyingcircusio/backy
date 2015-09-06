@@ -35,12 +35,15 @@ def parse_duration(duration):
 def next_in_interval(relative, interval, spread):
     relative = (relative - backy.utils.min_date()).total_seconds()
     interval = interval.total_seconds()
-
-    # Damn. I came up with this formular and it works, but really,
-    # I should write down why this works. We're basically creating an
-    # interval-based grid (instead of, like, a daily grid) since
-    # the "dawn of time" and put an offset in based on the spread.
-    next = relative + interval - ((spread + relative) % interval)
+    # Ensure the spread fits the interval so we don't accidentally
+    # jump one when adding the spread.
+    spread = spread % interval
+    # To avoid that we jump an interval while we're in the spread period,
+    # we need to subtract it here. This is basically the reversal of
+    # the + spread when we add it to the next interval.
+    relative = relative - spread
+    current_interval = int(relative / interval)
+    next = (current_interval + 1) * interval + spread
     next = backy.utils.min_date() + datetime.timedelta(seconds=next)
     return next
 

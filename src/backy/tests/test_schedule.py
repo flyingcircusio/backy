@@ -42,19 +42,19 @@ def test_first_backup_catches_up_all_tags_immediately(
 
 
 def test_tag_first_interval_after_now(schedule, archive, clock):
-    assert ((datetime(2015, 9, 1, 23, 59, 59, tzinfo=pytz.UTC), {'daily'}) ==
+    assert ((datetime(2015, 9, 2, 0, 0, 1, tzinfo=pytz.UTC), {'daily'}) ==
             schedule._next_ideal(backy.utils.now(), 1))
 
 
 def test_tag_second_interval_after_now(schedule, archive, clock):
-    assert ((datetime(2015, 9, 2, 23, 59, 55, tzinfo=pytz.UTC), {'daily'}) ==
+    assert ((datetime(2015, 9, 3, 0, 0, 5, tzinfo=pytz.UTC), {'daily'}) ==
             schedule._next_ideal(backy.utils.now() +
                                  timedelta(seconds=24 * 60 * 60),
                                  5))
 
 
 def test_tag_second_interval_with_different_spread(schedule, archive, clock):
-    assert ((datetime(2015, 9, 2, 23, 59, 55, tzinfo=pytz.UTC), {'daily'}) ==
+    assert ((datetime(2015, 9, 3, 0, 0, 5, tzinfo=pytz.UTC), {'daily'}) ==
             schedule._next_ideal(backy.utils.now() +
                                  timedelta(seconds=25 * 60 * 60),
                                  5))
@@ -72,7 +72,7 @@ def test_tag_catchup_not_needed_for_recent(schedule, archive, clock):
     # interval.
 
     assert (
-        (datetime(2015, 9, 1, 23, 59, 59, tzinfo=pytz.UTC), {'daily'}) ==
+        (datetime(2015, 9, 2, 0, 0, 1, tzinfo=pytz.UTC), {'daily'}) ==
         schedule.next(clock.now(), 1, archive))
 
 
@@ -89,7 +89,7 @@ def test_tag_catchup_not_needed_for_very_old(schedule, archive, clock):
     # This in turn causes the main next() function to return the regular next
     # interval.
     assert (
-        (datetime(2015, 9, 1, 23, 59, 59, tzinfo=pytz.UTC), {'daily'}) ==
+        (datetime(2015, 9, 2, 0, 0, 1, tzinfo=pytz.UTC), {'daily'}) ==
         schedule.next(clock.now(), 1, archive))
 
 
@@ -151,29 +151,29 @@ def test_next_in_interval(clock):
     interval = timedelta(days=1)
     assert datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC) == now
     assert (
-        datetime(2015, 9, 1, 23, 58, 20, tzinfo=pytz.UTC) ==
+        datetime(2015, 9, 2, 0, 1, 40, tzinfo=pytz.UTC) ==
         next_in_interval(now, interval, 100))
 
     # t+30 minutes -> same interval
     now = now + timedelta(seconds=60 * 30)
     assert (
-        datetime(2015, 9, 1, 23, 58, 20, tzinfo=pytz.UTC) ==
+        datetime(2015, 9, 2, 0, 1, 40, tzinfo=pytz.UTC) ==
         next_in_interval(now, interval, 100))
 
     # t+60 minutes -> same interval
     now = now + timedelta(seconds=60 * 30)
     assert (
-        datetime(2015, 9, 1, 23, 58, 20, tzinfo=pytz.UTC) ==
+        datetime(2015, 9, 2, 0, 1, 40, tzinfo=pytz.UTC) ==
         next_in_interval(now, interval, 100))
 
-    # t2 - 30 minutes -> same interval
-    now = datetime(2015, 9, 1, 23, 28, 20, tzinfo=pytz.UTC)
+    # t2 - a few seconds -> same interval
+    now = datetime(2015, 9, 2, 0, 1, 20, tzinfo=pytz.UTC)
     assert (
-        datetime(2015, 9, 1, 23, 58, 20, tzinfo=pytz.UTC) ==
+        datetime(2015, 9, 2, 0, 1, 40, tzinfo=pytz.UTC) ==
         next_in_interval(now, interval, 100))
 
     # t2 + 1 second -> next interval
-    now = datetime(2015, 9, 1, 23, 58, 21, tzinfo=pytz.UTC)
+    now = datetime(2015, 9, 2, 0, 1, 41, tzinfo=pytz.UTC)
     assert (
-        datetime(2015, 9, 2, 23, 58, 20, tzinfo=pytz.UTC) ==
+        datetime(2015, 9, 3, 0, 1, 40, tzinfo=pytz.UTC) ==
         next_in_interval(now, interval, 100))

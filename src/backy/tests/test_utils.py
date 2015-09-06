@@ -265,6 +265,12 @@ def test_safe_copy_correctly_makes_sparse_file(tmpdir):
     source = open(source_name, 'rb')
     target_name = str(tmpdir / 'output')
     target = open(target_name, 'wb')
+    # To actually ensure that we punch holes and truncate, lets
+    # fill the file with a predictable pattern that is non-zero and
+    # longer than the source.
+    target.write(b'1' * 1024 * 150)
+    target.close()
+    target = open(target_name, 'wb')
     safe_copy(source, target)
     source.close()
     target.close()

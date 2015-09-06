@@ -1,3 +1,4 @@
+from .fallocate import punch_hole
 import datetime
 import hashlib
 import logging
@@ -169,6 +170,7 @@ def safe_copy(source, target):
         pat_size = 4 * 1024
         while True:
             if chunk[pat_offset:pat_offset + pat_size] == ZEROES_PAT:
+                punch_hole(target, target.tell(), pat_size)
                 target.seek(pat_size, 1)
             else:
                 target.write(chunk[pat_offset:pat_offset + pat_size])

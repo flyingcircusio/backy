@@ -30,7 +30,8 @@ setup(
         'setuptools',
         'shortuuid',
         'telnetlib3',
-        'pytz'
+        'pytz',
+        'nagiosplugin'
     ],
     extras_require={
         'test': [

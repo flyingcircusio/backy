@@ -320,6 +320,7 @@ class BackyDaemon(object):
     def save_status_file(self):
         while True:
             with backy.utils.SafeFile(self.status_file) as tmp:
+                tmp.protected_mode = 0o444
                 tmp.open_new('w')
                 yaml.dump(self.status(), tmp.f)
             yield from asyncio.sleep(10)

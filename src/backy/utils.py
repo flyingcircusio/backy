@@ -27,6 +27,8 @@ class SafeFile(object):
 
     """
 
+    protected_mode = 0o440
+
     def __init__(self, filename, encoding=None):
         self.filename = filename
         self.encoding = encoding
@@ -50,9 +52,9 @@ class SafeFile(object):
         self.f.close()
 
         if self.use_write_protection:
-            os.chmod(self.f.name, 0o440)
+            os.chmod(self.f.name, self.protected_mode)
             if os.path.exists(self.filename):
-                os.chmod(self.filename, 0o440)
+                os.chmod(self.filename, self.protected_mode)
 
         if self.rename:
             if exc_type is None:

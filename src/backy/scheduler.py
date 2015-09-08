@@ -308,7 +308,7 @@ class BackyDaemon(object):
                 last_tags=(', '.join(job.schedule.sorted_tags(last.tags))
                            if last else '-'),
                 last_duration=str(
-                    datetime.timedelta(seconds=last.stats['duration'])
+                    datetime.timedelta(seconds=last.stats.get('duration', 0))
                     if last else '-'),
                 next_time=(backy.utils.format_timestamp(job.task.ideal_start)
                            if job.task else '-'),

@@ -65,6 +65,10 @@ class Commands(object):
         import backy.scheduler
         backy.scheduler.main(config)
 
+    def check(self, config):
+        import backy.scheduler
+        backy.scheduler.check(config)
+
 
 class Archive(object):
     """Keeps track of existing revisions in a backup."""

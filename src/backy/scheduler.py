@@ -5,18 +5,16 @@ import asyncio
 import backy.utils
 import datetime
 import hashlib
+import logging
 import os
 import pkg_resources
 import random
 import sys
 import telnetlib3
+import time
 import yaml
 
-original_print = print
-
-
-def print(str):
-    original_print('{}: {}'.format(datetime.datetime.now().isoformat(), str))
+logger = logging.getLogger(__name__)
 
 
 class Task(object):
@@ -41,7 +39,7 @@ class Task(object):
     def backup(self, future):
         future.add_done_callback(lambda f: self.finished.set())
 
-        print("{}: running backup {}, was due at {}".format(
+        logger.info("{}: running backup {}, was due at {}".format(
             self.job.name, ', '.join(self.tags), self.ideal_start.isoformat()))
 
         # Update config
@@ -71,7 +69,7 @@ class Task(object):
         self.job.archive.scan()
         self.job.schedule.expire(self.job.archive)
 
-        print("{}: finished backup.".format(self.job.name))
+        logger.info("{}: finished backup.".format(self.job.name))
 
         future.set_result(self)
 
@@ -114,7 +112,7 @@ class TaskPool(object):
 
     @asyncio.coroutine
     def run(self):
-        print("Starting to work on queue")
+        logger.info("Starting to work on queue")
         while True:
             # Ok, lets get a worker slot and a task
             yield from self.workers.acquire()
@@ -127,7 +125,7 @@ class TaskPool(object):
     def finish_task(self, future):
         self.workers.release()
         task = future.result()
-        print("{}: finished, releasing worker.".format(task.name))
+        logger.info("{}: finished, releasing worker.".format(task.name))
 
 
 class Job(object):
@@ -136,6 +134,7 @@ class Job(object):
     source = None
     schedule_name = None
     status = None
+    task = None
 
     _generator_handle = None
 
@@ -149,7 +148,6 @@ class Job(object):
         self.schedule_name = config['schedule']
         self.path = self.daemon.base_dir + '/' + self.name
         self.archive = Archive(self.path)
-        self.daemon.loop.call_soon(self.start)
 
     @property
     def spread(self):
@@ -186,7 +184,7 @@ class Job(object):
 
     def update_status(self, status):
         self.status = status
-        print('{}: {}'.format(self.name, self.status))
+        logger.info('{}: {}'.format(self.name, self.status))
 
     @asyncio.coroutine
     def generate_tasks(self):
@@ -201,7 +199,7 @@ class Job(object):
         It doesn't care whether the tasks have been successfully worked on or
         not. The task pool needs to deal with that.
         """
-        print("{}: started task generator loop".format(self.name))
+        logger.info("{}: started task generator loop".format(self.name))
         while True:
             next_time, next_tags = self.schedule.next(
                 backy.utils.now(), self.spread, self.archive)
@@ -234,44 +232,33 @@ class BackyDaemon(object):
     worker_limit = 1
     base_dir = '/srv/backy'
 
-    def __init__(self, loop, config_file):
+    def __init__(self, config_file):
         self.backy_cmd = os.path.join(
             os.getcwd(), os.path.dirname(sys.argv[0]), 'backy')
-        self.loop = loop
         self.config_file = config_file
         self.config = None
         self.schedules = {}
         self.jobs = {}
 
-    def configure(self):
-        # XXX Signal handling to support reload
+    def _read_config(self):
         if not os.path.exists(self.config_file):
-            print('Could not load configuration. '
-                  '`{}` does not exist.'.format(self.config_file))
+            logger.error(
+                'Could not load configuration. '
+                '`{}` does not exist.'.format(self.config_file))
             raise SystemExit(1)
         with open(self.config_file, 'r', encoding='utf-8') as f:
-            config = yaml.load(f)
-        if config != self.config:
-            print("Config changed - reloading.")
-            self.config = config
-            self.configure_global()
-            self.configure_schedules()
-            self.configure_jobs()
+            self.config = yaml.load(f)
 
-    def configure_global(self):
-        c = self.config.get('global')
-        if c:
-            self.worker_limit = c.get('worker-limit', self.worker_limit)
-        # This isn't reload-safe. The semaphore is tricky to update
-        self.taskpool = TaskPool(self.worker_limit)
-        print("New worker limit: {}".format(self.worker_limit))
-        self.base_dir = c.get('base-dir', self.base_dir)
-        print("New backup location: {}".format(self.base_dir))
+        g = self.config.get('global', {})
+        self.worker_limit = g.get('worker-limit', self.worker_limit)
+        logger.info("Worker limit: {}".format(self.worker_limit))
 
-    def configure_schedules(self):
-        # TODO: Ensure that we do not accidentally remove schedules that
-        # are still in use? Or simply warn in this case?
-        # Use monitoring for that?
+        self.base_dir = g.get('base-dir', self.base_dir)
+        logger.info("Backup location: {}".format(self.base_dir))
+
+        self.status_file = g.get('status-file', self.base_dir + '/status')
+        logger.info("Status location: {}".format(self.status_file))
+
         new = {}
         for name, config in self.config['schedules'].items():
             if name in self.schedules:
@@ -280,30 +267,92 @@ class BackyDaemon(object):
                 new[name] = Schedule()
             new[name].configure(config)
         self.schedules = new
-        print("Available schedules: {}".format(', '.join(self.schedules)))
+        logger.info(
+            "Available schedules: {}".format(', '.join(self.schedules)))
 
-    def configure_jobs(self):
-        new = {}
+        self.jobs = {}
         for name, config in self.config['jobs'].items():
-            if name in self.jobs:
-                job = self.jobs[name]
-            else:
-                job = Job(self, name)
-            new[name] = job
-            new[name].configure(config)
-        # Stop old jobs.
-        for job in self.jobs.values():
-            if job not in new:
-                job.stop()
-        # (Re-)start existing and new jobs.
-        for job in new.values():
-            job.start()
-        self.jobs = new
-        print("Configured jobs: {}".format(len(self.jobs)))
+            self.jobs[name] = Job(self, name)
+            self.jobs[name].configure(config)
 
-    def start(self):
-        self.configure()
+    def start(self, loop):
+        # Ensure single daemon instance.
+        os.open(self.config_file, os.O_RDONLY | os.O_EXLOCK | os.O_NONBLOCK)
+
+        self.loop = loop
+        self._read_config()
+        self.taskpool = TaskPool(self.worker_limit)
         asyncio.async(self.taskpool.run())
+        asyncio.async(self.save_status_file())
+
+        # Start jobs
+        for job in self.jobs.values():
+            job.start()
+
+    def status(self):
+        result = []
+        for job in daemon.jobs.values():
+            job.archive.scan()
+            if job.archive.history:
+                last = job.archive.history[-1]
+            else:
+                last = None
+            result.append(dict(
+                job=job.name,
+                sla='OK' if job.sla else 'TOO OLD',
+                status=job.status,
+                last_time=(backy.utils.format_timestamp(last.timestamp)
+                           if last else '-'),
+                last_tags=(', '.join(job.schedule.sorted_tags(last.tags))
+                           if last else '-'),
+                last_duration=str(
+                    datetime.timedelta(seconds=last.stats['duration'])
+                    if last else '-'),
+                next_time=(backy.utils.format_timestamp(job.task.ideal_start)
+                           if job.task else '-'),
+                next_tags=(', '.join(job.schedule.sorted_tags(job.task.tags))
+                           if job.task else '-')))
+        return result
+
+    @asyncio.coroutine
+    def save_status_file(self):
+        while True:
+            with backy.utils.SafeFile(self.status_file) as tmp:
+                tmp.open_new('w')
+                yaml.dump(self.status(), tmp.f)
+            yield from asyncio.sleep(10)
+
+    def check(self):
+        # This should be transformed into the nagiosplugin output. I can't make
+        # myself wrap my head around its structure, though.
+        self._read_config()
+
+        if not os.path.exists(self.status_file):
+            print("UNKNOWN: No status file found at {}".format(
+                  self.status_file))
+            sys.exit(3)
+
+        # The output should be relatively new. Let's say 5 min max.
+        s = os.stat(self.status_file)
+        if time.time() - s.st_mtime > 5 * 60:
+            print("CRITICAL: Status file is older than 5 minutes.")
+            sys.exit(2)
+
+        failed_jobs = []
+
+        with open(self.status_file, 'r') as f:
+            status = yaml.load(f)
+
+        for job in status:
+            if job['sla'] != 'OK':
+                failed_jobs.append(job)
+
+        if failed_jobs:
+            print("CRITICAL: {} jobs not within SLA".format(len(failed_jobs)))
+            sys.exit(2)
+
+        print("OK: {} jobs within SLA".format(len(status)))
+        sys.exit(0)
 
 
 class SchedulerShell(telnetlib3.Telsh):
@@ -321,23 +370,15 @@ class SchedulerShell(telnetlib3.Telsh):
                          "Next Backup",
                          "Next Tags"])
 
-        for job in daemon.jobs.values():
-            job.archive.scan()
-            if job.archive.history:
-                last = job.archive.history[-1]
-            else:
-                last = None
-            t.add_row([job.name,
-                       'OK' if job.sla else 'TOO OLD',
-                       job.status,
-                       (backy.utils.format_timestamp(last.timestamp)
-                        if last else '-'),
-                       (', '.join(job.schedule.sorted_tags(last.tags))
-                        if last else '-'),
-                       (datetime.timedelta(seconds=last.stats['duration'])
-                        if last else '-'),
-                       backy.utils.format_timestamp(job.task.ideal_start),
-                       ', '.join(job.schedule.sorted_tags(job.task.tags))])
+        for job in daemon.status():
+            t.add_row([job['name'],
+                       job['sla'],
+                       job['status'],
+                       job['last_time'],
+                       job['last_tags'],
+                       job['last_duration'],
+                       job['next_time'],
+                       job['next_tags']])
 
         t.sortby = "Job"
         t.align = 'l'
@@ -354,13 +395,18 @@ class SchedulerShell(telnetlib3.Telsh):
 daemon = None
 
 
+def check(config_file):
+    daemon = BackyDaemon(config_file)
+    daemon.check()
+
+
 def main(config_file):
     global daemon
 
     loop = asyncio.get_event_loop()
-    daemon = BackyDaemon(loop, config_file)
 
-    daemon.start()
+    daemon = BackyDaemon(config_file)
+    daemon.start(loop)
 
     func = loop.create_server(
         lambda: telnetlib3.TelnetServer(shell=SchedulerShell),

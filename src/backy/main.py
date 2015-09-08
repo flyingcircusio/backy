@@ -88,6 +88,16 @@ Run the scheduler.
     p.add_argument(
         '-c', '--config', default='/etc/backy.conf')
 
+    # SCHEDULE CHECK
+    p = subparsers.add_parser(
+        'check',
+        help="""\
+Check whether all jobs adhere to their schedules' SLA.
+""")
+    p.set_defaults(func='check')
+    p.add_argument(
+        '-c', '--config', default='/etc/backy.conf')
+
     # SCHEDULE SIMULATION
     p = subparsers.add_parser(
         'simulate',
@@ -99,11 +109,12 @@ Simulate the schedule.
 
     args = parser.parse_args()
 
-    init_logging(args.backupdir, args.verbose)
-
     if not hasattr(args, 'func'):
         parser.print_usage()
         sys.exit(0)
+
+    if args.func != 'check':
+        init_logging(args.backupdir, args.verbose)
 
     commands = backy.backup.Commands(args.backupdir)
     func = getattr(commands, args.func)

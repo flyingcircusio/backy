@@ -373,7 +373,7 @@ class SchedulerShell(telnetlib3.Telsh):
                          "Next Tags"])
 
         for job in daemon.status():
-            t.add_row([job['name'],
+            t.add_row([job['job'],
                        job['sla'],
                        job['status'],
                        job['last_time'],

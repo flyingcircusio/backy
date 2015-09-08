@@ -39,7 +39,6 @@ setup(
     entry_points="""
         [console_scripts]
             backy = backy.main:main
-            backy-scheduler = backy.scheduler:main
 
         [backy.sources]
             ceph-rbd = backy.sources.ceph.source:CephRBD

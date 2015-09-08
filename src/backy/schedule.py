@@ -129,6 +129,15 @@ class Schedule(object):
 
         return removed
 
+    def sorted_tags(self, tags):
+        """Return a list of tags, sorted by their interval. Smallest first."""
+        t = {}
+        for tag in tags:
+            t[tag] = self.schedule.get(
+                tag, {'interval': datetime.timedelta(0)})['interval']
+        vals = t.items()
+        return (x[0] for x in sorted(vals, key=lambda x: x[1]))
+
 
 def simulate(backup, days):
     curses.wrapper(simulate_main, backup.schedule, days)

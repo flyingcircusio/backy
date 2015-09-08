@@ -1,6 +1,6 @@
 from backy.backup import Archive
 from backy.schedule import Schedule
-import argparse
+from prettytable import PrettyTable
 import asyncio
 import backy.utils
 import datetime
@@ -10,11 +10,6 @@ import random
 import sys
 import telnetlib3
 import yaml
-
-
-# - rearrange when the global config changes: use a hashing mechanism to
-#   select when to run backups for various tags?
-# - simulation moves over to the scheduler?
 
 original_print = print
 
@@ -165,6 +160,26 @@ class Job(object):
         return generator.randint(0, limit)
 
     @property
+    def sla(self):
+        """Is the SLA currently held?
+
+        The SLA being held is only reflecting the current status.
+
+        It does not help to reflect on past situations that have failed as
+        those are not indicators whether and admin needs to do something
+        right now.
+        """
+        max_age = min(x['interval'] for x in self.schedule.schedule.values())
+        self.archive.scan()
+        if not self.archive.history:
+            return True
+        newest = self.archive.history[-1]
+        age = backy.utils.now() - newest.timestamp
+        if age > max_age * 1.5:
+            return False
+        return True
+
+    @property
     def schedule(self):
         return self.daemon.schedules[self.schedule_name]
 
@@ -190,20 +205,18 @@ class Job(object):
             next_time, next_tags = self.schedule.next(
                 backy.utils.now(), self.spread, self.archive)
 
-            task = Task(self)
-            task.ideal_start = next_time
-            task.tags.update(next_tags)
+            self.task = task = Task(self)
+            self.task.ideal_start = next_time
+            self.task.tags.update(next_tags)
 
-            id = dict(tags=','.join(task.tags), deadline=next_time)
-
-            self.update_status("waiting ({deadline} -- {tags})".format(**id))
+            self.update_status("waiting")
             yield from task.wait_for_deadline()
-            self.update_status(
-                "submitted to workers ({deadline} -- {tags})".format(**id))
+            self.update_status("submitting to worker queue")
             yield from self.daemon.taskpool.put(task)
-            self.update_status(
-                "waiting for job ({deadline} -- {tags})".format(**id))
+            # XXX This is a lie
+            self.update_status("running")
             yield from task.wait_for_finished()
+            self.update_status("finished")
 
     def start(self):
         self.stop()
@@ -234,7 +247,7 @@ class BackyDaemon(object):
         if not os.path.exists(self.config_file):
             print('Could not load configuration. '
                   '`{}` does not exist.'.format(self.config_file))
-            return
+            raise SystemExit(1)
         with open(self.config_file, 'r', encoding='utf-8') as f:
             config = yaml.load(f)
         if config != self.config:
@@ -246,9 +259,8 @@ class BackyDaemon(object):
 
     def configure_global(self):
         c = self.config.get('global')
-        if not c:
-            return
-        self.worker_limit = c.get('worker-limit', self.worker_limit)
+        if c:
+            self.worker_limit = c.get('worker-limit', self.worker_limit)
         # This isn't reload-safe. The semaphore is tricky to update
         self.taskpool = TaskPool(self.worker_limit)
         print("New worker limit: {}".format(self.worker_limit))
@@ -298,46 +310,60 @@ class SchedulerShell(telnetlib3.Telsh):
     shell_name = 'backy'
     shell_ver = '0.2'
 
+    def cmdset_jobs(self):
+        t = PrettyTable(["Job",
+                         "SLA",
+                         "Status",
+                         "Last Backup",
+                         "Last Tags",
+                         "Last Duration",
+                         "Next Backup",
+                         "Next Tags"])
+
+        for job in daemon.jobs.values():
+            job.archive.scan()
+            if job.archive.history:
+                last = job.archive.history[-1]
+            else:
+                last = None
+            t.add_row([job.name,
+                       'OK' if job.sla else 'TOO OLD',
+                       job.status,
+                       (backy.utils.format_timestamp(last.timestamp)
+                        if last else '-'),
+                       (', '.join(job.schedule.sorted_tags(last.tags))
+                        if last else '-'),
+                       (datetime.timedelta(seconds=last.stats['duration'])
+                        if last else '-'),
+                       backy.utils.format_timestamp(job.task.ideal_start),
+                       ', '.join(job.schedule.sorted_tags(job.task.tags))])
+
+        t.sortby = "Job"
+        t.align = 'l'
+
+        self.stream.write(t.get_string().replace('\n', '\r\n'))
+
     def cmdset_status(self):
-        self.stream.write('######################\r\n')
-        self.stream.write('# Jobs\r\n')
-        self.stream.write('######################\r\n')
-        for job in sorted(daemon.jobs):
-            self.stream.write(
-                '{}: {}\r\n'.format(job, daemon.jobs[job].status))
-        self.stream.write('\r\n')
-        self.stream.write('######################\r\n')
-        self.stream.write('# Workers\r\n')
-        self.stream.write('######################\r\n')
-        self.stream.write('{} idle'.format(daemon.taskpool.workers._value+1))
+        t = PrettyTable(["Property", "Status"])
+        t.add_row(["Idle Workers", daemon.taskpool.workers._value + 1])
+        t.sortby = "Property"
+        self.stream.write(t.get_string().replace('\n', '\r\n'))
 
 
 daemon = None
 
 
-def main():
+def main(config_file):
     global daemon
 
-    parser = argparse.ArgumentParser(
-        description='Daemon that handles scheduling of backy jobs.',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
-    parser.add_argument(
-        '-c', '--config', default='/etc/backy.conf')
-
-    import logging
-    logging.basicConfig(level=logging.WARN)
-
-    args = parser.parse_args()
-
     loop = asyncio.get_event_loop()
-    daemon = BackyDaemon(loop, args.config)
+    daemon = BackyDaemon(loop, config_file)
 
     daemon.start()
 
     func = loop.create_server(
         lambda: telnetlib3.TelnetServer(shell=SchedulerShell),
-        'localhost', 6023)
+        '127.0.0.1', 6023)
     loop.run_until_complete(func)
 
     # Blocking call interrupted by loop.stop()

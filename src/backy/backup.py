@@ -61,6 +61,10 @@ class Commands(object):
         self._backup._configure()
         self._backup.restore(revision, target)
 
+    def scheduler(self, config):
+        import backy.scheduler
+        backy.scheduler.main(config)
+
 
 class Archive(object):
     """Keeps track of existing revisions in a backup."""

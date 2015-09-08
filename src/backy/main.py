@@ -78,9 +78,19 @@ Show backup status. Show inventory and summary information.
 """)
     p.set_defaults(func='status')
 
+    # SCHEDULER DAEMON
+    p = subparsers.add_parser(
+        'scheduler',
+        help="""\
+Run the scheduler.
+""")
+    p.set_defaults(func='scheduler')
+    p.add_argument(
+        '-c', '--config', default='/etc/backy.conf')
+
     # SCHEDULE SIMULATION
     p = subparsers.add_parser(
-        'schedule',
+        'simulate',
         help="""\
 Simulate the schedule.
 """)

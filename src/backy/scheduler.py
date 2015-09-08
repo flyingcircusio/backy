@@ -6,6 +6,7 @@ import backy.utils
 import datetime
 import hashlib
 import os
+import pkg_resources
 import random
 import sys
 import telnetlib3
@@ -308,7 +309,7 @@ class BackyDaemon(object):
 class SchedulerShell(telnetlib3.Telsh):
 
     shell_name = 'backy'
-    shell_ver = '0.2'
+    shell_ver = pkg_resources.require("backy")[0].version
 
     def cmdset_jobs(self):
         t = PrettyTable(["Job",

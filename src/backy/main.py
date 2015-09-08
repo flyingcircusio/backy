@@ -10,18 +10,14 @@ import sys
 logger = logging.getLogger(__name__)
 
 
-def init_logging(backupdir, verbose=False):
-    if verbose:
-        level = logging.DEBUG
-    else:
-        level = logging.WARNING
+def init_logging(backupdir, console_level):
     logging.basicConfig(
         filename=os.path.join(backupdir, 'backy.log'),
         format='%(asctime)s [%(process)d] %(message)s',
         level=logging.INFO)
 
     console = logging.StreamHandler(sys.stdout)
-    console.setLevel(level)
+    console.setLevel(console_level)
     logging.getLogger('').addHandler(console)
 
     logger.info('$ ' + ' '.join(sys.argv))
@@ -114,7 +110,13 @@ Simulate the schedule.
         sys.exit(0)
 
     if args.func != 'check':
-        init_logging(args.backupdir, args.verbose)
+        if args.verbose:
+            console_level = logging.DEBUG
+        elif args.func == 'scheduler':
+            console_level = logging.INFO
+        else:
+            console_level = logging.WARNING
+        init_logging(args.backupdir, console_level)
 
     commands = backy.backup.Commands(args.backupdir)
     func = getattr(commands, args.func)

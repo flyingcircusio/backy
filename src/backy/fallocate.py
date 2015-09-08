@@ -27,7 +27,7 @@ try:
 
     _fallocate = libc.fallocate
 except AttributeError:
-    logger.warn('Falling back to non-hole-punching `fallocate`.')
+    logger.debug('Falling back to non-hole-punching `fallocate`.')
 
     def fallocate(fd, mode, offset, len_):
         old = fd.tell()

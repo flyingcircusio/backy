@@ -4,6 +4,7 @@ from prettytable import PrettyTable
 import asyncio
 import backy.utils
 import datetime
+import fcntl
 import hashlib
 import logging
 import os
@@ -277,7 +278,8 @@ class BackyDaemon(object):
 
     def start(self, loop):
         # Ensure single daemon instance.
-        os.open(self.config_file, os.O_RDONLY | os.O_EXLOCK | os.O_NONBLOCK)
+        f = open(self.config_file, 'a+')
+        fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
         self.loop = loop
         self._read_config()

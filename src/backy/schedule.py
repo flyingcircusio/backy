@@ -104,6 +104,7 @@ class Schedule(object):
         Returns list of removed revisions.
 
         """
+        archive.scan()
         removed = []
         # Clean out old backups: keep at least a certain number of copies
         # (keep) and ensure that we don't throw away copies that are newer
@@ -119,9 +120,12 @@ class Schedule(object):
                 if old_revision.timestamp >= keep_threshold:
                     continue
                 old_revision.tags.remove(tag)
+                old_revision.write_info()
 
         # Phase 2: delete revisions that have no tags any more.
-        for revision in archive.history:
+        # We are deleting items of the history while iterating over it.
+        # Use a copy of the list!
+        for revision in list(archive.history):
             if revision.tags:
                 continue
             removed.append(revision)

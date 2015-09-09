@@ -1,8 +1,10 @@
 from backy.backup import Archive
+from backy.revision import Revision
 from backy.schedule import parse_duration, Schedule, next_in_interval
-import backy.utils
 from datetime import datetime, timedelta
+import backy.utils
 import mock
+import os.path
 import pytest
 import pytz
 
@@ -124,7 +126,8 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
     history = archive.history
 
     def add_revision(timestamp):
-        revision = mock.Mock()
+        revision = Revision(len(archive.history) + 1, archive)
+        revision.materialize()
         revision.tags = {'daily'}
         revision.timestamp = timestamp
         history.append(revision)
@@ -133,26 +136,45 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
 
     clock.now.return_value = datetime(2014, 5, 10, 10, 0)
     add_revision(datetime(2014, 5, 10, 10, 0))
-    schedule.expire(archive)
-    assert not any(x.remove.called for x in history)
+    assert [] == schedule.expire(archive)
+    archive.scan()
+    assert len(archive.history) == 1
+    assert archive.history[0].tags == {'daily'}
 
     add_revision(datetime(2014, 5, 9, 10, 0))
     add_revision(datetime(2014, 5, 8, 10, 0))
     add_revision(datetime(2014, 5, 7, 10, 0))
     add_revision(datetime(2014, 5, 6, 10, 0))
-    schedule.expire(archive)
-    assert not any(x.remove.called for x in history)
+    assert [] == schedule.expire(archive)
+    archive.scan()
+    assert len(archive.history) == 5
+    assert [{'daily'}] * 5 == [r.tags for r in history]
+
     # This is the one revision more than the basic 'keep' parameter
     # but its still within the keep*interval frame so we keep it.
     add_revision(datetime(2014, 5, 6, 11, 0))
     assert [] == schedule.expire(archive)
-    assert not any(x.remove.called for x in history)
+    assert [{'daily'}] * 6 == [r.tags for r in history]
+
     # This revision is more than keep and also outside the interval.
-    # It gets removed.
+    # It gets its tag removed and disappears.
     r = add_revision(datetime(2014, 5, 4, 11, 0))
-    schedule.expire(archive)
-    assert r.remove.called
-    assert sum(1 for x in history if x.remove.called) == 1
+    assert os.path.exists(r.filename)
+    assert [r] == schedule.expire(archive)
+    archive.scan()
+    assert [{'daily'}] * 6 == [rev.tags for rev in history]
+    assert not os.path.exists(r.filename)
+
+    # If we have unknown tags, then those do not expire. However, the
+    # known tag disappears but then the file remains because there's still
+    # a tag left.
+    r = add_revision(datetime(2014, 5, 4, 11, 0))
+    r.tags = {'daily', 'test'}
+    assert os.path.exists(r.filename)
+    assert [] == schedule.expire(archive)
+    archive.scan()
+    assert [{'test'}] + [{'daily'}] * 6 == [rev.tags for rev in history]
+    assert os.path.exists(r.filename)
 
 
 def test_next_in_interval(clock):

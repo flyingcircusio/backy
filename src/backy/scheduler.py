@@ -78,7 +78,7 @@ class Task(object):
     def wait_for_deadline(self):
         while self.ideal_start > backy.utils.now():
             remaining_time = self.ideal_start - backy.utils.now()
-            yield from asyncio.sleep(remaining_time)
+            yield from asyncio.sleep(remaining_time.total_seconds())
 
     @asyncio.coroutine
     def wait_for_finished(self):
@@ -323,7 +323,7 @@ class BackyDaemon(object):
                 tmp.protected_mode = 0o444
                 tmp.open_new('w')
                 yaml.dump(self.status(), tmp.f)
-            yield from asyncio.sleep(10)
+            yield from asyncio.sleep(30)
 
     def check(self):
         # This should be transformed into the nagiosplugin output. I can't make

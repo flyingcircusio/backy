@@ -1,11 +1,9 @@
-from backy.backup import Archive
 from backy.revision import Revision
-from backy.schedule import parse_duration, Schedule, next_in_interval
+from backy.schedule import parse_duration, next_in_interval
 from datetime import datetime, timedelta
 import backy.utils
 import mock
 import os.path
-import pytest
 import pytz
 
 
@@ -18,20 +16,6 @@ def test_parse_duration():
     assert parse_duration('25m') == timedelta(seconds=25 * 60)
     assert parse_duration('10s') == timedelta(seconds=10)
     assert parse_duration('5') == timedelta(seconds=5)
-
-
-@pytest.fixture
-def schedule():
-    schedule = Schedule()
-    schedule.configure({'daily': {'interval': '1d', 'keep': 5}})
-    return schedule
-
-
-@pytest.fixture
-def archive(tmpdir):
-    a = Archive(str(tmpdir))
-    a.scan = lambda: None
-    return a
 
 
 def test_first_backup_catches_up_all_tags_immediately(

@@ -1,5 +1,6 @@
 import backy.backup
 import backy.main
+import backy.schedule
 import datetime
 import mock
 import pytest
@@ -30,3 +31,22 @@ def clock(monkeypatch):
         2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC)
     monkeypatch.setattr(backy.utils, 'now', clock.now)
     return clock
+
+
+@pytest.fixture
+def schedule():
+    schedule = backy.schedule.Schedule()
+    schedule.configure({'daily': {'interval': '1d', 'keep': 5}})
+    return schedule
+
+
+@pytest.fixture
+def archive(tmpdir):
+    a = backy.backup.Archive(str(tmpdir))
+    a.scan = lambda: None
+    return a
+
+
+@pytest.fixture
+def backup(schedule, tmpdir):
+    return backy.backup.Backup(str(tmpdir))

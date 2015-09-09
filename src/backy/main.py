@@ -1,7 +1,11 @@
 # -*- encoding: utf-8 -*-
 
+from backy.utils import format_timestamp, format_bytes_flexible
+from prettytable import PrettyTable
 import argparse
 import backy.backup
+import backy.scheduler
+import errno
 import logging
 import os
 import sys
@@ -10,7 +14,7 @@ import sys
 logger = logging.getLogger(__name__)
 
 
-def init_logging(backupdir, console_level):
+def init_logging(backupdir, console_level):  # pragma: no cover
     logging.basicConfig(
         filename=os.path.join(backupdir, 'backy.log'),
         format='%(asctime)s [%(process)d] %(message)s',
@@ -23,13 +27,66 @@ def init_logging(backupdir, console_level):
     logger.info('$ ' + ' '.join(sys.argv))
 
 
+class Commands(object):
+    """Proxy between CLI calls and actual backup code."""
+
+    def __init__(self, path):
+        self._backup = backy.backup.Backup(path)
+
+    def init(self, type, source):
+        self._backup.init(type, source)
+
+    def status(self):
+        self._backup._configure()
+        total_bytes = 0
+
+        t = PrettyTable(["Date", "ID", "Size", "Duration", "Tags"])
+        t.align = 'l'
+        t.align['Size'] = 'r'
+        t.align['Duration'] = 'r'
+
+        for r in self._backup.archive.history:
+            total_bytes += r.stats.get('bytes_written', 0)
+            t.add_row([format_timestamp(r.timestamp),
+                       r.uuid,
+                       format_bytes_flexible(r.stats.get('bytes_written', 0)),
+                       int(r.stats.get('duration', 0)),
+                       ', '.join(r.tags)])
+
+        print(t)
+
+        print("== Summary")
+        print("{} revisions".format(len(self._backup.archive.history)))
+        print("{} data (estimated)".format(
+            format_bytes_flexible(total_bytes)))
+
+    def backup(self, tags):
+        self._backup._configure()
+        try:
+            self._backup.backup(tags)
+        except IOError as e:
+            if e.errno not in [errno.EDEADLK, errno.EAGAIN]:
+                raise
+            logger.info('Backup already in progress.')
+
+    def restore(self, revision, target):
+        self._backup._configure()
+        self._backup.restore(revision, target)
+
+    def scheduler(self, config):
+        backy.scheduler.main(config)
+
+    def check(self, config):
+        backy.scheduler.check(config)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Backup and restore for block devices.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument(
-        '-v', '--verbose', action='store_true',  help='verbose output')
+        '-v', '--verbose', action='store_true', help='verbose output')
     parser.add_argument(
         '-b', '--backupdir', default='.')
 
@@ -118,7 +175,7 @@ Simulate the schedule.
             console_level = logging.WARNING
         init_logging(args.backupdir, console_level)
 
-    commands = backy.backup.Commands(args.backupdir)
+    commands = Commands(args.backupdir)
     func = getattr(commands, args.func)
 
     # Pass over to function

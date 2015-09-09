@@ -1,10 +1,8 @@
 from backy.revision import Revision
 from backy.sources import select_source
-from backy.utils import format_timestamp, min_date
-from backy.utils import SafeFile, format_bytes_flexible, safe_copy
+from backy.utils import min_date
+from backy.utils import SafeFile, safe_copy
 from glob import glob
-from prettytable import PrettyTable
-import errno
 import fcntl
 import logging
 import os
@@ -13,61 +11,6 @@ import time
 import yaml
 
 logger = logging.getLogger(__name__)
-
-
-class Commands(object):
-    """Proxy between CLI calls and actual backup code."""
-
-    def __init__(self, path):
-        self._backup = Backup(path)
-
-    def init(self, type, source):
-        self._backup.init(type, source)
-
-    def status(self):
-        self._backup._configure()
-        total_bytes = 0
-
-        t = PrettyTable(["Date", "ID", "Size", "Duration", "Tags"])
-        t.align = 'l'
-        t.align['Size'] = 'r'
-        t.align['Duration'] = 'r'
-
-        for r in self._backup.archive.history:
-            total_bytes += r.stats.get('bytes_written', 0)
-            t.add_row([format_timestamp(r.timestamp),
-                       r.uuid,
-                       format_bytes_flexible(r.stats.get('bytes_written', 0)),
-                       int(r.stats.get('duration', 0)),
-                       ', '.join(r.tags)])
-
-        print(t)
-
-        print("== Summary")
-        print("{} revisions".format(len(self._backup.archive.history)))
-        print("{} data (estimated)".format(
-            format_bytes_flexible(total_bytes)))
-
-    def backup(self, tags):
-        self._backup._configure()
-        try:
-            self._backup.backup(tags)
-        except IOError as e:
-            if e.errno not in [errno.EDEADLK, errno.EAGAIN]:
-                raise
-            logger.info('Backup already in progress.')
-
-    def restore(self, revision, target):
-        self._backup._configure()
-        self._backup.restore(revision, target)
-
-    def scheduler(self, config):
-        import backy.scheduler
-        backy.scheduler.main(config)
-
-    def check(self, config):
-        import backy.scheduler
-        backy.scheduler.check(config)
 
 
 class Archive(object):

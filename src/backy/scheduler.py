@@ -77,8 +77,8 @@ class Task(object):
     @asyncio.coroutine
     def wait_for_deadline(self):
         while self.ideal_start > backy.utils.now():
-            remaining_time = backy.utils.now() - self.ideal_start
-            yield from asyncio.sleep(remaining_time.total_seconds())
+            remaining_time = self.ideal_start - backy.utils.now()
+            yield from asyncio.sleep(remaining_time)
 
     @asyncio.coroutine
     def wait_for_finished(self):

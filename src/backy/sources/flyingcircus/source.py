@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 
 class FlyingCircusRootDisk(CephRBD):
 
+    snapshot_timeout = 30
+
     def __init__(self, config):
         self.config = config
         self.vm = config['vm']
@@ -29,7 +31,8 @@ class FlyingCircusRootDisk(CephRBD):
                     format(snapshot_key))
         consul.kv[snapshot_key] = {'vm': self.vm, 'snapshot': name}
         try:
-            timeout = TimeOut(30, raise_on_timeout=True)
+            timeout = TimeOut(self.snapshot_timeout,
+                              raise_on_timeout=True)
             while timeout.tick():
                 for snapshot in self.rbd.snap_ls(self._image_name):
                     if snapshot['name'] == name:

@@ -1,11 +1,7 @@
-from backy.revision import Revision
 from datetime import timedelta
 import backy.utils
-import curses
 import datetime
 import logging
-import time
-
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +94,7 @@ class Schedule(object):
         # shutdown of the server or such.
         return (backy.utils.now(), catchup_tags)
 
-    def expire(self, archive, simulate=False):
+    def expire(self, archive):
         """Remove old revisions according to the backup schedule.
 
         Returns list of removed revisions.
@@ -129,7 +125,7 @@ class Schedule(object):
             if revision.tags:
                 continue
             removed.append(revision)
-            revision.remove(simulate)
+            revision.remove()
 
         return removed
 
@@ -141,91 +137,3 @@ class Schedule(object):
                 tag, {'interval': datetime.timedelta(0)})['interval']
         vals = t.items()
         return (x[0] for x in sorted(vals, key=lambda x: x[1]))
-
-
-def simulate(backup, days):
-    curses.wrapper(simulate_main, backup.schedule, days)
-
-
-def simulate_main(stdscr, schedule, days):
-    stdscr.clear()
-    stdscr.nodelay(True)
-
-    backy.utils.now = lambda: now
-
-    now = time.time()
-
-    header = curses.newwin(3, curses.COLS, 0, 0)
-    header.addstr("SCHEDULE SIMULATION".center(curses.COLS - 1, '='))
-    header.refresh()
-
-    revision_log = curses.newwin(20, curses.COLS, 3, 0)
-
-    histogram = curses.newwin(10, 31, 23, 30)
-
-    footer = curses.newwin(1, curses.COLS, curses.LINES - 2, 0)
-
-    days = days - 1
-    start_time = now
-    iteration = 0
-    while now - start_time < days * DAY:
-        now += 1 * 60 * 60
-        iteration += 1
-
-        revision_log.clear()
-
-        # Simulate a new backup
-        tags = schedule.next()
-        if tags:
-            r = Revision.create(schedule.backup)
-            r.tags = list(tags)
-            schedule.backup.archive.history.append(r)
-
-        schedule.expire(simulate=True)
-
-        revisions = schedule.backup.archive.history
-        revision_log.addstr(
-            " iteration {} | {} | {} revisions | estimated data: {} GiB\n\n"
-            .format(iteration, backy.utils.format_timestamp(now),
-                    len(revisions), 0))
-
-        for i, r in enumerate(revisions[-15:]):
-            time_readable = backy.utils.format_timestamp(r.timestamp)
-            revision_log.addstr(
-                "{1} | {0.uuid} | {2:20s}\n".
-                format(r, time_readable, ', '.join(r.tags)))
-
-        revisions_by_day = {}
-        for revision in schedule.backup.archive.history:
-            revisions_by_day[
-                datetime.date.fromtimestamp(revision.timestamp)] = revision
-        hist_max = datetime.date.fromtimestamp(schedule.backup.now())
-        hist_now = hist_max - datetime.timedelta(days=180)
-        histogram.clear()
-        hist_data = []
-        while hist_now <= hist_max:
-            r = revisions_by_day.get(hist_now, None)
-            if r is None:
-                ch = ' '
-            else:
-                ch = r.tags[0][0] if r.tags else '.'
-            hist_data.append(ch)
-            hist_now += datetime.timedelta(days=1)
-        hist_data = ''.join(hist_data)
-        hist_data = hist_data.rjust(10 * 31 - 1, '_')
-        histogram.addstr(hist_data)
-        histogram.refresh()
-        revision_log.refresh()
-        x = stdscr.getch()
-        if x == ord('q'):
-            break
-        elif x == ord(' '):
-            x = None
-            while x != ord(' '):
-                x = stdscr.getch()
-        time.sleep(0.1)
-
-    stdscr.nodelay(False)
-    footer.addstr("DONE - PRESS KEY".center(curses.COLS - 2, "="))
-    footer.refresh()
-    stdscr.getch()

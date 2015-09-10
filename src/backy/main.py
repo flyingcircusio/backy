@@ -151,15 +151,6 @@ Check whether all jobs adhere to their schedules' SLA.
     p.add_argument(
         '-c', '--config', default='/etc/backy.conf')
 
-    # SCHEDULE SIMULATION
-    p = subparsers.add_parser(
-        'simulate',
-        help="""\
-Simulate the schedule.
-""")
-    p.set_defaults(func='schedule')
-    p.add_argument('days', type=int)
-
     args = parser.parse_args()
 
     if not hasattr(args, 'func'):

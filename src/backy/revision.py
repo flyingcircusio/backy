@@ -86,7 +86,7 @@ class Revision(object):
 
     def defrag(self):
         try:
-            cmd(['btrfs',  '--help'])
+            cmd(['btrfs', '--help'])
         except (subprocess.CalledProcessError, FileNotFoundError):
             logger.warn('btrfs not found.')
             return
@@ -119,10 +119,9 @@ class Revision(object):
         os.symlink(os.path.relpath(self.info_filename, path),
                    path + '/' + name)
 
-    def remove(self, simulate=False):
-        if not simulate:
-            for file in glob.glob(self.filename + '*'):
-                os.unlink(file)
+    def remove(self):
+        for file in glob.glob(self.filename + '*'):
+            os.unlink(file)
         if self in self.archive.history:
             self.archive.history.remove(self)
 

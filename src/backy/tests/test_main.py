@@ -24,7 +24,7 @@ def test_display_usage(capsys, argv):
     out, err = capsys.readouterr()
     assert """\
 usage: py.test [-h] [-v] [-b BACKUPDIR]
-               {init,backup,restore,status,scheduler,check,simulate} ...
+               {init,backup,restore,status,scheduler,check} ...
 """ == out
     assert err == ""
 
@@ -37,7 +37,7 @@ def test_display_help(capsys, argv):
     out, err = capsys.readouterr()
     assert Ellipsis("""\
 usage: py.test [-h] [-v] [-b BACKUPDIR]
-               {init,backup,restore,status,scheduler,check,simulate} ...
+               {init,backup,restore,status,scheduler,check} ...
 
 Backup and restore for block devices.
 
@@ -154,7 +154,7 @@ def test_call_check(capsys, caplog, argv, monkeypatch):
     assert err == ""
     assert Ellipsis("""\
 backup.py                  ... DEBUG    Backup(".../backy")
-main.py                    188 DEBUG    backup.check(**{'config': \
+main.py                    ... DEBUG    backup.check(**{'config': \
 '/etc/backy.conf'})
 main.py                    ... INFO     Backup complete.\
 
@@ -177,7 +177,7 @@ def test_call_scheduler(capsys, caplog, argv, monkeypatch):
     assert err == ""
     assert Ellipsis("""\
 backup.py                  ... DEBUG    Backup(".../backy")
-main.py                    188 DEBUG    backup.scheduler(**{'config': \
+main.py                    ... DEBUG    backup.scheduler(**{'config': \
 '/etc/backy.conf'})
 main.py                    ... INFO     Backup complete.\
 

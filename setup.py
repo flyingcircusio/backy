@@ -25,13 +25,14 @@ setup(
     install_requires=[
         'consulate',
         'fallocate',
+        'nagiosplugin',
         'prettytable',
+        'pytest-asyncio',
+        'pytz',
         'PyYaml',
         'setuptools',
         'shortuuid',
         'telnetlib3',
-        'pytz',
-        'nagiosplugin'
     ],
     extras_require={
         'test': [

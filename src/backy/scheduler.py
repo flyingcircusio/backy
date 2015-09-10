@@ -25,7 +25,6 @@ class Task(object):
     """
 
     ideal_start = None
-    tags = None
 
     def __init__(self, job):
         self.job = job

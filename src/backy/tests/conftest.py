@@ -3,6 +3,7 @@ import backy.main
 import backy.schedule
 import datetime
 import mock
+import os
 import pytest
 import pytz
 
@@ -19,6 +20,13 @@ def pytest_assertrepr_compare(op, left, right):
 def wrap_logging(monkeypatch):
     monkeypatch.setattr(backy.main, 'init_logging',
                         lambda backupdir, verbose: None)
+
+
+@pytest.yield_fixture(autouse=True)
+def fix_cwd():
+    cwd = os.getcwd()
+    yield
+    os.chdir(cwd)
 
 
 @pytest.fixture

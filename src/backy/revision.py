@@ -63,7 +63,7 @@ class Revision(object):
         r.timestamp = pytz.UTC.localize(metadata['timestamp'])
         r.parent = metadata['parent']
         r.stats = metadata.get('stats', {})
-        r.tags = metadata.get('tags', '')
+        r.tags = set(metadata.get('tags', []))
         return r
 
     @property

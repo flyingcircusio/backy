@@ -96,7 +96,8 @@ class TaskPool(object):
     checked whether their deadline is due.
     """
 
-    def __init__(self, limit=2):
+    def __init__(self, loop, limit=2):
+        self.loop = loop
         self.tasks = asyncio.PriorityQueue()
         self.workers = asyncio.BoundedSemaphore(limit)
 
@@ -117,16 +118,19 @@ class TaskPool(object):
         while True:
             # Ok, lets get a worker slot and a task
             yield from self.workers.acquire()
+            logger.debug("Got worker")
             task = yield from self.get()
+            logger.debug("Got task")
             task_future = asyncio.Future()
             # Now, lets select a job
-            asyncio.async(task.backup(task_future))
+            logger.debug("Sending task to event loop")
+            self.loop.create_task(task.backup(task_future))
             task_future.add_done_callback(self.finish_task)
 
     def finish_task(self, future):
-        self.workers.release()
         task = future.result()
         logger.info("{}: finished, releasing worker.".format(task.name))
+        self.workers.release()
 
 
 class Job(object):
@@ -283,7 +287,7 @@ class BackyDaemon(object):
 
         self.loop = loop
         self._read_config()
-        self.taskpool = TaskPool(self.worker_limit)
+        self.taskpool = TaskPool(loop, self.worker_limit)
         asyncio.async(self.taskpool.run())
         asyncio.async(self.save_status_file())
 

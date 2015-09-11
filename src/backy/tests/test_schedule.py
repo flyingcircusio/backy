@@ -2,7 +2,7 @@ from backy.revision import Revision
 from backy.schedule import parse_duration, next_in_interval
 from datetime import datetime, timedelta
 import backy.utils
-import mock
+from unittest import mock
 import os.path
 import pytz
 

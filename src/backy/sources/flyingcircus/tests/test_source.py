@@ -1,7 +1,7 @@
 from backy.sources.flyingcircus.source import FlyingCircusRootDisk
 import backy.timeout
 import consulate
-import mock
+from unittest import mock
 import pytest
 import subprocess
 

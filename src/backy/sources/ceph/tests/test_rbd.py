@@ -1,7 +1,7 @@
 from backy.sources.ceph.diff import RBDDiffV1
 from backy.sources.ceph.rbd import RBDClient
 import io
-import mock
+from unittest import mock
 import pytest
 import subprocess
 
@@ -70,8 +70,19 @@ def test_rbd_map_readonly(rbdclient):
         mock.call(['showmapped'], format='json')])
 
 
-def test_rbd_map_writable_missing_map(rbdclient):
+def test_rbd_map_writable_missing_map_no_maps(rbdclient):
     rbdclient._rbd.side_effect = [None, {}]
+    with pytest.raises(RuntimeError):
+        rbdclient.map('test/test04.root@backup', readonly=True)
+    rbdclient._rbd.assert_has_calls([
+        mock.call(['--read-only', 'map', 'test/test04.root@backup']),
+        mock.call(['showmapped'], format='json')])
+
+
+def test_rbd_map_writable_missing_map(rbdclient):
+    rbdclient._rbd.side_effect = [
+        None,
+        {'sadf': {'pool': 'sadf', 'name': 'asdf', 'snap': 'asdf'}}]
     with pytest.raises(RuntimeError):
         rbdclient.map('test/test04.root@backup', readonly=True)
     rbdclient._rbd.assert_has_calls([
@@ -106,7 +117,7 @@ def test_rbd_snap_rm(rbdclient):
 
 
 def test_rbd_export_diff(rbdclient, tmpdir):
-    target = str(tmpdir/'foo.rbddiff')
+    target = str(tmpdir / 'foo.rbddiff')
     open(target, 'wb').write(RBDDiffV1.header)
     diff = rbdclient.export_diff(
         'test/test04.root@new', 'old', target)
@@ -117,7 +128,7 @@ def test_rbd_export_diff(rbdclient, tmpdir):
 
 
 def test_rbd_image_reader(rbdclient, tmpdir):
-    device = str(tmpdir/'device')
+    device = str(tmpdir / 'device')
     open(device, 'wb').write(b'asdf')
     rbdclient._rbd.side_effect = [
         None,
@@ -127,6 +138,22 @@ def test_rbd_image_reader(rbdclient, tmpdir):
     with rbdclient.image_reader('test/test04.root@foo') as f:
         assert isinstance(f, io.BufferedReader)
         assert f.name == device
+    rbdclient._rbd.assert_has_calls([
+        mock.call(['--read-only', 'map', 'test/test04.root@foo']),
+        mock.call(['showmapped'], format='json'),
+        mock.call(['unmap', device])])
+
+
+def test_rbd_image_reader_explicit_closed(rbdclient, tmpdir):
+    device = str(tmpdir / 'device')
+    open(device, 'wb').write(b'asdf')
+    rbdclient._rbd.side_effect = [
+        None,
+        {'1': {'device': device, 'pool': 'test',
+               'name': 'test04.root', 'snap': 'foo'}},
+        None]
+    with rbdclient.image_reader('test/test04.root@foo') as f:
+        f.close()
     rbdclient._rbd.assert_has_calls([
         mock.call(['--read-only', 'map', 'test/test04.root@foo']),
         mock.call(['showmapped'], format='json'),

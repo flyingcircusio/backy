@@ -1,10 +1,46 @@
+from backy.revision import Revision
 from backy.scheduler import Task, BackyDaemon, TaskPool
+from unittest import mock
 import asyncio
-
 import backy.utils
 import datetime
-import mock
+import os
 import pytest
+
+
+@pytest.fixture
+def daemon(tmpdir):
+    daemon = BackyDaemon(str(tmpdir / 'config'))
+
+    base_dir = str(tmpdir)
+    source = str(tmpdir / 'test01.source')
+
+    with open(str(tmpdir / 'config'), 'w') as f:
+        f.write("""\
+---
+global:
+    base-dir: {base_dir}
+
+schedules:
+    default:
+        daily:
+            interval: 24h
+            keep: 9
+
+jobs:
+    test01:
+        source:
+            type: file
+            filename: {source}
+        schedule: default
+
+""".format(**locals()))
+
+    with open(source, 'w') as f:
+        f.write('I am your father, Luke!')
+
+    daemon._read_config()
+    return daemon
 
 
 def test_task():
@@ -55,37 +91,7 @@ def test_wait_for_finished(event_loop):
 
 
 @pytest.mark.asyncio
-def test_run_backup(event_loop, tmpdir):
-    daemon = BackyDaemon(str(tmpdir / 'config'))
-
-    base_dir = str(tmpdir)
-    source = str(tmpdir / 'test01.source')
-
-    with open(str(tmpdir / 'config'), 'w') as f:
-        f.write("""\
----
-global:
-    base-dir: {base_dir}
-
-schedules:
-    default:
-        daily:
-            interval: 24h
-            keep: 9
-
-jobs:
-    test01:
-        source:
-            type: file
-            filename: {source}
-        schedule: default
-
-""".format(**locals()))
-
-    with open(source, 'w') as f:
-        f.write('I am your father, Luke!')
-
-    daemon._read_config()
+def test_run_backup(event_loop, daemon):
     job = daemon.jobs['test01']
     t = Task(job)
     t.tags = set(['asdf'])
@@ -138,3 +144,66 @@ def test_taskpool(clock, event_loop):
 
     yield from wait_for_empty_queue()
     run.cancel()
+
+
+def test_spread(daemon):
+    job = daemon.jobs['test01']
+    assert job.spread == 19971
+    job.name = 'test02'
+    assert job.spread == 36217
+    job.name = 'asdf02'
+    assert job.spread == 14532
+
+
+def test_sla_before_first_backup(daemon):
+    job = daemon.jobs['test01']
+    # No previous backups - we consider this to be OK initially.
+    # I agree that this gives us a blind spot in the beginning. I'll
+    # think of something when this happens. Maybe keeping a log of errors
+    # or so to notice that we tried previously.
+    assert len(job.archive.history) == 0
+    assert job.sla is True
+
+
+def test_sla_over_time(daemon, clock, tmpdir):
+    job = daemon.jobs['test01']
+    os.makedirs(str(tmpdir / 'test01'))
+    # No previous backups - we consider this to be OK initially.
+    # I agree that this gives us a blind spot in the beginning. I'll
+    # think of something when this happens. Maybe keeping a log of errors
+    # or so to notice that we tried previously.
+    revision = Revision('1', job.archive)
+    # We're on a 24h cycle. 6 hours old backup is fine.
+    revision.timestamp = backy.utils.now() - datetime.timedelta(hours=6)
+    revision.materialize()
+    job.archive.scan()
+    assert len(job.archive.history) == 1
+    assert job.sla is True
+
+    # 24 hours is also fine.
+    revision.timestamp = backy.utils.now() - datetime.timedelta(hours=24)
+    revision.write_info()
+    assert job.sla is True
+
+    # 32 hours is also fine.
+    revision.timestamp = backy.utils.now() - datetime.timedelta(hours=32)
+    revision.write_info()
+    assert job.sla is True
+
+    # 24*1.5 hours is the last time that is OK.
+    revision.timestamp = backy.utils.now() - datetime.timedelta(hours=24 * 1.5)
+    revision.write_info()
+    assert job.sla is True
+
+    # 1 second later we consider this not to be good any longer.
+    revision.timestamp = backy.utils.now() - datetime.timedelta(
+        hours=24 * 1.5) - datetime.timedelta(seconds=1)
+    revision.write_info()
+    assert job.sla is False
+
+
+def test_update_status(daemon, clock, tmpdir):
+    job = daemon.jobs['test01']
+    assert job.status == ''
+    job.update_status('asdf')
+    assert job.status == 'asdf'

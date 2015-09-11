@@ -2,7 +2,7 @@ from backy.backup import Backup
 from backy.revision import Revision
 import backy
 import datetime
-import mock
+from unittest import mock
 import os.path
 import pytz
 import yaml

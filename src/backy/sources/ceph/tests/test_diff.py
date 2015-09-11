@@ -232,8 +232,8 @@ def test_read_detects_wrong_record_type(tmpdir):
 
 
 def test_read_empty_diff(tmpdir):
-    diff = RBDDiffV1(os.path.dirname(__file__)+'/nodata.rbddiff')
-    target = open(str(tmpdir/'foo'), 'wb')
+    diff = RBDDiffV1(os.path.dirname(__file__) + '/nodata.rbddiff')
+    target = open(str(tmpdir / 'foo'), 'wb')
     diff.integrate(
         target,
         'backy-ed968696-5ab0-4fe0-af1c-14cadab44661',

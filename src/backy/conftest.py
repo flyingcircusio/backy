@@ -1,8 +1,8 @@
-from unittest import mock
 import backy.backup
 import backy.main
 import backy.schedule
 import datetime
+from unittest import mock
 import os
 import pytest
 import pytz

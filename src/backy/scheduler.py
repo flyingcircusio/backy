@@ -138,7 +138,7 @@ class Job(object):
     name = None
     source = None
     schedule_name = None
-    status = None
+    status = ''
     task = None
 
     _generator_handle = None

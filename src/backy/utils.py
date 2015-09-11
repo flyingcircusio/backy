@@ -47,6 +47,8 @@ class SafeFile(object):
         #   and haven't changed the original
         # - if we're working with the original, we at least have
         #   synced by now and will restore write-protection
+        if self.f is None:
+            return
         self.f.flush()
         os.fsync(self.f)
         self.f.close()
@@ -211,8 +213,8 @@ def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=4 * MiB):
     a.seek(0, 2)
     size = a.tell()
     blocks = size // blocksize
-    sample = range(0, blocks)
-    sample = random.sample(sample, int(samplesize * blocks))
+    sample = range(0, max(blocks, 1))
+    sample = random.sample(sample, max(int(samplesize * blocks), 1))
     sample.sort()
     for block in sample:
         a.seek(block * blocksize)

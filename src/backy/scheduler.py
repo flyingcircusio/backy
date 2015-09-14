@@ -217,7 +217,7 @@ class Job(object):
             yield from task.wait_for_deadline()
             self.update_status("submitting to worker queue")
             yield from self.daemon.taskpool.put(task)
-            # XXX This is a lie
+            # XXX This status is a bit of a lie
             self.update_status("running")
             yield from task.wait_for_finished()
             self.update_status("finished")

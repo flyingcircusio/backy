@@ -207,3 +207,37 @@ def test_update_status(daemon, clock, tmpdir):
     assert job.status == ''
     job.update_status('asdf')
     assert job.status == 'asdf'
+
+
+@pytest.mark.asyncio
+def test_task_generator(daemon, clock, tmpdir, event_loop, monkeypatch):
+    # This is really just a smoke tests, but it covers the task pool,
+    # so hey, better than nothing.
+
+    task = mock.Mock()
+    task.ideal_start = backy.utils.now()
+
+    job = daemon.jobs['test01']
+    job.start()
+
+    daemon.taskpool = TaskPool(event_loop)
+
+    @asyncio.coroutine
+    def null_coroutine(self):
+        return
+
+    monkeypatch.setattr(Task, 'wait_for_deadline', null_coroutine)
+    monkeypatch.setattr(Task, 'wait_for_finished', null_coroutine)
+
+    # This patch causes a single run through the generator loop.
+    def patched_update_status(status):
+        if status == "finished":
+            job.stop()
+    job.update_status = patched_update_status
+
+    @asyncio.coroutine
+    def wait_for_job_finished():
+        while job._generator_handle is not None:
+            yield from asyncio.sleep(0.2)
+
+    yield from wait_for_job_finished()

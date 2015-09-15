@@ -21,7 +21,7 @@ def long_desc():
 
 setup(
     name='backy',
-    version='2.0b2.dev0',
+    version='2.0b2',
     install_requires=[
         'consulate',
         'fallocate',

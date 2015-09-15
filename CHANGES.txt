@@ -2,7 +2,7 @@
 Changelog
 =========
 
-2.0b2 (unreleased)
+2.0b2 (2015-09-15)
 ==================
 
 - Introduce scheduler and rework the main backup command. The backy

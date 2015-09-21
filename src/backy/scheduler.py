@@ -86,14 +86,13 @@ class Task(object):
 
 
 class TaskPool(object):
-    """Continuously processes tasks by assigning workers from a limited pool
-    ASAP.
+    """Processes tasks by assigning workers from a limited pool ASAP.
 
     Chooses the next task based on its relative priority (it's ideal
     start date).
 
-    Any task inserted into the pool will be worked on ASAP. Tasks are not
-    checked whether their deadline is due.
+    Any task inserted into the pool will be worked on ASAP. Tasks are
+    not checked whether their deadline is due.
     """
 
     def __init__(self, loop, limit=2):
@@ -103,8 +102,7 @@ class TaskPool(object):
 
     @asyncio.coroutine
     def put(self, task):
-        # Insert into a queue first, so that we can retrieve
-        # them and order them at the appropriate time.
+        """Insert task into queue for processing when due."""
         yield from self.tasks.put((task.ideal_start, task))
 
     @asyncio.coroutine
@@ -367,7 +365,8 @@ class SchedulerShell(telnetlib3.Telsh):
     shell_name = 'backy'
     shell_ver = pkg_resources.require("backy")[0].version
 
-    def cmdset_jobs(self):
+    def cmdset_jobs(self, *args):
+        """List status of all known jobs"""
         t = PrettyTable(["Job",
                          "SLA",
                          "Status",
@@ -389,14 +388,16 @@ class SchedulerShell(telnetlib3.Telsh):
 
         t.sortby = "Job"
         t.align = 'l'
-
         self.stream.write(t.get_string().replace('\n', '\r\n'))
+        return 0
 
-    def cmdset_status(self):
+    def cmdset_status(self, *args):
+        """Show worker status"""
         t = PrettyTable(["Property", "Status"])
         t.add_row(["Idle Workers", daemon.taskpool.workers._value + 1])
         t.sortby = "Property"
         self.stream.write(t.get_string().replace('\n', '\r\n'))
+        return 0
 
 
 daemon = None
@@ -415,6 +416,7 @@ def main(config_file):
     daemon = BackyDaemon(config_file)
     daemon.start(loop)
 
+    logger.info('starting telnet server on localhost:6023')
     func = loop.create_server(
         lambda: telnetlib3.TelnetServer(shell=SchedulerShell),
         '127.0.0.1', 6023)

@@ -88,7 +88,9 @@ def main():
     parser.add_argument(
         '-v', '--verbose', action='store_true', help='verbose output')
     parser.add_argument(
-        '-b', '--backupdir', default='.')
+        '-b', '--backupdir', default='.', metavar='DIR',
+        help='directory where backups and logs are written to '
+        '(default: %(default)s)')
 
     subparsers = parser.add_subparsers()
 

@@ -1,7 +1,4 @@
-# This should be only one line. If it must be multi-line, indent the second
-# line onwards to keep the PKG-INFO file format intact.
-"""Backup and restore for block devices.
-"""
+"""Backup and restore for block devices."""
 
 from setuptools import setup, find_packages
 import glob
@@ -63,7 +60,6 @@ License :: OSI Approved :: GNU General Public License v3 (GPLv3)
 Operating System :: POSIX
 Programming Language :: Python
 Programming Language :: Python :: 3
-Programming Language :: Python :: 3.2
 Programming Language :: Python :: 3.3
 Programming Language :: Python :: 3.4
 Topic :: System :: Archiving :: Backup

@@ -47,10 +47,11 @@ setup(
 
     """,
     author=('Christian Theune <ct@flyingcircus.io>, '
+            'Christian Kauhaus <kc@flyingcircus.io>, '
             'Daniel Kraft <daniel.kraft@d9t.de>'),
     author_email='ct@flyingcircus.io',
     license='GPL-3',
-    url='https://bitbucket.org/flyingcircus/backy/',
+    url='https://bitbucket.org/flyingcircus/backy',
     keywords='backup',
     classifiers="""\
 Development Status :: 4 - Beta

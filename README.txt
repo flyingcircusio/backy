@@ -124,6 +124,7 @@ Authors
 
 * Daniel Kraft <daniel.kraft@d9t.de>
 * Christian Theune <ct@flyingcircus.io>
+* Christian Kauhaus <kc@flyingcircus.io>
 
 
 License

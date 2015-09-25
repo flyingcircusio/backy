@@ -20,6 +20,8 @@ pip-selfcheck.json
 report.xml
 src/backy.egg-info/
 *.sublime*
-*.swp
+*.sw[po]
 tags
 vagrant/.vagrant
+.todo
+backy.log

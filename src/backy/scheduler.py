@@ -3,6 +3,7 @@ from backy.schedule import Schedule
 from prettytable import PrettyTable
 import asyncio
 import backy.utils
+import collections
 import datetime
 import fcntl
 import hashlib
@@ -334,7 +335,7 @@ class BackyDaemon(object):
 
         if not os.path.exists(self.status_file):
             print("UNKNOWN: No status file found at {}".format(
-                  self.status_file))
+                self.status_file))
             sys.exit(3)
 
         # The output should be relatively new. Let's say 5 min max.
@@ -398,6 +399,15 @@ class SchedulerShell(telnetlib3.Telsh):
         t.sortby = "Property"
         self.stream.write(t.get_string().replace('\n', '\r\n'))
         return 0
+
+    _regular_cmds = collections.OrderedDict([
+        ('jobs', None),
+        ('status', None),
+        ('quit', None),
+    ])
+
+    autocomplete_cmdset = _regular_cmds + collections.OrderedDict([
+        ('help', _regular_cmds)])
 
 
 daemon = None

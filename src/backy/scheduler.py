@@ -400,14 +400,14 @@ class SchedulerShell(telnetlib3.Telsh):
         self.stream.write(t.get_string().replace('\n', '\r\n'))
         return 0
 
-    _regular_cmds = collections.OrderedDict([
+    autocomplete_cmdset = collections.OrderedDict([
         ('jobs', None),
         ('status', None),
         ('quit', None),
     ])
 
-    autocomplete_cmdset = _regular_cmds + collections.OrderedDict([
-        ('help', _regular_cmds)])
+    autocomplete_cmdset.update(collections.OrderedDict([
+        ('help', autocomplete_cmdset)]))
 
 
 daemon = None

@@ -86,13 +86,12 @@ class Revision(object):
 
     def defrag(self):
         try:
-            cmd(['btrfs', '--help'])
+            cmd(['btrfs', '--version'])
         except (subprocess.CalledProcessError, FileNotFoundError):
-            logger.warn('btrfs not found.')
             return
         try:
-            cmd('btrfs filesystem defragment {}/*'.format(
-                os.path.dirname(self.filename)), shell=True)
+            subprocess.check_call(['btrfs', 'filesystem', 'defragment', '-r',
+                                   os.path.dirname(self.filename)])
         except subprocess.CalledProcessError:
             logger.warn('Could not btrfs defrag. Is this a btrfs volume?')
 

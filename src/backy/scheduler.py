@@ -281,7 +281,7 @@ class BackyDaemon(object):
 
     def start(self, loop):
         # Ensure single daemon instance.
-        f = open(self.config_file, 'a+')
+        f = open(self.config_file, 'r+')
         fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
         self.loop = loop

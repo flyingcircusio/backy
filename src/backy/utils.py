@@ -161,24 +161,25 @@ def format_bytes_flexible(number):
     return '%s %s' % (format % (number / factor), label)
 
 
-ZEROES_PAT = b'\x00' * 1024 * 4
+PUNCH_SIZE = 16 * kiB
+ZEROES = b'\x00' * PUNCH_SIZE
 
 
 def safe_copy(source, target):
     while True:
-        chunk = source.read(4 * 1024 ** 2)
+        chunk = source.read(4 * MiB)
         if not chunk:
             break
-        # Search for zeroes that we can make sparse.
+        # Search for zeroes that we can make sparse.  16 kiB blocks are a good
+        # compromise between sparsiness and fragmentation.
         pat_offset = 0
-        pat_size = 4 * 1024
         while True:
-            if chunk[pat_offset:pat_offset + pat_size] == ZEROES_PAT:
-                punch_hole(target, target.tell(), pat_size)
-                target.seek(pat_size, 1)
+            if chunk[pat_offset:pat_offset + PUNCH_SIZE] == ZEROES:
+                punch_hole(target, target.tell(), PUNCH_SIZE)
+                target.seek(PUNCH_SIZE, 1)
             else:
-                target.write(chunk[pat_offset:pat_offset + pat_size])
-            pat_offset += pat_size
+                target.write(chunk[pat_offset:pat_offset + PUNCH_SIZE])
+            pat_offset += PUNCH_SIZE
             if pat_offset > len(chunk):
                 break
     target.truncate()

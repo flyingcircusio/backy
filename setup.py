@@ -24,7 +24,6 @@ setup(
         'fallocate',
         'nagiosplugin',
         'prettytable',
-        'pytest-asyncio',
         'pytz',
         'PyYaml',
         'setuptools',
@@ -33,6 +32,7 @@ setup(
     ],
     extras_require={
         'test': [
+            'pytest-asyncio',
         ],
     },
     entry_points="""

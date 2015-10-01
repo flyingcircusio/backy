@@ -1,4 +1,5 @@
 from backy.utils import SafeFile
+from backy.ext_deps import BACKY_CP, BACKY_BTRFS
 import backy.utils
 import datetime
 import glob
@@ -19,12 +20,12 @@ def cp_reflink(source, target):
     # filesystem.
     try:
         with open('/dev/null', 'wb') as devnull:
-            cmd(['cp', '--reflink=always', source, target], stderr=devnull)
+            cmd([BACKY_CP, '--reflink=always', source, target], stderr=devnull)
     except subprocess.CalledProcessError:
-        logger.warn('Performing non-COW copy: {} -> {}'.format(source, target))
+        logger.warn('Performing non-COW copy: %s -> %s', source, target)
         if os.path.exists(target):
             os.unlink(target)
-        cmd(['cp', source, target])
+        cmd([BACKY_CP, source, target])
 
 
 class Revision(object):
@@ -86,12 +87,12 @@ class Revision(object):
 
     def defrag(self):
         try:
-            cmd(['btrfs', '--version'])
+            cmd([BACKY_BTRFS, '--version'])
         except (subprocess.CalledProcessError, FileNotFoundError):
             return
         try:
-            subprocess.check_call(['btrfs', 'filesystem', 'defragment', '-r',
-                                   os.path.dirname(self.filename)])
+            subprocess.check_call([BACKY_BTRFS, 'filesystem', 'defragment',
+                                   '-r', os.path.dirname(self.filename)])
         except subprocess.CalledProcessError:
             logger.warn('Could not btrfs defrag. Is this a btrfs volume?')
 

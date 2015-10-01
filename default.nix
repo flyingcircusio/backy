@@ -60,10 +60,78 @@ let
     doCheck = false;
   };
 
-in pythonPackages.buildPythonPackage {
+  pytestasyncio = pythonPackages.buildPythonPackage rec {
+    name = "pytest-asyncio-0.2.0";
+    src = pkgs.fetchurl {
+      url = "https://pypi.python.org/packages/source/p/pytest-asyncio/${name}.tar.gz";
+      md5 = "4cd7009570967eb5592614593cb1a45f";
+    };
+    buildInputs = [
+      pythonPackages.pytest
+    ];
+  };
+
+  pytestcapturelog = pythonPackages.buildPythonPackage rec {
+    name = "pytest-capturelog-0.7";
+    src = pkgs.fetchurl {
+      url =
+      "https://pypi.python.org/packages/source/p/pytest-capturelog/${name}.tar.gz";
+      md5 = "cfeac23d8ed254deaeb50a8c0aa141e9";
+    };
+    buildInputs = [
+      pythonPackages.pytest
+    ];
+  };
+
+  pytestcodecheckers = pythonPackages.buildPythonPackage rec {
+    name = "pytest-codecheckers-0.2";
+    src = pkgs.fetchurl {
+      url = "https://pypi.python.org/packages/source/p/pytest-codecheckers/${name}.tar.gz";
+      md5 = "5e7449fc6cd02d35cc11e21709ce1357";
+    };
+    buildInputs = [
+      pythonPackages.pytest
+      pythonPackages.pep8
+      pythonPackages.pyflakes
+    ];
+  };
+
+  pytesttimeout = pythonPackages.buildPythonPackage rec {
+    name = "pytest-timeout-0.5";
+    src = pkgs.fetchurl {
+      url = "https://pypi.python.org/packages/source/p/pytest-timeout/${name}.tar.gz";
+      md5 = "0c44e5e03b15131498a86169000cb050";
+    };
+    buildInputs = [
+      pythonPackages.pytest
+    ];
+  };
+
+  pytestcov = pythonPackages.buildPythonPackage (rec {
+    name = "pytest-cov-2.1.0";
+
+    src = pkgs.fetchurl {
+      url = "https://pypi.python.org/packages/source/p/pytest-cov/${name}.tar.gz";
+      md5 = "98e94f5be88423f6251e7bad59fa6c06";
+    };
+
+   buildInputs = [ pythonPackages.coverage pythonPackages.pytest ];
+  });
+
+
+in pythonPackages.buildPythonPackage rec {
   name = "backy-2.0b3.dev0";
   src = ./.;
   buildInputs = [
+    pkgs.makeWrapper
+    pytestasyncio
+    pytestcapturelog
+    pytestcodecheckers
+    pytestcov
+    pytesttimeout
+    pythonPackages.pytest
+    pythonPackages.pytestcache
+    pythonPackages.coverage
   ];
   propagatedBuildInputs = [
     consulate
@@ -76,4 +144,19 @@ in pythonPackages.buildPythonPackage {
     pythonPackages.pyyaml
     pythonPackages.requests2
   ];
+  checkPhase = ''
+    export PYTHONPATH="${src}/src:$PYTHONPATH"
+    py.test -vv
+  '';
+  postInstall = ''
+    wrapProgram $out/bin/backy \
+      --set BACKY_CP "${pkgs.coreutils}/bin/cp" \
+      --set BACKY_BTRFS "${pkgs.btrfsProgs}/bin/btrfs"
+  '';
+  shellHook = ''
+    alias backy="python3 -c 'import backy.main; backy.main.main()'"
+    export BACKY_CP="${pkgs.coreutils}/bin/cp"
+    export BACKY_BTRFS="${pkgs.btrfsProgs}/bin/btrfs"
+    export PYTHONPATH="${src}/src:$PYTHONPATH"
+  '';
 }

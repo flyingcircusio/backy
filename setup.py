@@ -32,7 +32,13 @@ setup(
     ],
     extras_require={
         'test': [
+            'pytest',
             'pytest-asyncio',
+            'pytest-cache',
+            'pytest-capturelog',
+            'pytest-codecheckers',
+            'pytest-cov',
+            'pytest-timeout',
         ],
     },
     entry_points="""

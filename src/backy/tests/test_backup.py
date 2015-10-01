@@ -13,7 +13,7 @@ fixtures = os.path.dirname(__file__) + '/samples'
 def simple_file_config(tmpdir):
     shutil.copy(fixtures + '/simple_file/config', str(tmpdir))
     b = Backup(str(tmpdir))
-    b._configure()
+    b.configure()
     return b
 
 

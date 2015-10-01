@@ -1,3 +1,4 @@
+from backy.ext_deps import RBD
 from backy.revision import Revision
 from backy.sources.ceph.source import CephRBD
 from unittest.mock import Mock, call
@@ -29,8 +30,9 @@ def test_context_manager(monkeypatch, backup):
         pass
 
     assert check_output.call_args_list == [
-        call(['rbd', '--no-progress', 'snap', 'create', 'test/foo@backy-1']),
-        call(['rbd', '--no-progress', '--format=json', 'snap', 'ls',
+        call([RBD, '--no-progress', 'snap', 'create',
+              'test/foo@backy-1']),
+        call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
               'test/foo'])]
 
 
@@ -56,10 +58,11 @@ def test_context_manager_cleans_out_snapshots(monkeypatch, backup):
         backup.archive.scan()
 
     assert check_output.call_args_list == [
-        call(['rbd', '--no-progress', 'snap', 'create', 'test/foo@backy-1']),
-        call(['rbd', '--no-progress', '--format=json', 'snap', 'ls',
+        call([RBD, '--no-progress', 'snap', 'create',
+              'test/foo@backy-1']),
+        call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
               'test/foo']),
-        call(['rbd', '--no-progress', 'snap', 'rm', 'test/foo@backy-2'])]
+        call([RBD, '--no-progress', 'snap', 'rm', 'test/foo@backy-2'])]
 
 
 def test_choose_full_without_parent(monkeypatch, backup):
@@ -182,15 +185,15 @@ def test_diff_backup(monkeypatch, backup, tmpdir):
         source.diff()
 
     assert check_output.call_args_list == [
-        call(['rbd', '--no-progress', 'snap', 'create',
+        call([RBD, '--no-progress', 'snap', 'create',
              'test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802']),
-        call(['rbd', '--no-progress', 'export-diff',
+        call([RBD, '--no-progress', 'export-diff',
               'test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802',
               '{}/f0e7292e-4ad8-4f2e-86d6-f40dca2aa802.rbddiff'.format(tmpdir),
               '--from-snap', 'backy-ed968696-5ab0-4fe0-af1c-14cadab44661']),
-        call(['rbd', '--no-progress', '--format=json', 'snap', 'ls',
-             'test/foo']),
-        call(['rbd', '--no-progress', 'snap', 'rm',
+        call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
+              'test/foo']),
+        call([RBD, '--no-progress', 'snap', 'rm',
               'test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802'])]
 
 
@@ -217,7 +220,7 @@ def test_full_backup(monkeypatch, backup, tmpdir):
         b'{}',
         # showmapped
         '{{"rbd0": {{"pool": "test", "name": "foo", "snap": "backy-a0", \
-                    "device": "{}"}}}}'.format(rbd_source).encode('ascii'),
+                     "device": "{}"}}}}'.format(rbd_source).encode('ascii'),
         # unmap
         b'{}',
         # snap ls
@@ -228,13 +231,14 @@ def test_full_backup(monkeypatch, backup, tmpdir):
         source.full()
 
     assert check_output.call_args_list == [
-        call(['rbd', '--no-progress', 'snap', 'create', 'test/foo@backy-a0']),
-        call(['rbd', '--no-progress', '--read-only', 'map',
+        call([RBD, '--no-progress', 'snap', 'create',
               'test/foo@backy-a0']),
-        call(['rbd', '--no-progress', '--format=json', 'showmapped']),
-        call(['rbd', '--no-progress', 'unmap', rbd_source]),
-        call(['rbd', '--no-progress', '--format=json', 'snap', 'ls',
-             'test/foo'])]
+        call([RBD, '--no-progress', '--read-only', 'map',
+              'test/foo@backy-a0']),
+        call([RBD, '--no-progress', '--format=json', 'showmapped']),
+        call([RBD, '--no-progress', 'unmap', rbd_source]),
+        call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
+              'test/foo'])]
 
 
 def test_verify_fail(monkeypatch, backup, tmpdir):
@@ -272,13 +276,13 @@ def test_verify_fail(monkeypatch, backup, tmpdir):
         assert not source.verify()
 
     assert check_output.call_args_list == [
-        call(['rbd', '--no-progress', 'snap', 'create', 'test/foo@backy-a0']),
-        call(['rbd', '--no-progress', '--read-only', 'map',
+        call([RBD, '--no-progress', 'snap', 'create', 'test/foo@backy-a0']),
+        call([RBD, '--no-progress', '--read-only', 'map',
               'test/foo@backy-a0']),
-        call(['rbd', '--no-progress', '--format=json', 'showmapped']),
-        call(['rbd', '--no-progress', 'unmap', rbd_source]),
-        call(['rbd', '--no-progress', '--format=json', 'snap', 'ls',
-             'test/foo'])]
+        call([RBD, '--no-progress', '--format=json', 'showmapped']),
+        call([RBD, '--no-progress', 'unmap', rbd_source]),
+        call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
+              'test/foo'])]
 
 
 def test_verify(monkeypatch, backup, tmpdir):
@@ -319,10 +323,10 @@ def test_verify(monkeypatch, backup, tmpdir):
         assert source.verify()
 
     assert check_output.call_args_list == [
-        call(['rbd', '--no-progress', 'snap', 'create', 'test/foo@backy-a0']),
-        call(['rbd', '--no-progress', '--read-only', 'map',
+        call([RBD, '--no-progress', 'snap', 'create', 'test/foo@backy-a0']),
+        call([RBD, '--no-progress', '--read-only', 'map',
               'test/foo@backy-a0']),
-        call(['rbd', '--no-progress', '--format=json', 'showmapped']),
-        call(['rbd', '--no-progress', 'unmap', rbd_source]),
-        call(['rbd', '--no-progress', '--format=json', 'snap', 'ls',
-             'test/foo'])]
+        call([RBD, '--no-progress', '--format=json', 'showmapped']),
+        call([RBD, '--no-progress', 'unmap', rbd_source]),
+        call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
+              'test/foo'])]

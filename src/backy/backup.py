@@ -93,7 +93,7 @@ class Backup(object):
         self.archive = Archive(self.path)
         logger.debug('Backup("{}")'.format(self.path))
 
-    def _configure(self):
+    def configure(self):
         if self.config is not None:
             return
 

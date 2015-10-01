@@ -1,4 +1,4 @@
-from backy.ext_deps import BACKY_RBD
+from backy.ext_deps import RBD
 from backy.sources.ceph.diff import RBDDiffV1
 from backy.sources.ceph.rbd import RBDClient
 import io
@@ -12,13 +12,13 @@ def test_rbd_command_wrapper(check_output):
     client = RBDClient()
 
     client._rbd(['foo'])
-    check_output.assert_called_with([BACKY_RBD, '--no-progress', 'foo'])
+    check_output.assert_called_with([RBD, '--no-progress', 'foo'])
 
     check_output.return_value = b'{"asdf": 1}'
     result = client._rbd(['foo'], format='json')
     assert result == {'asdf': 1}
     check_output.assert_called_with(
-        [BACKY_RBD, '--no-progress', '--format=json', 'foo'])
+        [RBD, '--no-progress', '--format=json', 'foo'])
 
 
 @pytest.fixture

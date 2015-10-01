@@ -33,11 +33,11 @@ class Commands(object):
     def __init__(self, path):
         self._backup = backy.backup.Backup(path)
 
-    def init(self, type, source):
-        self._backup.init(type, source)
+    def init(self, type_, source):
+        self._backup.init(type_, source)
 
     def status(self):
-        self._backup._configure()
+        self._backup.configure()
         total_bytes = 0
 
         t = PrettyTable(["Date", "ID", "Size", "Duration", "Tags"])
@@ -61,7 +61,7 @@ class Commands(object):
             format_bytes_flexible(total_bytes)))
 
     def backup(self, tags):
-        self._backup._configure()
+        self._backup.configure()
         try:
             self._backup.backup(tags)
         except IOError as e:
@@ -70,7 +70,7 @@ class Commands(object):
             logger.info('Backup already in progress.')
 
     def restore(self, revision, target):
-        self._backup._configure()
+        self._backup.configure()
         self._backup.restore(revision, target)
 
     def scheduler(self, config):

@@ -1,5 +1,5 @@
 from .utils import SafeFile
-from .ext_deps import BACKY_CP, BACKY_BTRFS
+from .ext_deps import CP, BTRFS
 import backy.utils
 import datetime
 import glob
@@ -16,16 +16,19 @@ cmd = subprocess.check_output
 
 
 def cp_reflink(source, target):
+    if os.environ.get('BACKY_FORGET_ABOUT_BTRFS', None):
+        cmd([CP, source, target])
+        return
     # We can't tell if reflink is really supported. It depends on the
     # filesystem.
     try:
         with open('/dev/null', 'wb') as devnull:
-            cmd([BACKY_CP, '--reflink=always', source, target], stderr=devnull)
+            cmd([CP, '--reflink=always', source, target], stderr=devnull)
     except subprocess.CalledProcessError:
         logger.warn('Performing non-COW copy: %s -> %s', source, target)
         if os.path.exists(target):
             os.unlink(target)
-        cmd([BACKY_CP, source, target])
+        cmd([CP, source, target])
 
 
 class Revision(object):
@@ -69,7 +72,7 @@ class Revision(object):
 
     @property
     def filename(self):
-        return '{}/{}'.format(self.archive.path, self.uuid)
+        return os.path.join(self.archive.path, str(self.uuid))
 
     @property
     def info_filename(self):
@@ -86,12 +89,10 @@ class Revision(object):
         self.writable()
 
     def defrag(self):
-        try:
-            cmd([BACKY_BTRFS, '--version'])
-        except (subprocess.CalledProcessError, FileNotFoundError):
+        if os.environ.get('BACKY_FORGET_ABOUT_BTRFS', None):
             return
         try:
-            subprocess.check_call([BACKY_BTRFS, 'filesystem', 'defragment',
+            subprocess.check_call([BTRFS, 'filesystem', 'defragment',
                                    '-r', os.path.dirname(self.filename)])
         except subprocess.CalledProcessError:
             logger.warn('Could not btrfs defrag. Is this a btrfs volume?')

@@ -146,6 +146,7 @@ in pythonPackages.buildPythonPackage rec {
   ];
   checkPhase = ''
     runHook shellHook
+    export BACKY_FORGET_ABOUT_BTRFS=1
     py.test ${pytest_args}
   '';
   postInstall = ''
@@ -153,12 +154,14 @@ in pythonPackages.buildPythonPackage rec {
       --set BACKY_CMD "$tmp_path/bin/backy" \
       --set BACKY_BTRFS "${pkgs.btrfsProgs}/bin/btrfs" \
       --set BACKY_CP "${pkgs.coreutils}/bin/cp" \
-      --set BACKY_RBD "${pkgs.ceph}/bin/rbd"
+      --set BACKY_RBD "${pkgs.ceph}/bin/rbd" \
+      --set BACKY_BASH "${pkgs.bash}/bin/bash"
   '';
   postShellHook = ''
     export BACKY_CMD="$tmp_path/bin/backy"
     export BACKY_BTRFS="${pkgs.btrfsProgs}/bin/btrfs"
     export BACKY_CP="${pkgs.coreutils}/bin/cp"
     export BACKY_RBD="${pkgs.ceph}/bin/rbd"
+    export BACKY_BASH="${pkgs.bash}/bin/bash"
   '';
 }

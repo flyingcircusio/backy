@@ -1,3 +1,4 @@
+from backy.ext_deps import BASH
 from backy.tests import Ellipsis
 import backy.backup
 import os
@@ -30,7 +31,7 @@ def test_smoketest_internal(tmpdir):
     backup.init('file', source1)
 
     # Backup first state
-    backup._configure()
+    backup.configure()
     backup.source.filename = source1
     backup.backup(tags='test')
 
@@ -96,9 +97,8 @@ def test_smoketest_internal(tmpdir):
 
 
 def test_smoketest_external():
-    output = subprocess.check_output(
-        os.path.dirname(__file__) + '/../../../smoketest.sh',
-        shell=True)
+    output = subprocess.check_output([
+        BASH, os.path.dirname(__file__) + '/../../../smoketest.sh'])
     output = output.decode('utf-8')
     assert Ellipsis("""\
 Using /... as workspace.
@@ -106,22 +106,19 @@ Generating Test Data.. Done.
 Backing up img_state1.img. Done.
 Restoring img_state1.img from level 0. Done.
 Diffing restore_state1.img against img_state1.img. Success.
-Backing up img_state2.img. ...
-Done.
+Backing up img_state2.img. Done.
 Restoring img_state2.img from level 0. Done.
 Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 1. Done.
 Diffing restore_state1.img against img_state1.img. Success.
-Backing up img_state2.img again. ...
-Done.
+Backing up img_state2.img again. Done.
 Restoring img_state2.img from level 0. Done.
 Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state2.img from level 1. Done.
 Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 2. Done.
 Diffing restore_state1.img against img_state1.img. Success.
-Backing up img_state3.img. ...
-Done.
+Backing up img_state3.img. Done.
 Restoring img_state3.img from level 0. Done.
 Diffing restore_state3.img against img_state3.img. Success.
 Restoring img_state2.img from level 1. Done.

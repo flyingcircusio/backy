@@ -1,11 +1,11 @@
 #!/bin/bash
 
 set -e
+umask 022
 
-HERE=$( cd $( dirname $0 ); pwd )
+HERE=$(cd $(dirname $0); pwd)
 BACKY="${HERE}/bin/backy"
-DIFF=/usr/bin/diff
-BACKUP=$( mktemp -d -t backy.test.XXXXX )
+BACKUP=$(mktemp -d -t backy.test.XXXXX)
 
 mkdir ${BACKUP}/backup
 cd ${BACKUP}/backup
@@ -37,7 +37,7 @@ $BACKY restore -r 0 ../restore_state1.img
 echo "Done."
 
 echo -n "Diffing restore_state1.img against img_state1.img. "
-res=$($DIFF $BACKUP/restore_state1.img $BACKUP/img_state1.img)
+res=$(diff $BACKUP/restore_state1.img $BACKUP/img_state1.img)
 if [ "" == "$res" ]; then
     echo "Success."
 else
@@ -59,7 +59,7 @@ $BACKY restore -r 0 ../restore_state2.img
 echo "Done."
 
 echo -n "Diffing restore_state2.img against img_state2.img. "
-res=$($DIFF $BACKUP/restore_state2.img $BACKUP/img_state2.img)
+res=$(diff $BACKUP/restore_state2.img $BACKUP/img_state2.img)
 if [ "" == "$res" ]; then
     echo "Success."
 else
@@ -72,7 +72,7 @@ $BACKY restore -r 1 ../restore_state1.img
 echo "Done."
 
 echo -n "Diffing restore_state1.img against img_state1.img. "
-res=$($DIFF $BACKUP/restore_state1.img $BACKUP/img_state1.img)
+res=$(diff $BACKUP/restore_state1.img $BACKUP/img_state1.img)
 if [ "" == "$res" ]; then
     echo "Success."
 else
@@ -95,7 +95,7 @@ $BACKY restore -r 0 ../restore_state2.img
 echo "Done."
 
 echo -n "Diffing restore_state2.img against img_state2.img. "
-res=$($DIFF $BACKUP/restore_state2.img $BACKUP/img_state2.img)
+res=$(diff $BACKUP/restore_state2.img $BACKUP/img_state2.img)
 if [ "" == "$res" ]; then
     echo "Success."
 else
@@ -110,7 +110,7 @@ $BACKY restore -r 1 ../restore_state2.img
 echo "Done."
 
 echo -n "Diffing restore_state2.img against img_state2.img. "
-res=$($DIFF $BACKUP/restore_state2.img $BACKUP/img_state2.img)
+res=$(diff $BACKUP/restore_state2.img $BACKUP/img_state2.img)
 if [ "" == "$res" ]; then
     echo "Success."
 else
@@ -123,7 +123,7 @@ $BACKY restore -r 2 ../restore_state1.img
 echo "Done."
 
 echo -n "Diffing restore_state1.img against img_state1.img. "
-res=$($DIFF $BACKUP/restore_state1.img $BACKUP/img_state1.img)
+res=$(diff $BACKUP/restore_state1.img $BACKUP/img_state1.img)
 if [ "" == "$res" ]; then
     echo "Success."
 else
@@ -133,7 +133,6 @@ fi
 
 # cleanup
 rm $BACKUP/restore_*
-
 
 
 echo -n "Backing up img_state3.img. "
@@ -146,7 +145,7 @@ $BACKY restore -r 0 ../restore_state3.img
 echo "Done."
 
 echo -n "Diffing restore_state3.img against img_state3.img. "
-res=$($DIFF $BACKUP/restore_state3.img $BACKUP/img_state3.img)
+res=$(diff $BACKUP/restore_state3.img $BACKUP/img_state3.img)
 if [ "" == "$res" ]; then
     echo "Success."
 else
@@ -159,7 +158,7 @@ $BACKY restore -r 1 ../restore_state2.img
 echo "Done."
 
 echo -n "Diffing restore_state2.img against img_state2.img. "
-res=$($DIFF $BACKUP/restore_state2.img $BACKUP/img_state2.img)
+res=$(diff $BACKUP/restore_state2.img $BACKUP/img_state2.img)
 if [ "" == "$res" ]; then
     echo "Success."
 else
@@ -174,7 +173,7 @@ $BACKY restore -r 2 ../restore_state2.img
 echo "Done."
 
 echo -n "Diffing restore_state2.img against img_state2.img. "
-res=$($DIFF $BACKUP/restore_state2.img $BACKUP/img_state2.img)
+res=$(diff $BACKUP/restore_state2.img $BACKUP/img_state2.img)
 if [ "" == "$res" ]; then
     echo "Success."
 else
@@ -187,7 +186,7 @@ $BACKY restore -r 3 ../restore_state1.img
 echo "Done."
 
 echo -n "Diffing restore_state1.img against img_state1.img. "
-res=$($DIFF $BACKUP/restore_state1.img $BACKUP/img_state1.img)
+res=$(diff $BACKUP/restore_state1.img $BACKUP/img_state1.img)
 if [ "" == "$res" ]; then
     echo "Success."
 else

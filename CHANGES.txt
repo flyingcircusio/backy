@@ -5,7 +5,10 @@ Changelog
 2.0b3 (unreleased)
 ==================
 
-- Nothing changed yet.
+- If the envionment variable BACKY_FORGET_ABOUT_BTRFS is set, special btrfs
+  features are not used. This simplifies testing on non-btrfs filesystems.
+
+- Provide Nix build script.
 
 
 2.0b2 (2015-09-15)

@@ -1,4 +1,4 @@
-from ...ext_deps import BACKY_RBD
+from ...ext_deps import RBD
 from .diff import RBDDiffV1
 import contextlib
 import json
@@ -14,7 +14,7 @@ class RBDClient(object):
 
     def _rbd(self, cmd, format=None):
         cmd = filter(None, cmd)
-        rbd = [BACKY_RBD, '--no-progress']
+        rbd = [RBD, '--no-progress']
 
         if format == 'json':
             rbd.append('--format=json')

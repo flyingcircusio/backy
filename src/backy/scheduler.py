@@ -1,6 +1,6 @@
-from backy.backup import Archive
-from backy.ext_deps import BACKY_CMD
-from backy.schedule import Schedule
+from .backup import Archive
+from .ext_deps import BACKY_CMD
+from .schedule import Schedule
 from prettytable import PrettyTable
 import asyncio
 import backy.utils
@@ -364,7 +364,7 @@ class SchedulerShell(telnetlib3.Telsh):
     shell_name = 'backy'
     shell_ver = pkg_resources.require("backy")[0].version
 
-    def cmdset_jobs(self, *args):
+    def cmdset_jobs(self, *_args):
         """List status of all known jobs"""
         t = PrettyTable(["Job",
                          "SLA",
@@ -390,7 +390,7 @@ class SchedulerShell(telnetlib3.Telsh):
         self.stream.write(t.get_string().replace('\n', '\r\n'))
         return 0
 
-    def cmdset_status(self, *args):
+    def cmdset_status(self, *_args):
         """Show worker status"""
         t = PrettyTable(["Property", "Status"])
         t.add_row(["Idle Workers", daemon.taskpool.workers._value + 1])

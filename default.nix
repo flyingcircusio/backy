@@ -145,17 +145,20 @@ in pythonPackages.buildPythonPackage rec {
     pythonPackages.requests2
   ];
   checkPhase = ''
-    export BACKY_CMD="bin/backy"
-    export PYTHONPATH="${src}/src:$PYTHONPATH"
+    runHook shellHook
     py.test ${pytest_args}
   '';
   postInstall = ''
     wrapProgram $out/bin/backy \
+      --set BACKY_CMD "$tmp_path/bin/backy" \
+      --set BACKY_BTRFS "${pkgs.btrfsProgs}/bin/btrfs" \
       --set BACKY_CP "${pkgs.coreutils}/bin/cp" \
-      --set BACKY_BTRFS "${pkgs.btrfsProgs}/bin/btrfs"
+      --set BACKY_RBD "${pkgs.ceph}/bin/rbd"
   '';
-  shellHook = ''
-    export BACKY_CP="${pkgs.coreutils}/bin/cp"
+  postShellHook = ''
+    export BACKY_CMD="$tmp_path/bin/backy"
     export BACKY_BTRFS="${pkgs.btrfsProgs}/bin/btrfs"
+    export BACKY_CP="${pkgs.coreutils}/bin/cp"
+    export BACKY_RBD="${pkgs.ceph}/bin/rbd"
   '';
 }

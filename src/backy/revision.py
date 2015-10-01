@@ -1,5 +1,5 @@
-from backy.utils import SafeFile
-from backy.ext_deps import BACKY_CP, BACKY_BTRFS
+from .utils import SafeFile
+from .ext_deps import BACKY_CP, BACKY_BTRFS
 import backy.utils
 import datetime
 import glob

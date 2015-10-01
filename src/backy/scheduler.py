@@ -1,4 +1,5 @@
 from backy.backup import Archive
+from backy.ext_deps import BACKY_CMD
 from backy.schedule import Schedule
 from prettytable import PrettyTable
 import asyncio
@@ -41,8 +42,9 @@ class Task(object):
     def backup(self, future):
         future.add_done_callback(lambda f: self.finished.set())
 
-        logger.info("{}: running backup {}, was due at {}".format(
-            self.job.name, ', '.join(self.tags), self.ideal_start.isoformat()))
+        logger.info('%s: running backup %s, was due at %s',
+                    self.job.name, ', '.join(self.tags),
+                    self.ideal_start.isoformat())
 
         # Update config
         # TODO: this isn't true async, but it works for now.
@@ -60,9 +62,7 @@ class Task(object):
 
         # Run backup command
         cmd = "{} -b {} backup {}".format(
-            self.job.daemon.backy_cmd,
-            backup_dir,
-            ','.join(self.tags))
+            BACKY_CMD, backup_dir, ','.join(self.tags))
         process = yield from asyncio.create_subprocess_shell(cmd)
         yield from process.communicate()
 
@@ -237,8 +237,6 @@ class BackyDaemon(object):
     base_dir = '/srv/backy'
 
     def __init__(self, config_file):
-        self.backy_cmd = os.path.join(
-            os.getcwd(), os.path.dirname(sys.argv[0]), 'backy')
         self.config_file = config_file
         self.config = None
         self.schedules = {}

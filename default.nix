@@ -1,4 +1,4 @@
-{ }:
+{ pytest_args ? "" }:
 
 let
   pkgs = import <nixpkgs> { };
@@ -145,8 +145,9 @@ in pythonPackages.buildPythonPackage rec {
     pythonPackages.requests2
   ];
   checkPhase = ''
+    export BACKY_CMD="bin/backy"
     export PYTHONPATH="${src}/src:$PYTHONPATH"
-    py.test -vv
+    py.test ${pytest_args}
   '';
   postInstall = ''
     wrapProgram $out/bin/backy \
@@ -154,9 +155,7 @@ in pythonPackages.buildPythonPackage rec {
       --set BACKY_BTRFS "${pkgs.btrfsProgs}/bin/btrfs"
   '';
   shellHook = ''
-    alias backy="python3 -c 'import backy.main; backy.main.main()'"
     export BACKY_CP="${pkgs.coreutils}/bin/cp"
     export BACKY_BTRFS="${pkgs.btrfsProgs}/bin/btrfs"
-    export PYTHONPATH="${src}/src:$PYTHONPATH"
   '';
 }

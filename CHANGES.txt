@@ -11,6 +11,8 @@ Changelog
 
 - Provide Nix build script.
 
+- Generate requirements.txt automatically from buildout versions.cfg.
+
 
 2.0b2 (2015-09-15)
 ==================

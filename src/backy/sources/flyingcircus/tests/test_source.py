@@ -35,6 +35,7 @@ def test_flyingcircus_consul_interaction(monkeypatch):
     s._create_snapshot('asdf')
 
 
+@pytest.mark.slow
 def test_flyingcircus_consul_interaction_timeout(monkeypatch):
     consul_class = mock.Mock()
     consul = consul_class()

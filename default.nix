@@ -146,7 +146,6 @@ in pythonPackages.buildPythonPackage rec {
   ];
   checkPhase = ''
     runHook shellHook
-    export BACKY_FORGET_ABOUT_BTRFS=1
     py.test ${pytest_args}
   '';
   postInstall = ''

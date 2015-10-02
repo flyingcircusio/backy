@@ -1,24 +1,32 @@
 """Backup and restore for block devices."""
 
 from setuptools import setup, find_packages
+import codecs
 import glob
-import os.path
+import os.path as p
 
 
-def project_path(*names):
-    return os.path.join(os.path.dirname(__file__), *names)
+def open_project_path(filename):
+    fullname = p.join(p.dirname(__file__), filename)
+    return codecs.open(fullname, encoding='ascii')
 
 
 def long_desc():
     parts = []
     for name in ('README.txt', 'CHANGES.txt'):
-        with open(project_path(name)) as f:
+        with open_project_path(name) as f:
             parts.append(f.read())
-    return '\n\n'.join(parts)
+    return '\n'.join(parts)
+
+
+def version():
+    with open_project_path('version.txt') as f:
+        return f.read().strip()
+
 
 setup(
     name='backy',
-    version='2.0b3.dev0',
+    version=version(),
     install_requires=[
         'consulate',
         'fallocate',
@@ -76,6 +84,6 @@ Topic :: System :: Archiving :: Backup
     packages=find_packages('src'),
     package_dir={'': 'src'},
     include_package_data=True,
-    data_files=[('', glob.glob(project_path('*.txt')))],
+    data_files=[('', glob.glob('*.txt'))],
     zip_safe=False,
 )

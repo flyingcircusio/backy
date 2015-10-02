@@ -1,0 +1,13 @@
+Hacking
+=======
+
+Backy is intended to be compatible with Python 3.3 and 3.4. It is expected to
+work properly on Linux and Mac OS X, even though specific backends may not be
+avaible on some platforms::
+
+    $ hg clone https://bitbucket.org/flyingcircus/backy
+    $ cd backy
+    $ virtualenv --python=python3.4 .
+    $ bin/pip install zc.buildout
+    $ bin/buildout
+    $ bin/py.test

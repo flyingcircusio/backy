@@ -10,4 +10,4 @@ avaible on some platforms::
     $ virtualenv --python=python3.4 .
     $ bin/pip install zc.buildout
     $ bin/buildout
-    $ bin/py.test
+    $ bin/py.test -m 1

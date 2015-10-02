@@ -5,6 +5,8 @@ Changelog
 2.0b3 (unreleased)
 ==================
 
+- Improve telnet console.
+
 - If the envionment variable BACKY_FORGET_ABOUT_BTRFS is set, special btrfs
   features (reflink copies, defrag) are not used. This is intended to run tests
   on non-btrfs filesystems.

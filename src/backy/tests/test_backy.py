@@ -96,6 +96,7 @@ def test_smoketest_internal(tmpdir, forget_about_btrfs):
     assert open(source1, 'rb').read() == open(restore_target, 'rb').read()
 
 
+@pytest.mark.slow
 def test_smoketest_external(forget_about_btrfs):
     output = subprocess.check_output([
         BASH, os.path.dirname(__file__) + '/../../../smoketest.sh'])

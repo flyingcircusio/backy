@@ -23,12 +23,11 @@ class Archive(object):
     def scan(self):
         self.history = []
         seen_uuids = set()
-        for file in glob(self.path + '/*.rev'):
+        for file in glob(os.path.join(self.path, '*.rev')):
             r = Revision.load(file, self)
-            if r.uuid in seen_uuids:
-                continue
-            seen_uuids.add(r.uuid)
-            self.history.append(r)
+            if r.uuid not in seen_uuids:
+                seen_uuids.add(r.uuid)
+                self.history.append(r)
         self.history.sort(key=lambda r: r.timestamp)
 
     def last_by_tag(self):

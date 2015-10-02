@@ -98,7 +98,6 @@ class Schedule(object):
         """Remove old revisions according to the backup schedule.
 
         Returns list of removed revisions.
-
         """
         archive.scan()
         removed = []

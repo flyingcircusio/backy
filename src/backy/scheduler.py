@@ -68,11 +68,9 @@ class Task(object):
 
         # Expire backups
         # TODO: this isn't true async, but it works for now.
-        self.job.archive.scan()
-        self.job.schedule.expire(self.job.archive)
+        self.job.expire()
 
-        logger.info("{}: finished backup.".format(self.job.name))
-
+        logger.info("%s: finished backup", self.job.name)
         future.set_result(self)
 
     @asyncio.coroutine
@@ -139,6 +137,8 @@ class Job(object):
     schedule_name = None
     status = ''
     task = None
+    path = None
+    archive = None
 
     _generator_handle = None
 
@@ -193,17 +193,19 @@ class Job(object):
     @asyncio.coroutine
     def generate_tasks(self):
         """Generate backup tasks for this job.
-         tasks based on the ideal next time in the future
-        and previous tasks to ensure we catch up quickly if the next
-        job in the future is too far away.
 
-        This may repetetively submit a task until its time has come and then
-        generate other tasks after the ideal next time has switched over.
+        Tasks are based on the ideal next time in the future and
+        previous tasks to ensure we catch up quickly if the next job in
+        the future is too far away.
 
-        It doesn't care whether the tasks have been successfully worked on or
-        not. The task pool needs to deal with that.
+        This may repetetively submit a task until its time has come and
+        then generate other tasks after the ideal next time has switched
+        over.
+
+        It doesn't care whether the tasks have been successfully worked
+        on or not. The task pool needs to deal with that.
         """
-        logger.info("{}: started task generator loop".format(self.name))
+        logger.info("%s: started task generator loop", self.name)
         while True:
             next_time, next_tags = self.schedule.next(
                 backy.utils.now(), self.spread, self.archive)
@@ -230,11 +232,17 @@ class Job(object):
             self._generator_handle.cancel()
             self._generator_handle = None
 
+    def expire(self):
+        """Remove old revisions from my archive according to the schedule."""
+        return self.schedule.expire(self.archive)
+
 
 class BackyDaemon(object):
 
+    # config defaults, will be overriden from config file
     worker_limit = 1
     base_dir = '/srv/backy'
+    status_file = os.path.join(base_dir, 'status')
 
     def __init__(self, config_file):
         self.config_file = config_file
@@ -245,21 +253,21 @@ class BackyDaemon(object):
     def _read_config(self):
         if not os.path.exists(self.config_file):
             logger.error(
-                'Could not load configuration. '
-                '`{}` does not exist.'.format(self.config_file))
+                'Could not load configuration. `%s` does not exist.',
+                self.config_file)
             raise SystemExit(1)
         with open(self.config_file, encoding='utf-8') as f:
             self.config = yaml.safe_load(f)
 
         g = self.config.get('global', {})
-        self.worker_limit = g.get('worker-limit', self.worker_limit)
-        logger.info("Worker limit: {}".format(self.worker_limit))
+        self.worker_limit = int(g.get('worker-limit', self.worker_limit))
+        logger.info("Worker limit: %s", self.worker_limit)
 
         self.base_dir = g.get('base-dir', self.base_dir)
-        logger.info("Backup location: {}".format(self.base_dir))
+        logger.info("Backup location: %s", self.base_dir)
 
-        self.status_file = g.get('status-file', self.base_dir + '/status')
-        logger.info("Status location: {}".format(self.status_file))
+        self.status_file = g.get('status-file', self.status_file)
+        logger.info("Status location: %s", self.status_file)
 
         new = {}
         for name, config in self.config['schedules'].items():
@@ -269,8 +277,7 @@ class BackyDaemon(object):
                 new[name] = Schedule()
             new[name].configure(config)
         self.schedules = new
-        logger.info(
-            "Available schedules: {}".format(', '.join(self.schedules)))
+        logger.info("Available schedules: %s", ', '.join(self.schedules))
 
         self.jobs = {}
         for name, config in self.config['jobs'].items():

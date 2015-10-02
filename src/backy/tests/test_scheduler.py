@@ -91,7 +91,7 @@ def test_wait_for_finished(event_loop):
 
 
 @pytest.mark.asyncio
-def test_run_backup(event_loop, daemon):
+def test_run_backup(event_loop, daemon, forget_about_btrfs):
     job = daemon.jobs['test01']
     t = Task(job)
     t.tags = set(['asdf'])

@@ -21,7 +21,9 @@ let
         -e "/\s\+install_requires=/d" \
         setup.py
     '';
-    doCheck = false;
+    buildInputs = [
+      pythonPackages.pytest
+    ];
   };
 
   shortuuid = pythonPackages.buildPythonPackage rec {
@@ -30,6 +32,7 @@ let
       url = "https://pypi.python.org/packages/source/s/shortuuid/${name}.tar.gz";
       md5 = "142e3ae4e7cd32d41a71deb359db4cfe";
     };
+    # test_pep8 fails for this version
     doCheck = false;
   };
 
@@ -39,7 +42,6 @@ let
       url = "https://pypi.python.org/packages/source/n/nagiosplugin/${name}.tar.gz";
       md5 = "c85e1641492d606d929b02aa262bf55d";
     };
-    doCheck = false;
   };
 
   fallocate = pythonPackages.buildPythonPackage rec {
@@ -48,7 +50,6 @@ let
       url = "https://pypi.python.org/packages/source/f/fallocate/${name}.tar.gz";
       md5 = "4c03e83699b7f4bb88c3d205032d9371";
     };
-    doCheck = false;
   };
 
   consulate = pythonPackages.buildPythonPackage rec {
@@ -57,7 +58,9 @@ let
       url = "https://pypi.python.org/packages/source/c/consulate/${name}.tar.gz";
       md5 = "15bd25472f1a8c346f36903fdf54ece5";
     };
-    doCheck = false;
+    buildInputs = [
+      pythonPackages.requests2
+    ];
   };
 
   pytestasyncio = pythonPackages.buildPythonPackage rec {
@@ -146,7 +149,6 @@ in pythonPackages.buildPythonPackage rec {
   ];
   checkPhase = ''
     runHook shellHook
-    export BACKY_FORGET_ABOUT_BTRFS=1
     py.test ${pytest_args}
   '';
   postInstall = ''

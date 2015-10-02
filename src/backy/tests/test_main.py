@@ -233,8 +233,8 @@ def test_commands_wrapper_init(commands, tmpdir):
     with pytest.raises(RuntimeError):
         # Already initialized by fixture. Doing again causes exception.
         commands.init('file', str(tmpdir) + '/source')
-    with open(str(tmpdir) + '/config', 'r') as f:
-        config = yaml.load(f.read())
+    with open(str(tmpdir) + '/config') as f:
+        config = yaml.load(f)
         assert config == {
             'filename': str(tmpdir) + '/source',
             'type': 'file'}

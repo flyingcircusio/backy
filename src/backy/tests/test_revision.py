@@ -70,7 +70,7 @@ def test_store_revision_data(tmpdir, clock):
     r.parent = 'asdf'
     r.backup = backup
     r.write_info()
-    with open(r.info_filename, 'r', encoding='utf-8') as info:
+    with open(r.info_filename, encoding='utf-8') as info:
         assert yaml.load(info) == {
             "parent": "asdf",
             "uuid": "asdf2",

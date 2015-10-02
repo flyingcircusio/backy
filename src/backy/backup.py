@@ -97,9 +97,8 @@ class Backup(object):
         if self.config is not None:
             return
 
-        f = open(self.path + '/config', 'r', encoding='utf-8')
-        self.config = yaml.load(f)
-
+        with open(os.path.join(self.path, 'config'), encoding='utf-8') as f:
+            self.config = yaml.safe_load(f)
         try:
             source_factory = select_source(self.config['type'])
         except IndexError:
@@ -127,8 +126,7 @@ class Backup(object):
 
         with SafeFile(self.path + '/config', encoding='utf-8') as f:
             f.open_new('wb')
-            d = yaml.dump(source_config)
-            f.write(d)
+            yaml.safe_dump(source_config, f)
 
     def backup(self, tags):
         self._lock()

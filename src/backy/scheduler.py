@@ -58,7 +58,7 @@ class Task(object):
             # configured environment.
             os.mkdir(backup_dir)
         with open(os.path.join(backup_dir, 'config'), 'w') as f:
-            f.write(yaml.dump(self.job.source))
+            yaml.safe_dump(self.job.source, f)
 
         # Run backup command
         cmd = "{} -b {} backup {}".format(
@@ -248,8 +248,8 @@ class BackyDaemon(object):
                 'Could not load configuration. '
                 '`{}` does not exist.'.format(self.config_file))
             raise SystemExit(1)
-        with open(self.config_file, 'r', encoding='utf-8') as f:
-            self.config = yaml.load(f)
+        with open(self.config_file, encoding='utf-8') as f:
+            self.config = yaml.safe_load(f)
 
         g = self.config.get('global', {})
         self.worker_limit = g.get('worker-limit', self.worker_limit)
@@ -323,7 +323,7 @@ class BackyDaemon(object):
             with backy.utils.SafeFile(self.status_file) as tmp:
                 tmp.protected_mode = 0o444
                 tmp.open_new('w')
-                yaml.dump(self.status(), tmp.f)
+                yaml.safe_dump(self.status(), tmp.f)
             yield from asyncio.sleep(30)
 
     def check(self):
@@ -344,8 +344,8 @@ class BackyDaemon(object):
 
         failed_jobs = []
 
-        with open(self.status_file, 'r') as f:
-            status = yaml.load(f)
+        with open(self.status_file) as f:
+            status = yaml.safe_load(f)
 
         for job in status:
             if job['sla'] != 'OK':

@@ -88,8 +88,8 @@ def test_find_revision_empty(simple_file_config):
 def test_init_ceph(tmpdir):
     backup = Backup(str(tmpdir))
     backup.init('ceph-rbd', 'test/test04')
-    config = open(str(tmpdir / 'config'))
-    config = yaml.load(config)
+    with open(str(tmpdir / 'config')) as f:
+        config = yaml.safe_load(f)
     assert config == {
         "type": "ceph-rbd",
         "image": "test04",
@@ -100,8 +100,8 @@ def test_init_file(tmpdir):
     backup = Backup(str(tmpdir))
     backup.init('file', '/dev/foo')
 
-    config = open(str(tmpdir / 'config')).read()
-    config = yaml.load(config)
+    with open(str(tmpdir / 'config')) as f:
+        config = yaml.load(f)
     assert config == {
         "type": "file",
         "filename": "/dev/foo"}

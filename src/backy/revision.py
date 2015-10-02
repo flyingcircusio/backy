@@ -55,9 +55,9 @@ class Revision(object):
         return r
 
     @classmethod
-    def load(cls, file, archive):
-        with open(file, 'r', encoding='utf-8') as f:
-            metadata = yaml.load(f)
+    def load(cls, filename, archive):
+        with open(filename, encoding='utf-8') as f:
+            metadata = yaml.safe_load(f)
         r = Revision(metadata['uuid'], archive)
         if isinstance(metadata['timestamp'], float):
             metadata['timestamp'] = datetime.datetime.fromtimestamp(
@@ -106,7 +106,7 @@ class Revision(object):
             'tags': list(self.tags)}
         with SafeFile(self.info_filename, encoding='utf-8') as f:
             f.open_new('wb')
-            f.write(yaml.dump(metadata))
+            yaml.safe_dump(metadata, f)
 
     def set_link(self, name):
         path = self.archive.path

@@ -175,6 +175,7 @@ def test_sla_over_time(daemon, clock, tmpdir):
     revision = Revision('1', job.archive)
     # We're on a 24h cycle. 6 hours old backup is fine.
     revision.timestamp = backy.utils.now() - datetime.timedelta(hours=6)
+    revision.stats['duration'] = 60.0
     revision.materialize()
     job.archive.scan()
     assert len(job.archive.history) == 1
@@ -199,6 +200,20 @@ def test_sla_over_time(daemon, clock, tmpdir):
     revision.timestamp = backy.utils.now() - datetime.timedelta(
         hours=24 * 1.5) - datetime.timedelta(seconds=1)
     revision.write_info()
+    assert job.sla is False
+
+
+def test_incomplete_revs_dont_count_for_sla(daemon, clock, tmpdir):
+    job = daemon.jobs['test01']
+    os.makedirs(str(tmpdir / 'test01'))
+    r1 = Revision('1', job.archive)
+    r1.timestamp = backy.utils.now() - datetime.timedelta(hours=48)
+    r1.stats['duration'] = 60.0
+    r1.materialize()
+    r2 = Revision('2', job.archive)
+    r2.timestamp = backy.utils.now() - datetime.timedelta(hours=1)
+    r2.materialize()
+    job.archive.scan()
     assert job.sla is False
 
 

@@ -172,12 +172,13 @@ class Job(object):
         those are not indicators whether and admin needs to do something
         right now.
         """
-        max_age = min(x['interval'] for x in self.schedule.schedule.values())
         self.archive.scan()
-        if not self.archive.history:
+        # filter out incomplete revisions
+        revs = [rev for rev in self.archive.history if 'duration' in rev.stats]
+        if not revs:
             return True
-        newest = self.archive.history[-1]
-        age = backy.utils.now() - newest.timestamp
+        age = backy.utils.now() - revs[-1].timestamp
+        max_age = min(x['interval'] for x in self.schedule.schedule.values())
         if age > max_age * 1.5:
             return False
         return True

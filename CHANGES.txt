@@ -5,7 +5,11 @@ Changelog
 2.0b4 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Fix monitoring bug where partially written images made the check go green
+  (#30).
+
+- Performance improvement: turn off line buffering in bulk file operations
+  (#20).
 
 
 2.0b3 (2015-10-02)

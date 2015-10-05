@@ -89,7 +89,7 @@ class CephRBD(object):
         logger.info('Performing full backup')
         s = self.rbd.image_reader('{}/{}@backy-{}'.format(
             self.pool, self.image, self.revision.uuid))
-        t = open(self.revision.filename, 'r+b')
+        t = open(self.revision.filename, 'r+b', buffering=0)
         with s as source, t as target:
             bytes = safe_copy(source, target)
         self.revision.stats['bytes_written'] = bytes
@@ -97,10 +97,10 @@ class CephRBD(object):
     def verify(self):
         s = self.rbd.image_reader('{}/{}@backy-{}'.format(
             self.pool, self.image, self.revision.uuid))
-        t = open(self.revision.filename, 'rb')
+        t = open(self.revision.filename, 'rb', buffering=0)
 
         self.revision.stats['ceph-verification'] = 'partial'
 
         with s as source, t as target:
-            logger.info('Performing partial verification ...')
+            logger.info('Performing partial verification')
             return files_are_roughly_equal(source, target)

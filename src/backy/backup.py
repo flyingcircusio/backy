@@ -1,12 +1,11 @@
 from backy.revision import Revision
 from backy.sources import select_source
-from backy.utils import min_date
-from backy.utils import SafeFile, safe_copy
+from backy.utils import min_date, SafeFile, safe_copy
 from glob import glob
 import fcntl
 import logging
 import os
-import os.path
+import os.path as p
 import time
 import yaml
 
@@ -17,13 +16,13 @@ class Archive(object):
     """Keeps track of existing revisions in a backup."""
 
     def __init__(self, path):
-        self.path = os.path.realpath(path)
+        self.path = p.realpath(path)
         self.history = []
 
     def scan(self):
         self.history = []
         seen_uuids = set()
-        for file in glob(os.path.join(self.path, '*.rev')):
+        for file in glob(p.join(self.path, '*.rev')):
             r = Revision.load(file, self)
             if r.uuid not in seen_uuids:
                 seen_uuids.add(r.uuid)
@@ -84,11 +83,13 @@ class Archive(object):
 
 
 class Backup(object):
+    """Access to backup images."""
 
     config = None
+    _lock_file = None
 
     def __init__(self, path):
-        self.path = os.path.realpath(path)
+        self.path = p.realpath(path)
         self.archive = Archive(self.path)
         logger.debug('Backup("{}")'.format(self.path))
 
@@ -96,7 +97,7 @@ class Backup(object):
         if self.config is not None:
             return
 
-        with open(os.path.join(self.path, 'config'), encoding='utf-8') as f:
+        with open(p.join(self.path, 'config'), encoding='utf-8') as f:
             self.config = yaml.safe_load(f)
         try:
             source_factory = select_source(self.config['type'])
@@ -107,23 +108,23 @@ class Backup(object):
         self.archive.scan()
 
     def _lock(self):
-        self._lock_file = open(self.path + '/config', 'rb')
+        self._lock_file = open(p.join(self.path, 'config'), 'rb')
         fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     def init(self, type, source):
         # Allow re-configuration in this case.
         if self.config:
             raise RuntimeError("Can not initialize configured backup objects.")
-        if not os.path.exists(self.path):
+        if not p.exists(self.path):
             os.makedirs(self.path)
-        if os.path.exists(self.path + '/config'):
+        if p.exists(p.join(self.path, 'config')):
             raise RuntimeError('Refusing to initialize with existing config.')
 
         source_factory = select_source(type)
         source_config = source_factory.config_from_cli(source)
         source_config['type'] = type
 
-        with SafeFile(self.path + '/config', encoding='utf-8') as f:
+        with SafeFile(p.join(self.path, 'config'), encoding='utf-8') as f:
             f.open_new('wb')
             yaml.safe_dump(source_config, f)
 
@@ -140,8 +141,7 @@ class Backup(object):
                             format(revision.uuid))
                 revision.remove()
 
-        tags = set(tags.split(','))
-
+        tags = set(t.strip() for t in tags.split(','))
         new_revision = Revision.create(self.archive)
         new_revision.tags = tags
         new_revision.materialize()
@@ -170,6 +170,8 @@ class Backup(object):
         self.archive.scan()
 
         r = self.archive.find_revision(revision)
-        source = open(r.filename, 'rb')
-        target = open(target, 'wb')
-        safe_copy(source, target)
+        s = open(r.filename, 'rb', buffering=0)
+        t = open(target, 'wb', buffering=0)
+        with s as source, t as target:
+            os.posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+            safe_copy(source, target)

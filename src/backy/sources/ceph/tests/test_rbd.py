@@ -137,7 +137,7 @@ def test_rbd_image_reader(rbdclient, tmpdir):
                'name': 'test04.root', 'snap': 'foo'}},
         None]
     with rbdclient.image_reader('test/test04.root@foo') as f:
-        assert isinstance(f, io.BufferedReader)
+        assert isinstance(f, io.FileIO)
         assert f.name == device
     rbdclient._rbd.assert_has_calls([
         mock.call(['--read-only', 'map', 'test/test04.root@foo']),

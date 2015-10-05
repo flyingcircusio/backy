@@ -25,8 +25,8 @@ class File(object):
 
     def backup(self):
         logger.info('Performing full backup')
-        t = open(self.revision.filename, 'wb')
-        s = open(self.filename, 'rb')
+        s = open(self.filename, 'rb', buffering=0)
+        t = open(self.revision.filename, 'r+b', buffering=0)
 
         with s as source, t as target:
             bytes = safe_copy(source, target)
@@ -34,8 +34,8 @@ class File(object):
 
     def verify(self):
         logger.info('Performing full verification')
-        s = open(self.filename, 'rb')
-        t = open(self.revision.filename, 'rb')
+        s = open(self.filename, 'rb', buffering=0)
+        t = open(self.revision.filename, 'rb', buffering=0)
 
         with s as source, t as target:
             return files_are_equal(source, target)

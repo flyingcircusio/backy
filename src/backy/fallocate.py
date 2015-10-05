@@ -24,7 +24,6 @@ def make_fallocate():
 try:
     libc_name = ctypes.util.find_library('c')
     libc = ctypes.CDLL(libc_name)
-
     _fallocate = libc.fallocate
 except AttributeError:
     logger.debug('Falling back to non-hole-punching `fallocate`.')

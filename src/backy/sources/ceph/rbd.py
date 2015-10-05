@@ -68,7 +68,7 @@ class RBDClient(object):
     @contextlib.contextmanager
     def image_reader(self, image):
         mapped = self.map(image, readonly=True)
-        source = open(mapped['device'], 'rb')
+        source = open(mapped['device'], 'rb', buffering=0)
         try:
             yield source
         finally:

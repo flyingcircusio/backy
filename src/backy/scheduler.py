@@ -286,7 +286,7 @@ class BackyDaemon(object):
 
     def start(self, loop):
         # Ensure single daemon instance.
-        f = open(self.config_file, 'r+')
+        f = open(self.config_file, 'rb')
         fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
         self.loop = loop
@@ -351,7 +351,7 @@ class BackyDaemon(object):
 
         failed_jobs = []
 
-        with open(self.status_file) as f:
+        with open(self.status_file, encoding='utf-8') as f:
             status = yaml.safe_load(f)
 
         for job in status:

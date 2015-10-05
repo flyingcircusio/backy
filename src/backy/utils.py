@@ -2,6 +2,7 @@ from .fallocate import punch_hole
 import datetime
 import hashlib
 import logging
+import mmap
 import os
 import os.path
 import pytz
@@ -84,14 +85,12 @@ class SafeFile(object):
 
         if os.path.exists(self.filename):
             self.open_new('wb')
-            source = open(self.filename, 'rb')
-            safe_copy(source, self.f)
-            source.close()
-            self.f.flush()
+            with open(self.filename, 'rb', buffering=0) as source:
+                safe_copy(source, self.f)
             os.fsync(self.f)
             self.f.close()
 
-        self.f = open(self.f.name, mode)
+        self.f = open(self.f.name, mode, buffering=0)
 
     def open_inplace(self, mode):
         """Open as an existing file, in-place."""
@@ -101,7 +100,7 @@ class SafeFile(object):
             # you so far and doesn't try to get in your way if you really need
             # to do this.
             os.chmod(self.filename, 0o640)
-        self.f = open(self.filename, mode)
+        self.f = open(self.filename, mode, buffering=0)
 
     def use_write_protection(self):
         """Enable write-protection handling.
@@ -161,20 +160,23 @@ def format_bytes_flexible(number):
     return '%s %s' % (format % (number / factor), label)
 
 
+# 16 kiB blocks are a good compromise between sparsiness and fragmentation.
 PUNCH_SIZE = 16 * kiB
-ZEROES = b'\x00' * PUNCH_SIZE
+CHUNK_SIZE = 4 * MiB
 
 
 def safe_copy(source, target):
+    os.posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    with open('/dev/zero', 'rb', buffering=0) as f:
+        zeroes = mmap.mmap(f.fileno(), PUNCH_SIZE, access=mmap.ACCESS_READ)
     while True:
-        chunk = source.read(4 * MiB)
+        chunk = source.read(CHUNK_SIZE)
         if not chunk:
             break
-        # Search for zeroes that we can make sparse.  16 kiB blocks are a good
-        # compromise between sparsiness and fragmentation.
+        # Search for zeroes that we can make sparse.
         pat_offset = 0
         while True:
-            if chunk[pat_offset:pat_offset + PUNCH_SIZE] == ZEROES:
+            if chunk[pat_offset:pat_offset + PUNCH_SIZE] == zeroes:
                 punch_hole(target, target.tell(), PUNCH_SIZE)
                 target.seek(PUNCH_SIZE, 1)
             else:
@@ -182,20 +184,21 @@ def safe_copy(source, target):
             pat_offset += PUNCH_SIZE
             if pat_offset > len(chunk):
                 break
+    zeroes.close()
     target.truncate()
     size = target.tell()
-    target.flush()
     os.fsync(target)
     return size
 
 
 def files_are_equal(a, b):
-    chunk_size = 4 * MiB
+    os.posix_fadvise(a.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    os.posix_fadvise(b.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
     position = 0
     errors = 0
     while True:
-        chunk_a = a.read(chunk_size)
-        chunk_b = b.read(chunk_size)
+        chunk_a = a.read(CHUNK_SIZE)
+        chunk_b = b.read(CHUNK_SIZE)
         if chunk_a != chunk_b:
             logger.error(
                 "Chunk A ({}, {}) != Chunk B ({}, {}) "
@@ -206,17 +209,23 @@ def files_are_equal(a, b):
             errors += 1
         if not chunk_a:
             break
-        position += chunk_size
+        position += CHUNK_SIZE
     return not errors
 
 
-def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=4 * MiB):
+def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=16 * kiB):
     a.seek(0, 2)
     size = a.tell()
     blocks = size // blocksize
     sample = range(0, max(blocks, 1))
     sample = random.sample(sample, max(int(samplesize * blocks), 1))
     sample.sort()
+    # turn off readahead, but preload blocks selectively into page cache
+    for fdesc in a.fileno(), b.fileno():
+        os.posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
+        for block in sample:
+            os.posix_fadvise(fdesc, block * blocksize, blocksize,
+                             os.POSIX_FADV_WILLNEED)
     for block in sample:
         a.seek(block * blocksize)
         b.seek(block * blocksize)

@@ -30,7 +30,6 @@ setup(
     install_requires=[
         'consulate',
         'fallocate',
-        'nagiosplugin',
         'prettytable',
         'pytz',
         'PyYaml',

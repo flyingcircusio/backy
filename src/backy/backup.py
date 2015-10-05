@@ -109,7 +109,7 @@ class Backup(object):
 
     def _lock(self):
         self._lock_file = open(p.join(self.path, 'config'), 'rb')
-        fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     def init(self, type, source):
         # Allow re-configuration in this case.

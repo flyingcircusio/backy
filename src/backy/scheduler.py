@@ -250,6 +250,7 @@ class BackyDaemon(object):
         self.config = None
         self.schedules = {}
         self.jobs = {}
+        self._lock_file = None
 
     def _read_config(self):
         if not os.path.exists(self.config_file):
@@ -287,8 +288,8 @@ class BackyDaemon(object):
 
     def start(self, loop):
         # Ensure single daemon instance.
-        f = open(self.config_file, 'rb')
-        fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        self._lock_file = open(self.config_file, 'rb')
+        fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
         self.loop = loop
         self._read_config()

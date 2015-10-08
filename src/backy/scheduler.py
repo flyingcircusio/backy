@@ -1,4 +1,4 @@
-from .backup import Archive
+from .archive import Archive
 from .ext_deps import BACKY_CMD
 from .schedule import Schedule
 from prettytable import PrettyTable
@@ -10,6 +10,7 @@ import fcntl
 import hashlib
 import logging
 import os
+import os.path as p
 import pkg_resources
 import random
 import sys
@@ -48,22 +49,26 @@ class Task(object):
 
         # Update config
         # TODO: this isn't true async, but it works for now.
-        backup_dir = os.path.join(
+        backup_dir = p.join(
             self.job.daemon.config['global']['base-dir'],
             self.name)
-        if not os.path.exists(backup_dir):
+        if not p.exists(backup_dir):
             # We do not want to create leading directories, only
             # the backup directory itself. If the base directory
             # does not exist then we likely don't have a correctly
             # configured environment.
             os.mkdir(backup_dir)
-        with open(os.path.join(backup_dir, 'config'), 'w') as f:
+        with open(p.join(backup_dir, 'config'), 'w') as f:
             yaml.safe_dump(self.job.source, f)
 
         # Run backup command
-        cmd = "{} -b {} backup {}".format(
-            BACKY_CMD, backup_dir, ','.join(self.tags))
-        process = yield from asyncio.create_subprocess_shell(cmd)
+        logfile = p.join(backup_dir, 'backy.log')
+        cmd = [BACKY_CMD, '-b', backup_dir, '-l', logfile, 'backup',
+               ','.join(self.tags)]
+        # capture stdout and stderr from shellouts as well
+        with open(logfile, 'a', encoding='utf-8', buffering=1) as log:
+            process = yield from asyncio.create_subprocess_exec(
+                *cmd, stdout=log, stderr=log)
         yield from process.communicate()
 
         # Expire backups
@@ -172,12 +177,9 @@ class Job(object):
         those are not indicators whether and admin needs to do something
         right now.
         """
-        self.archive.scan()
-        # filter out incomplete revisions
-        revs = [rev for rev in self.archive.history if 'duration' in rev.stats]
-        if not revs:
+        if not self.archive.clean_history:
             return True
-        age = backy.utils.now() - revs[-1].timestamp
+        age = backy.utils.now() - self.archive.clean_history[-1].timestamp
         max_age = min(x['interval'] for x in self.schedule.schedule.values())
         if age > max_age * 1.5:
             return False
@@ -243,22 +245,23 @@ class BackyDaemon(object):
     # config defaults, will be overriden from config file
     worker_limit = 1
     base_dir = '/srv/backy'
-    status_file = os.path.join(base_dir, 'status')
+    status_file = None
 
     def __init__(self, config_file):
         self.config_file = config_file
         self.config = None
         self.schedules = {}
         self.jobs = {}
-        self._lock_file = None
+        self._lock = None
 
     def _read_config(self):
-        if not os.path.exists(self.config_file):
+        if not p.exists(self.config_file):
             logger.error(
                 'Could not load configuration. `%s` does not exist.',
                 self.config_file)
             raise SystemExit(1)
         with open(self.config_file, encoding='utf-8') as f:
+            fcntl.flock(f, fcntl.LOCK_SH)
             self.config = yaml.safe_load(f)
 
         g = self.config.get('global', {})
@@ -268,6 +271,8 @@ class BackyDaemon(object):
         self.base_dir = g.get('base-dir', self.base_dir)
         logger.info("Backup location: %s", self.base_dir)
 
+        if not self.status_file:
+            self.status_file = p.join(self.base_dir, 'status')
         self.status_file = g.get('status-file', self.status_file)
         logger.info("Status location: %s", self.status_file)
 
@@ -288,11 +293,16 @@ class BackyDaemon(object):
 
     def start(self, loop):
         # Ensure single daemon instance.
-        self._lock_file = open(self.config_file, 'rb')
-        fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        self._read_config()
+        self._lock = open(self.status_file, 'a+b')
+        fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        # semi-daemonize
+        os.chdir(self.base_dir)
+        with open('/dev/null', 'r+b') as null:
+            os.dup2(null.fileno(), 0)
 
         self.loop = loop
-        self._read_config()
         self.taskpool = TaskPool(loop, self.worker_limit)
         asyncio.async(self.taskpool.run())
         asyncio.async(self.save_status_file())
@@ -305,8 +315,8 @@ class BackyDaemon(object):
         result = []
         for job in daemon.jobs.values():
             job.archive.scan()
-            if job.archive.history:
-                last = job.archive.history[-1]
+            if job.archive.clean_history:
+                last = job.archive.clean_history[-1]
             else:
                 last = None
             result.append(dict(
@@ -330,7 +340,7 @@ class BackyDaemon(object):
     def save_status_file(self):
         while True:
             with backy.utils.SafeFile(self.status_file) as tmp:
-                tmp.protected_mode = 0o444
+                tmp.protected_mode = 0o644
                 tmp.open_new('w')
                 yaml.safe_dump(self.status(), tmp.f)
             yield from asyncio.sleep(30)
@@ -340,7 +350,7 @@ class BackyDaemon(object):
         # myself wrap my head around its structure, though.
         self._read_config()
 
-        if not os.path.exists(self.status_file):
+        if not p.exists(self.status_file):
             print("UNKNOWN: No status file found at {}".format(
                 self.status_file))
             sys.exit(3)
@@ -362,6 +372,7 @@ class BackyDaemon(object):
 
         if failed_jobs:
             print("CRITICAL: {} jobs not within SLA".format(len(failed_jobs)))
+            logging.debug('failed jobs: %r', failed_jobs)
             sys.exit(2)
 
         print("OK: {} jobs within SLA".format(len(status)))

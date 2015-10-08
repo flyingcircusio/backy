@@ -35,6 +35,13 @@ Synopsis
 
     backy [-b BACKUPDIR ] status
 
+    backy [-b BACKUPDIR ] restore -r REVISION TARGET
+
+Global options:
+
+* -l LOGFILE
+* --verbose
+
 
 Disaster recovery
 =================
@@ -199,6 +206,18 @@ backy backup
 ------------
 
 Unconditionally create a revision (backup) with the given tags.
+
+backy restore
+-------------
+
+Creates a new image from a specified backup revision. The revision can be
+specified in several ways:
+
+* as unique ID prefix (as seen in the output of `backy status`),
+* as tag name to select the last backup with the matching tag,
+* as keyword 'last'
+* as integer N to select the Nth-newest backup.
+
 
 Authors
 =======

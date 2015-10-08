@@ -7,24 +7,26 @@ import backy.backup
 import backy.scheduler
 import errno
 import logging
-import os
+import logging.handlers
 import sys
 
 
 logger = logging.getLogger(__name__)
 
 
-def init_logging(backupdir, console_level):  # pragma: no cover
-    logging.basicConfig(
-        filename=os.path.join(backupdir, 'backy.log'),
-        format='%(asctime)s [%(process)d] %(message)s',
-        level=logging.INFO)
-
-    console = logging.StreamHandler(sys.stdout)
-    console.setLevel(console_level)
-    logging.getLogger('').addHandler(console)
-
-    logger.info('$ ' + ' '.join(sys.argv))
+def init_logging(logfile, verbose):  # pragma: no cover
+    if logfile:
+        handler = logging.handlers.WatchedFileHandler(logfile, delay=True)
+        handler.setFormatter(logging.Formatter(
+            '%(asctime)s [%(process)d] %(levelname)s %(message)s',
+            '%Y-%m-%d %H:%M:%S'))
+    else:
+        handler = logging.StreamHandler(sys.stdout)
+    root = logging.getLogger('')
+    root.setLevel(logging.DEBUG if verbose else logging.INFO)
+    root.addHandler(handler)
+    if logfile:
+        logger.info('$ %s', ' '.join(sys.argv))
 
 
 class Commands(object):
@@ -33,8 +35,8 @@ class Commands(object):
     def __init__(self, path):
         self._backup = backy.backup.Backup(path)
 
-    def init(self, type_, source):
-        self._backup.init(type_, source)
+    def init(self, type, source):
+        self._backup.init(type, source)
 
     def status(self):
         self._backup.configure()
@@ -80,13 +82,16 @@ class Commands(object):
         backy.scheduler.check(config)
 
 
-def main():
+def setup_argparser():
     parser = argparse.ArgumentParser(
         description='Backup and restore for block devices.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument(
         '-v', '--verbose', action='store_true', help='verbose output')
+    parser.add_argument(
+        '-l', '--logfile', help='file name to write log output in. '
+        'If no file name is specified, log to stdout.')
     parser.add_argument(
         '-b', '--backupdir', default='.',
         help='directory where backups and logs are written to '
@@ -152,21 +157,20 @@ Check whether all jobs adhere to their schedules' SLA.
     p.set_defaults(func='check')
     p.add_argument(
         '-c', '--config', default='/etc/backy.conf')
+    return parser
 
+
+def main():
+    parser = setup_argparser()
     args = parser.parse_args()
 
     if not hasattr(args, 'func'):
         parser.print_usage()
         sys.exit(0)
 
+    # Logging
     if args.func != 'check':
-        if args.verbose:
-            console_level = logging.DEBUG
-        elif args.func == 'scheduler':
-            console_level = logging.INFO
-        else:
-            console_level = logging.WARNING
-        init_logging(args.backupdir, console_level)
+        init_logging(args.logfile, args.verbose)
 
     commands = Commands(args.backupdir)
     func = getattr(commands, args.func)
@@ -176,14 +180,16 @@ Check whether all jobs adhere to their schedules' SLA.
     del func_args['func']
     del func_args['verbose']
     del func_args['backupdir']
+    del func_args['logfile']
 
     try:
         logger.debug('backup.{0}(**{1!r})'.format(args.func, func_args))
         func(**func_args)
-        logger.info('Backup complete.\n')
+        logger.info('Backy operation complete.')
         sys.exit(0)
     except Exception as e:
-        logger.error('Unexpected exception')
+        # at least a *bit* of output to stderr in this case
+        print('Error: {}'.format(e), file=sys.stderr)
         logger.exception(e)
-        logger.info('Backup failed.\n')
+        logger.info('Backy operation failed.')
         sys.exit(1)

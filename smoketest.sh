@@ -4,8 +4,8 @@ set -e
 umask 022
 
 HERE=$(cd $(dirname $0); pwd)
-BACKY="${HERE}/bin/backy"
 BACKUP=$(mktemp -d -t backy.test.XXXXX)
+BACKY="${HERE}/bin/backy -l ${BACKUP}/backy.log"
 
 mkdir ${BACKUP}/backup
 cd ${BACKUP}/backup
@@ -198,5 +198,7 @@ $BACKY status
 
 # cleanup
 if [ "$1" != "keep" ]; then
-    rm -rf $BACKUP
+    rm -rf "$BACKUP"
+else
+    echo "Not deleting backup dir ${BACKUP}."
 fi

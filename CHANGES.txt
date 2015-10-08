@@ -5,8 +5,13 @@ Changelog
 2.0b4 (unreleased)
 ==================
 
+- backy now accepts a `-l` option to specify a log file. If no such option is
+  given, it logs to stdout.
+
 - Fix monitoring bug where partially written images made the check go green
   (#30).
+
+- Greatly improve error handling and detection of failed jobs.
 
 - Performance improvement: turn off line buffering in bulk file operations
   (#20).

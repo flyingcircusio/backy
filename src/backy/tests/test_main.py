@@ -23,7 +23,7 @@ def test_display_usage(capsys, argv):
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert """\
-usage: py.test [-h] [-v] [-b BACKUPDIR]
+usage: py.test [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
                {init,backup,restore,status,scheduler,check} ...
 """ == out
     assert err == ""
@@ -36,7 +36,7 @@ def test_display_help(capsys, argv):
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
-usage: py.test [-h] [-v] [-b BACKUPDIR]
+usage: py.test [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
                {init,backup,restore,status,scheduler,check} ...
 
 Backup and restore for block devices.
@@ -78,9 +78,7 @@ def test_call_status(capsys, caplog, argv, monkeypatch):
     assert Ellipsis("""\
 backup.py                  ... DEBUG    Backup(".../backy")
 main.py                    ... DEBUG    backup.status(**{})
-main.py                    ... INFO     Backup complete.\
-
-
+main.py                    ... INFO     Backy operation complete.
 """) == caplog.text()
 
 
@@ -102,9 +100,7 @@ def test_call_init(capsys, caplog, argv, monkeypatch):
     assert Ellipsis("""\
 backup.py                  ... DEBUG    Backup(".../backy")
 main.py                    ... DEBUG    backup.init(**{...ceph-rbd...})
-main.py                    ... INFO     Backup complete.\
-
-
+main.py                    ... INFO     Backy operation complete.
 """) == caplog.text()
 
 
@@ -132,9 +128,7 @@ filename: {}
     assert Ellipsis("""\
 backup.py                  ... DEBUG    Backup(".../backy")
 main.py                    ... DEBUG    backup.backup(**{'tags': 'test'})
-main.py                    ... INFO     Backup complete.\
-
-
+main.py                    ... INFO     Backy operation complete.
 """) == caplog.text()
     assert exit.value.code == 0
 
@@ -156,9 +150,7 @@ def test_call_check(capsys, caplog, argv, monkeypatch):
 backup.py                  ... DEBUG    Backup(".../backy")
 main.py                    ... DEBUG    backup.check(**{'config': \
 '/etc/backy.conf'})
-main.py                    ... INFO     Backup complete.\
-
-
+main.py                    ... INFO     Backy operation complete.
 """) == caplog.text()
     assert exit.value.code == 0
 
@@ -179,9 +171,7 @@ def test_call_scheduler(capsys, caplog, argv, monkeypatch):
 backup.py                  ... DEBUG    Backup(".../backy")
 main.py                    ... DEBUG    backup.scheduler(**{'config': \
 '/etc/backy.conf'})
-main.py                    ... INFO     Backup complete.\
-
-
+main.py                    ... INFO     Backy operation complete.
 """) == caplog.text()
     assert exit.value.code == 0
 
@@ -200,11 +190,10 @@ def test_call_unexpected_exception(capsys, caplog, argv, monkeypatch):
         backy.main.main()
     out, err = capsys.readouterr()
     assert "" == out
-    assert "" == err
+    assert "Error: test\n" == err
     assert Ellipsis("""\
 backup.py                  ... DEBUG    Backup("...")
 main.py                    ... DEBUG    backup.status(**{})
-main.py                    ... ERROR    Unexpected exception
 main.py                    ... ERROR    test
 Traceback (most recent call last):
   File ".../main.py", line ..., in main
@@ -212,9 +201,7 @@ Traceback (most recent call last):
   File ".../src/backy/tests/test_main.py", line ..., in do_raise
     raise RuntimeError("test")
 RuntimeError: test
-main.py                    ... INFO     Backup failed.\
-
-
+main.py                    ... INFO     Backy operation failed.
 """) == caplog.text()
 
 

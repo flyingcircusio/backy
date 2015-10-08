@@ -184,22 +184,26 @@ def test_sla_over_time(daemon, clock, tmpdir):
     # 24 hours is also fine.
     revision.timestamp = backy.utils.now() - datetime.timedelta(hours=24)
     revision.write_info()
+    job.archive.scan()
     assert job.sla is True
 
     # 32 hours is also fine.
     revision.timestamp = backy.utils.now() - datetime.timedelta(hours=32)
     revision.write_info()
+    job.archive.scan()
     assert job.sla is True
 
     # 24*1.5 hours is the last time that is OK.
     revision.timestamp = backy.utils.now() - datetime.timedelta(hours=24 * 1.5)
     revision.write_info()
+    job.archive.scan()
     assert job.sla is True
 
     # 1 second later we consider this not to be good any longer.
     revision.timestamp = backy.utils.now() - datetime.timedelta(
         hours=24 * 1.5) - datetime.timedelta(seconds=1)
     revision.write_info()
+    job.archive.scan()
     assert job.sla is False
 
 
@@ -214,7 +218,11 @@ def test_incomplete_revs_dont_count_for_sla(daemon, clock, tmpdir):
     r2.timestamp = backy.utils.now() - datetime.timedelta(hours=1)
     r2.materialize()
     job.archive.scan()
-    assert job.sla is False
+    assert False is job.sla
+
+
+def test_status_should_default_to_basedir(daemon, tmpdir):
+    assert str(tmpdir / 'status') == daemon.status_file
 
 
 def test_update_status(daemon, clock, tmpdir):

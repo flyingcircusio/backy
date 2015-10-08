@@ -26,3 +26,4 @@ vagrant/.vagrant
 .todo
 backy.log
 result
+pyvenv.cfg

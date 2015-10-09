@@ -16,6 +16,8 @@ Changelog
 - Performance improvement: turn off line buffering in bulk file operations
   (#20).
 
+- The scheduler reports child failures (exit status > 0) now in the main log.
+
 
 2.0b3 (2015-10-02)
 ==================

@@ -33,6 +33,7 @@ class Task(object):
         self.job = job
         self.tags = set()
         self.finished = asyncio.Event()
+        self.returncode = None
 
     @property
     def name(self):
@@ -43,39 +44,27 @@ class Task(object):
     def backup(self, future):
         future.add_done_callback(lambda f: self.finished.set())
 
-        logger.info('%s: running backup %s, was due at %s',
-                    self.job.name, ', '.join(self.tags),
+        logger.info('%s: running backup [%s] due %s',
+                    self.name, ', '.join(self.tags),
                     self.ideal_start.isoformat())
 
-        # Update config
-        # TODO: this isn't true async, but it works for now.
-        backup_dir = p.join(
-            self.job.daemon.config['global']['base-dir'],
-            self.name)
-        if not p.exists(backup_dir):
-            # We do not want to create leading directories, only
-            # the backup directory itself. If the base directory
-            # does not exist then we likely don't have a correctly
-            # configured environment.
-            os.mkdir(backup_dir)
-        with open(p.join(backup_dir, 'config'), 'w') as f:
-            yaml.safe_dump(self.job.source, f)
+        # XXX this isn't true async
+        self.job.update_config()
 
-        # Run backup command
-        logfile = p.join(backup_dir, 'backy.log')
-        cmd = [BACKY_CMD, '-b', backup_dir, '-l', logfile, 'backup',
+        # Run backy command
+        logfile = p.join(self.job.path, 'backy.log')
+        cmd = [BACKY_CMD, '-b', self.job.path, '-l', logfile, 'backup',
                ','.join(self.tags)]
-        # capture stdout and stderr from shellouts as well
+        # capture stdout and stderr from shellouts into logfile as well
         with open(logfile, 'a', encoding='utf-8', buffering=1) as log:
             process = yield from asyncio.create_subprocess_exec(
                 *cmd, stdout=log, stderr=log)
-        yield from process.communicate()
+            yield from process.communicate()
+        self.returncode = process.returncode
 
         # Expire backups
         # TODO: this isn't true async, but it works for now.
         self.job.expire()
-
-        logger.info("%s: finished backup", self.job.name)
         future.set_result(self)
 
     @asyncio.coroutine
@@ -122,16 +111,18 @@ class TaskPool(object):
             yield from self.workers.acquire()
             logger.debug("Got worker")
             task = yield from self.get()
-            logger.debug("Got task")
+            logger.debug('Got task "{}"'.format(task.name))
             task_future = asyncio.Future()
-            # Now, lets select a job
-            logger.debug("Sending task to event loop")
             self.loop.create_task(task.backup(task_future))
             task_future.add_done_callback(self.finish_task)
 
     def finish_task(self, future):
         task = future.result()
-        logger.info("{}: finished, releasing worker.".format(task.name))
+        if task.returncode > 0:
+            logger.error('{}: exit status {}'.format(
+                task.name, task.returncode))
+        else:
+            logger.debug('{}: success'.format(task.name))
         self.workers.release()
 
 
@@ -155,7 +146,7 @@ class Job(object):
     def configure(self, config):
         self.source = config['source']
         self.schedule_name = config['schedule']
-        self.path = self.daemon.base_dir + '/' + self.name
+        self.path = p.join(self.daemon.base_dir, self.name)
         self.archive = Archive(self.path)
 
     @property
@@ -191,7 +182,19 @@ class Job(object):
 
     def update_status(self, status):
         self.status = status
-        logger.info('{}: {}'.format(self.name, self.status))
+        logger.info('{}: status {}'.format(self.name, self.status))
+
+    def update_config(self):
+        """Writes config file for 'backy backup' subprocess."""
+        if not p.exists(self.path):
+            # We do not want to create leading directories, only
+            # the backup directory itself. If the base directory
+            # does not exist then we likely don't have a correctly
+            # configured environment.
+            os.mkdir(self.path)
+        with open(p.join(self.path, 'config'), 'w') as f:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            yaml.safe_dump(self.source, f)
 
     @asyncio.coroutine
     def generate_tasks(self):
@@ -221,8 +224,7 @@ class Job(object):
             yield from task.wait_for_deadline()
             self.update_status("submitting to worker queue")
             yield from self.daemon.taskpool.put(task)
-            # XXX This status is a bit of a lie
-            self.update_status("running")
+            self.update_status("active")
             yield from task.wait_for_finished()
             self.update_status("finished")
 

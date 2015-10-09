@@ -70,9 +70,9 @@ def test_wait_for_deadline():
     t = Task(job)
     # Not having a a deadline set causes this to fail.
     now = backy.utils.now()
-    t.ideal_start = now + datetime.timedelta(seconds=1)
+    t.ideal_start = now + datetime.timedelta(seconds=0.1)
     yield from t.wait_for_deadline()
-    assert backy.utils.now() - now >= datetime.timedelta(seconds=1)
+    assert backy.utils.now() - now >= datetime.timedelta(seconds=0.1)
 
 
 @pytest.mark.asyncio
@@ -81,13 +81,13 @@ def test_wait_for_finished(event_loop):
     t = Task(job)
     # Not having a a deadline set causes this to fail.
     now = backy.utils.now()
-    event_loop.call_later(1, lambda: t.finished.set())
+    event_loop.call_later(0.1, lambda: t.finished.set())
     yield from t.wait_for_finished()
-    # This should be pretty fast. It needs to wait at least for 1 seconds
-    # until we set the event, but it should definitely be faster than 2
+    # This should be pretty fast. It needs to wait at least for .1 seconds
+    # until we set the event, but it should definitely be faster than .5
     # seconds.
-    assert backy.utils.now() - now >= datetime.timedelta(seconds=1)
-    assert backy.utils.now() - now <= datetime.timedelta(seconds=2)
+    assert backy.utils.now() - now >= datetime.timedelta(seconds=0.1)
+    assert backy.utils.now() - now <= datetime.timedelta(seconds=0.5)
 
 
 @pytest.mark.asyncio
@@ -120,6 +120,7 @@ def test_taskpool(clock, event_loop):
     # so hey, better than nothing.
     t = TaskPool(event_loop)
     task = mock.Mock()
+    task.returncode = 0
     task.ideal_start = backy.utils.now()
 
     @asyncio.coroutine

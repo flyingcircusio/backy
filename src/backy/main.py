@@ -42,10 +42,10 @@ class Commands(object):
         self._backup.configure()
         total_bytes = 0
 
-        t = PrettyTable(["Date", "ID", "Size", "Duration", "Tags"])
+        t = PrettyTable(["Date", "ID", "Size", "Dur", "Tags"])
         t.align = 'l'
         t.align['Size'] = 'r'
-        t.align['Duration'] = 'r'
+        t.align['Dur'] = 'r'
 
         for r in self._backup.archive.history:
             total_bytes += r.stats.get('bytes_written', 0)

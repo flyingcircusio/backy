@@ -129,8 +129,11 @@ Perform a backup.
         help="""\
 Restore (a given revision) to a given target.
 """)
-    p.add_argument('-r', '--revision', default='latest')
-    p.add_argument('target')
+    p.add_argument('-r', '--revision', metavar='SPEC', default='latest',
+                   help='use revision SPEC as restore source')
+    p.add_argument('target', metavar='TARGET', help="""\
+Copy backed up revision to TARGET. Use stdout if TARGET is "-".
+""")
     p.set_defaults(func='restore')
 
     # FIND

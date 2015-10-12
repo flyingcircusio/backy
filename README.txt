@@ -220,6 +220,8 @@ specified in several ways:
 * as keyword 'last' or 'latest'
 * as integer N to select the Nth-newest backup before the last backup.
 
+The restore target should be a file path or '-' for stdout.
+
 backy find
 ----------
 

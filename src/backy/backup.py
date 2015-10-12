@@ -116,10 +116,10 @@ class Backup(object):
     def restore(self, revision, target):
         self.archive.scan()
         r = self.archive[revision]
-        logger.info('Restoring revision @ %s [%s]', r.timestamp,
-                    ','.join(r.tags))
         with open(r.filename, 'rb', buffering=0) as source:
             if target != '-':
+                logger.info('Restoring revision @ %s [%s]', r.timestamp,
+                            ','.join(r.tags))
                 self.restore_file(source, target)
             else:
                 self.restore_stdout(source)

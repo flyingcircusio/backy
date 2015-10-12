@@ -3,6 +3,7 @@ from backy.tests import Ellipsis
 import backy.backup
 import backy.main
 import os
+import pprint
 import pytest
 import sys
 import yaml
@@ -24,7 +25,7 @@ def test_display_usage(capsys, argv):
     out, err = capsys.readouterr()
     assert """\
 usage: py.test [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
-               {init,backup,restore,status,scheduler,check} ...
+               {init,backup,restore,find,status,scheduler,check} ...
 """ == out
     assert err == ""
 
@@ -37,7 +38,7 @@ def test_display_help(capsys, argv):
     out, err = capsys.readouterr()
     assert Ellipsis("""\
 usage: py.test [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
-               {init,backup,restore,status,scheduler,check} ...
+               {init,backup,restore,find,status,scheduler,check} ...
 
 Backup and restore for block devices.
 
@@ -57,7 +58,6 @@ def test_verbose_logging(capsys, argv):
 
 
 def print_args(*args, **kw):
-    import pprint
     print(args)
     pprint.pprint(kw)
 
@@ -78,7 +78,6 @@ def test_call_status(capsys, caplog, argv, monkeypatch):
     assert Ellipsis("""\
 backup.py                  ... DEBUG    Backup(".../backy")
 main.py                    ... DEBUG    backup.status(**{})
-main.py                    ... INFO     Backy operation complete.
 """) == caplog.text()
 
 
@@ -100,7 +99,6 @@ def test_call_init(capsys, caplog, argv, monkeypatch):
     assert Ellipsis("""\
 backup.py                  ... DEBUG    Backup(".../backy")
 main.py                    ... DEBUG    backup.init(**{...ceph-rbd...})
-main.py                    ... INFO     Backy operation complete.
 """) == caplog.text()
 
 
@@ -128,7 +126,26 @@ filename: {}
     assert Ellipsis("""\
 backup.py                  ... DEBUG    Backup(".../backy")
 main.py                    ... DEBUG    backup.backup(**{'tags': 'test'})
-main.py                    ... INFO     Backy operation complete.
+""") == caplog.text()
+    assert exit.value.code == 0
+
+
+def test_call_find(capsys, caplog, argv, monkeypatch):
+    monkeypatch.setattr(backy.main.Commands, 'find', print_args)
+    argv.append('-v')
+    argv.append('find')
+    with pytest.raises(SystemExit) as exit:
+        backy.main.main()
+    assert exit.value.code == 0
+    out, err = capsys.readouterr()
+    assert Ellipsis("""\
+(<backy.main.Commands object at ...>,)
+{'revision': 'latest'}
+""") == out
+    assert err == ""
+    assert Ellipsis("""\
+backup.py                  ... DEBUG    Backup(".../backy")
+main.py                    ... DEBUG    backup.find(...
 """) == caplog.text()
     assert exit.value.code == 0
 
@@ -150,7 +167,6 @@ def test_call_check(capsys, caplog, argv, monkeypatch):
 backup.py                  ... DEBUG    Backup(".../backy")
 main.py                    ... DEBUG    backup.check(**{'config': \
 '/etc/backy.conf'})
-main.py                    ... INFO     Backy operation complete.
 """) == caplog.text()
     assert exit.value.code == 0
 
@@ -171,7 +187,6 @@ def test_call_scheduler(capsys, caplog, argv, monkeypatch):
 backup.py                  ... DEBUG    Backup(".../backy")
 main.py                    ... DEBUG    backup.scheduler(**{'config': \
 '/etc/backy.conf'})
-main.py                    ... INFO     Backy operation complete.
 """) == caplog.text()
     assert exit.value.code == 0
 
@@ -185,7 +200,7 @@ def test_call_unexpected_exception(capsys, caplog, argv, monkeypatch):
     import logging
     monkeypatch.setattr(logging, 'error', print_args)
     monkeypatch.setattr(logging, 'exception', print_args)
-    argv.append('status')
+    argv.extend(['-l', 'logfile', 'status'])
     with pytest.raises(SystemExit):
         backy.main.main()
     out, err = capsys.readouterr()
@@ -237,11 +252,11 @@ def test_commands_wrapper_status(commands, tmpdir, capsys, clock):
 
     assert err == ""
     assert out == """\
-+-------------------------+----+---------+----------+------+
-| Date                    | ID |    Size | Duration | Tags |
-+-------------------------+----+---------+----------+------+
-| 2015-09-01 07:06:47 UTC | 1  | 0 Bytes |        0 |      |
-+-------------------------+----+---------+----------+------+
++-------------------------+----+---------+-------+------+
+|           Date          | ID |    Size | Durat | Tags |
++-------------------------+----+---------+-------+------+
+| 2015-09-01 07:06:47 UTC | 1  | 0 Bytes |   0 s |      |
++-------------------------+----+---------+-------+------+
 == Summary
 1 revisions
 0 Bytes data (estimated)

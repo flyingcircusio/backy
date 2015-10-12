@@ -4,75 +4,77 @@ import pytest
 
 @pytest.fixture
 def archive(tmpdir):
-    return Archive(str(tmpdir))
+    a = Archive(str(tmpdir))
+    return a
+
+
+@pytest.fixture
+def archive_with_revisions(archive, tmpdir):
+    with open(str(tmpdir / '123-0.rev'), 'wb') as f:
+        f.write(b"""\
+uuid: 123-0
+timestamp: 2015-08-29 00:00:00
+parent:
+stats: {bytes_written: 14868480, duration: 31.1}
+tags: [daily, weekly, monthly]
+""")
+    with open(str(tmpdir / '123-1.rev'), 'wb') as f:
+        f.write(b"""\
+uuid: 123-1
+timestamp: 2015-08-30 01:00:00
+parent: 123-0
+stats: {bytes_written: 1486880, duration: 3.7}
+tags: [daily, weekly]
+""")
+    with open(str(tmpdir / '123-2.rev'), 'wb') as f:
+        f.write(b"""\
+uuid: 123-2
+timestamp: 2015-08-30 02:00:00
+parent: 123-1
+stats: {}
+tags: [daily]
+""")
+    archive.scan()
+    return archive
 
 
 def test_empty_revisions(archive):
-    archive.scan()
     assert archive.history == []
 
 
 def test_find_revision_empty(archive):
-    archive.scan()
     with pytest.raises(KeyError):
-        archive.find_revision(-1)
+        archive[-1]
     with pytest.raises(KeyError):
-        archive.find_revision("last")
+        archive['last']
     with pytest.raises(KeyError):
-        archive.find_revision("fdasfdka")
+        archive['fdasfdka']
 
 
-def test_load_revisions(archive, tmpdir):
-    with open(str(tmpdir / '123-123.rev'), 'wb') as f:
-        f.write(b"""\
-uuid: 123-123
-timestamp: 2015-08-29 00:00:00
-parent:
-""")
-    with open(str(tmpdir / '124-124.rev'), 'wb') as f:
-        f.write(b"""\
-uuid: 124-124
-timestamp: 2015-08-30 00:00:00
-parent: 123-123
-""")
+def test_load_revisions(archive_with_revisions):
+    a = archive_with_revisions
+    assert [x.uuid for x in a.history] == ['123-0', '123-1', '123-2']
+    assert a.history[1].uuid == "123-1"
+    assert a.history[1].parent == "123-0"
+    assert a.find_revisions("all") == a.history
+    assert a.find_revisions(1) == [a[1]]
 
-    archive.scan()
-    assert [x.uuid for x in archive.history] == ["123-123", "124-124"]
 
-    assert archive.history[1].uuid == "124-124"
-    assert archive.history[1].parent == "123-123"
+def test_find_revision(archive_with_revisions):
+    a = archive_with_revisions
+    assert a['last'].uuid == '123-2'
+    assert a[0].uuid == '123-2'
+    assert a[1].uuid == '123-1'
+    assert a[2].uuid == '123-0'
 
-    assert archive.find_revisions("all") == archive.history
-
-    assert archive.find_revision("last").uuid == "124-124"
-    assert archive.find_revision(0).uuid == "124-124"
-    assert archive.find_revision(1).uuid == "123-123"
-    assert archive.find_revision("124-124").uuid == "124-124"
-
+    assert a['123-1'].uuid == '123-1'
     with pytest.raises(KeyError):
-        archive.find_revision("125-125")
+        a['125-125']
 
-    assert archive.find_revisions(1) == [
-        archive.find_revision(1)]
+    assert a['daily'].uuid == '123-2'
+    assert a['weekly'].uuid == '123-1'
+    assert a['monthly'].uuid == '123-0'
 
 
-def test_clean_history_should_exclude_incomplete_revs(archive, tmpdir):
-    with open(str(tmpdir / '123-123.rev'), 'wb') as f:
-        f.write(b"""\
-parent: 456-456
-stats: {bytes_written: 0}
-tags: [daily]
-timestamp: 2015-10-07 14:04:50.094479+00:00
-uuid: 123-123
-""")
-    with open(str(tmpdir / '456-456.rev'), 'wb') as f:
-        f.write(b"""\
-parent: null
-stats: {bytes_written: 524280, duration: 0.014884233474731445}
-tags: [test]
-timestamp: 2015-10-07 12:54:12.566326+00:00
-uuid: 456-456
-""")
-    archive.scan()
-    assert 1 == len(archive.clean_history)
-    assert '456-456' == archive.clean_history[0].uuid
+def test_clean_history_should_exclude_incomplete_revs(archive_with_revisions):
+    assert 2 == len(archive_with_revisions.clean_history)

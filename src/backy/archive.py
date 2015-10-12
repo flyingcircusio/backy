@@ -49,32 +49,54 @@ class Archive(object):
         elif spec == 'all':
             result = self.history[:]
         else:
-            result = [self.find_revision(spec)]
+            result = [self[spec]]
         return result
 
-    def find_revision(self, spec):
-        if spec is None:
+    def find_by_number(self, spec):
+        """Returns revision by relative number from the end.
+
+        Raises IndexError or ValueError if no revision is found.
+        """
+        spec = int(spec)
+        if spec < 0:
+            raise KeyError('Integer revisions must be positive')
+        return self.history[-spec - 1]
+
+    def find_by_tag(self, spec):
+        """Returns the latest revision matching a given tag.
+
+        Raises IndexError or ValueError if no revision is found.
+        """
+        if spec in ['last', 'latest']:
+            return self.history[-1]
+        matching = [r for r in self.history if spec in r.tags]
+        return max((r.timestamp, r) for r in matching)[1]
+
+    def find_by_uuid(self, spec):
+        """Returns revision matched by UUID.
+
+        Raises IndexError if no revision is found.
+        """
+        return [r for r in self.history if r.uuid == spec][0]
+
+    def __getitem__(self, spec):
+        """Flexible revision search.
+
+        Locates a revision by relative number, by tag, or by uuid.
+        """
+        if spec is None or spec == '':
+            raise KeyError(spec)
+        if not self.history:
             raise KeyError(spec)
 
-        if spec in ['last', 'latest']:
-            spec = 0
-
-        try:
-            spec = int(spec)
-            if spec < 0:
-                raise KeyError("Integer revisions must be positive.")
-        except ValueError:
-            # spec is a string and represents a UUID
-            for r in self.history:
-                if r.uuid == spec:
-                    return r
-            else:
-                raise KeyError(spec)
-        else:
+        for selector in (self.find_by_number,
+                         self.find_by_tag,
+                         self.find_by_uuid):
             try:
-                return self.history[-spec - 1]
-            except IndexError:
-                raise KeyError(spec)
+                return selector(spec)
+            except (ValueError, IndexError):
+                pass
+        raise KeyError(spec)
 
     @property
     def clean_history(self):

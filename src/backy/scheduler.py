@@ -5,7 +5,6 @@ from prettytable import PrettyTable
 import asyncio
 import backy.utils
 import collections
-import datetime
 import fcntl
 import hashlib
 import logging
@@ -327,14 +326,14 @@ class BackyDaemon(object):
                 status=job.status,
                 last_time=(backy.utils.format_timestamp(last.timestamp)
                            if last else '-'),
-                last_tags=(', '.join(job.schedule.sorted_tags(last.tags))
+                last_tags=(','.join(job.schedule.sorted_tags(last.tags))
                            if last else '-'),
-                last_duration=str(
-                    datetime.timedelta(seconds=last.stats.get('duration', 0))
+                last_duration=(
+                    str(round(last.stats.get('duration', 0), 1)) + ' s'
                     if last else '-'),
                 next_time=(backy.utils.format_timestamp(job.task.ideal_start)
                            if job.task else '-'),
-                next_tags=(', '.join(job.schedule.sorted_tags(job.task.tags))
+                next_tags=(','.join(job.schedule.sorted_tags(job.task.tags))
                            if job.task else '-')))
         return result
 
@@ -393,9 +392,11 @@ class SchedulerShell(telnetlib3.Telsh):
                          "Status",
                          "Last Backup",
                          "Last Tags",
-                         "Last Duration",
+                         "Last Dur",
                          "Next Backup",
                          "Next Tags"])
+        t.align['Last Dur'] = 'r'
+        t.sortby = "Job"
 
         for job in daemon.status():
             t.add_row([job['job'],
@@ -407,8 +408,6 @@ class SchedulerShell(telnetlib3.Telsh):
                        job['next_time'],
                        job['next_tags']])
 
-        t.sortby = "Job"
-        t.align = 'l'
         self.stream.write(t.get_string().replace('\n', '\r\n'))
         return 0
 

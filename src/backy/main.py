@@ -42,18 +42,17 @@ class Commands(object):
         self._backup.configure()
         total_bytes = 0
 
-        t = PrettyTable(["Date", "ID", "Size", "Dur", "Tags"])
-        t.align = 'l'
+        t = PrettyTable(["Date", "ID", "Size", "Durat", "Tags"])
         t.align['Size'] = 'r'
-        t.align['Dur'] = 'r'
+        t.align['Durat'] = 'r'
 
         for r in self._backup.archive.history:
             total_bytes += r.stats.get('bytes_written', 0)
             t.add_row([format_timestamp(r.timestamp),
                        r.uuid,
                        format_bytes_flexible(r.stats.get('bytes_written', 0)),
-                       int(r.stats.get('duration', 0)),
-                       ', '.join(r.tags)])
+                       str(round(r.stats.get('duration', 0), 1)) + ' s',
+                       ','.join(r.tags)])
 
         print(t)
 
@@ -74,6 +73,10 @@ class Commands(object):
     def restore(self, revision, target):
         self._backup.configure()
         self._backup.restore(revision, target)
+
+    def find(self, revision):
+        self._backup.configure()
+        print(self._backup.find(revision))
 
     def scheduler(self, config):
         backy.scheduler.main(config)
@@ -130,6 +133,14 @@ Restore (a given revision) to a given target.
     p.add_argument('target')
     p.set_defaults(func='restore')
 
+    # FIND
+    p = subparsers.add_parser('find', help="""\
+Print full path to a given revision's image file.
+""")
+    p.add_argument('revision', metavar='REVISION', nargs='?', default='latest',
+                   help='Select revision by UUID or relative from last')
+    p.set_defaults(func='find')
+
     # STATUS
     p = subparsers.add_parser(
         'status',
@@ -185,11 +196,13 @@ def main():
     try:
         logger.debug('backup.{0}(**{1!r})'.format(args.func, func_args))
         func(**func_args)
-        logger.info('Backy operation complete.')
+        if args.logfile:
+            logger.info('Backy operation complete.')
         sys.exit(0)
     except Exception as e:
         # at least a *bit* of output to stderr in this case
         print('Error: {}'.format(e), file=sys.stderr)
-        logger.exception(e)
-        logger.info('Backy operation failed.')
+        if args.logfile:
+            logger.exception(e)
+            logger.info('Backy operation failed.')
         sys.exit(1)

@@ -33,9 +33,11 @@ Synopsis
 
     backy [-b BACKUPDIR ] backup TAGS
 
-    backy [-b BACKUPDIR ] status
-
     backy [-b BACKUPDIR ] restore -r REVISION TARGET
+
+    backy [-b BACKUPDIR ] find REVISION
+
+    backy [-b BACKUPDIR ] status
 
 Global options:
 
@@ -215,8 +217,18 @@ specified in several ways:
 
 * as unique ID prefix (as seen in the output of `backy status`),
 * as tag name to select the last backup with the matching tag,
-* as keyword 'last'
-* as integer N to select the Nth-newest backup.
+* as keyword 'last' or 'latest'
+* as integer N to select the Nth-newest backup before the last backup.
+
+backy find
+----------
+
+Resolves revision specifications (see above) to full image file pathnames.
+
+For example, to expand the path to the second to last weekly backup::
+
+   $ backy find weekly
+   /srv/backy.test/myjob/dZmiafS963sUgvCRhZGZpi
 
 
 Authors
@@ -232,4 +244,4 @@ License
 
 GPLv3
 
-.. vim: set ft=rst spell spelllang=en:
+.. vim: set ft=rst sw=3 sts=3 spell spelllang=en:

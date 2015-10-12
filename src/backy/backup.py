@@ -98,7 +98,7 @@ class Backup(object):
         self._lock()
         self.archive.scan()
 
-        r = self.archive.find_revision(revision)
+        r = self.archive[revision]
         logger.info('Restoring revision @ %s [%s]', r.timestamp,
                     ','.join(r.tags))
         s = open(r.filename, 'rb', buffering=0)
@@ -107,3 +107,13 @@ class Backup(object):
         with s as source, t as target:
             os.posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
             safe_copy(source, target)
+
+    def find(self, revision):
+        """Locates `revision` and returns full path."""
+        self.archive.scan()
+        try:
+            rev = self.archive[revision]
+            return rev.filename
+        except KeyError as e:
+            raise RuntimeError('Cannot find revision in {}: {}'.format(
+                self.path, str(e)))

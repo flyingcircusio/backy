@@ -18,6 +18,8 @@ Changelog
 
 - The scheduler reports child failures (exit status > 0) now in the main log.
 
+- Add `backy find REVISION` subcommand to query image paths from shell scripts.
+
 
 2.0b3 (2015-10-02)
 ==================

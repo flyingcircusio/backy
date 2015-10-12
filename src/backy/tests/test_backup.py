@@ -1,5 +1,7 @@
 from backy.backup import Backup
+from backy.revision import Revision
 from backy.sources.file import File
+import backy.utils
 import yaml
 import os.path
 import pytest
@@ -66,3 +68,20 @@ def test_init_refused_with_existing_config(tmpdir):
         backup.init('file', '/dev/foo')
     with open(str(tmpdir / 'config'), 'rb') as f:
         assert f.read() == existing_config
+
+
+def test_find(simple_file_config, tmpdir):
+    backup = simple_file_config
+    rev = Revision('123-456', backup.archive)
+    rev.timestamp = backy.utils.now()
+    rev.materialize()
+    assert str(tmpdir / '123-456') == backup.find(0)
+
+
+def test_find_should_raise_if_not_found(simple_file_config, tmpdir):
+    backup = simple_file_config
+    rev = Revision('123-456', backup.archive)
+    rev.timestamp = backy.utils.now()
+    rev.materialize()
+    with pytest.raises(RuntimeError):
+        backup.find('no such revision')

@@ -54,6 +54,7 @@ class CephRBD(object):
                 continue
             uuid = snapshot['name'].replace('backy-', '')
             if uuid != keep_snapshot_revision:
+                logger.info('Removing old snapshot %s', snapshot['name'])
                 self.rbd.snap_rm(self._image_name + '@' + snapshot['name'])
 
     def _create_snapshot(self, name):
@@ -62,7 +63,7 @@ class CephRBD(object):
     def backup(self):
         backup = self.diff
         try:
-            parent = self.revision.archive.find_revision(self.revision.parent)
+            parent = self.revision.archive[self.revision.parent]
             if not self.rbd.exists(self._image_name + '@backy-' + parent.uuid):
                 raise KeyError()
         except KeyError:
@@ -71,7 +72,7 @@ class CephRBD(object):
         backup()
 
     def diff(self):
-        logger.info('Performing differential backup ...')
+        logger.info('Performing differential backup')
         snap_from = 'backy-' + self.revision.parent
         snap_to = 'backy-' + self.revision.uuid
         d = self.rbd.export_diff(self._image_name + '@' + snap_to,

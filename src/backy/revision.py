@@ -72,10 +72,12 @@ class Revision(object):
 
     @property
     def filename(self):
+        """Full pathname of the image file."""
         return os.path.join(self.archive.path, str(self.uuid))
 
     @property
     def info_filename(self):
+        """Full pathname of the metadata file."""
         return self.filename + '.rev'
 
     def materialize(self):
@@ -84,7 +86,7 @@ class Revision(object):
             open(self.filename, 'wb').close()
             return
 
-        parent = self.archive.find_revision(self.parent)
+        parent = self.archive[self.parent]
         cp_reflink(parent.filename, self.filename)
         self.writable()
 

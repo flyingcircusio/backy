@@ -12,8 +12,9 @@ fixtures = os.path.dirname(__file__) + '/samples'
 
 
 @pytest.fixture
-def simple_file_config(tmpdir):
+def simple_file_config(tmpdir, monkeypatch):
     shutil.copy(fixtures + '/simple_file/config', str(tmpdir))
+    monkeypatch.chdir(tmpdir)
     b = Backup(str(tmpdir))
     b.configure()
     return b
@@ -78,10 +79,35 @@ def test_find(simple_file_config, tmpdir):
     assert str(tmpdir / '123-456') == backup.find(0)
 
 
-def test_find_should_raise_if_not_found(simple_file_config, tmpdir):
+def test_find_should_raise_if_not_found(simple_file_config):
     backup = simple_file_config
     rev = Revision('123-456', backup.archive)
     rev.timestamp = backy.utils.now()
     rev.materialize()
     with pytest.raises(RuntimeError):
         backup.find('no such revision')
+
+
+def test_restore_target(simple_file_config, forget_about_btrfs):
+    backup = simple_file_config
+    source = 'input-file'
+    target = 'restore.img'
+    with open(source, 'wb') as f:
+        f.write(b'volume contents\n')
+    backup.backup('daily')
+    backup.restore(0, target)
+    with open(source, 'rb') as s, open(target, 'rb') as t:
+        assert s.read() == t.read()
+
+
+def test_restore_stdout(simple_file_config, forget_about_btrfs, capfd):
+    backup = simple_file_config
+    source = 'input-file'
+    with open(source, 'wb') as f:
+        f.write(b'volume contents\n')
+    backup.backup('daily')
+    backup.restore(0, '-')
+    assert not os.path.exists('-')
+    out, err = capfd.readouterr()
+    assert 'volume contents\n' == out
+    assert '' == err

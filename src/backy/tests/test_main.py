@@ -132,15 +132,14 @@ main.py                    ... DEBUG    backup.backup(**{'tags': 'test'})
 
 def test_call_find(capsys, caplog, argv, monkeypatch):
     monkeypatch.setattr(backy.main.Commands, 'find', print_args)
-    argv.append('-v')
-    argv.append('find')
+    argv.extend(['-v', 'find', '1'])
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
 (<backy.main.Commands object at ...>,)
-{'revision': 'latest'}
+{'revision': '1'}
 """) == out
     assert err == ""
     assert Ellipsis("""\

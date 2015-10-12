@@ -13,14 +13,15 @@ class Archive(object):
     def __init__(self, path):
         self.path = p.realpath(path)
         self.history = []
+        self._by_uuid = {}
 
     def scan(self):
         self.history = []
-        seen_uuids = set()
+        self._by_uuid = {}
         for file in glob.glob(p.join(self.path, '*.rev')):
             r = Revision.load(file, self)
-            if r.uuid not in seen_uuids:
-                seen_uuids.add(r.uuid)
+            if r.uuid not in self._by_uuid:
+                self._by_uuid[r.uuid] = r
                 self.history.append(r)
         self.history.sort(key=lambda r: r.timestamp)
 
@@ -77,23 +78,22 @@ class Archive(object):
 
         Raises IndexError if no revision is found.
         """
-        return [r for r in self.history if r.uuid == spec][0]
+        try:
+            return self._by_uuid[spec]
+        except KeyError:
+            raise IndexError()
 
     def __getitem__(self, spec):
         """Flexible revision search.
 
         Locates a revision by relative number, by tag, or by uuid.
         """
-        if spec is None or spec == '':
-            raise KeyError(spec)
-        if not self.history:
+        if spec is None or spec == '' or not self.history:
             raise KeyError(spec)
 
-        for selector in (self.find_by_number,
-                         self.find_by_tag,
-                         self.find_by_uuid):
+        for find in (self.find_by_number, self.find_by_uuid, self.find_by_tag):
             try:
-                return selector(spec)
+                return find(spec)
             except (ValueError, IndexError):
                 pass
         raise KeyError(spec)

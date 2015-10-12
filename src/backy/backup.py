@@ -1,7 +1,7 @@
 from .revision import Revision
 from .archive import Archive
 from .sources import select_source
-from .utils import SafeFile, safe_copy
+from .utils import SafeFile, safe_copy, CHUNK_SIZE
 import fcntl
 import logging
 import os
@@ -39,7 +39,7 @@ class Backup(object):
 
     def _lock(self):
         self._lock_file = open(p.join(self.path, 'config'), 'rb')
-        fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(self._lock_file, fcntl.LOCK_EX)
 
     def init(self, type, source):
         # Allow re-configuration in this case.
@@ -94,19 +94,35 @@ class Backup(object):
                 new_revision.readonly()
                 self.archive.history.append(new_revision)
 
-    def restore(self, revision, target):
-        self._lock()
-        self.archive.scan()
+    def restore_file(self, source, target):
+        """Bulk-copy from open revision `source` to target file."""
+        logger.debug('Copying from "%s" to "%s"...', source.name, target)
+        t = open(target, 'wb', buffering=0)
+        with t as target:
+            os.posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+            safe_copy(source, target)
 
+    def restore_stdout(self, source):
+        """Emit restore data to stdout (for pipe processing)."""
+        logger.debug('Dumping from "%s" to stdout...', source.name)
+        os.posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+        with os.fdopen(os.dup(1), 'wb') as target:
+            while True:
+                chunk = source.read(CHUNK_SIZE)
+                if not chunk:
+                    break
+                target.write(chunk)
+
+    def restore(self, revision, target):
+        self.archive.scan()
         r = self.archive[revision]
         logger.info('Restoring revision @ %s [%s]', r.timestamp,
                     ','.join(r.tags))
-        s = open(r.filename, 'rb', buffering=0)
-        t = open(target, 'wb', buffering=0)
-        logger.debug('Copying from "%s" to "%s"...', r.filename, target)
-        with s as source, t as target:
-            os.posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
-            safe_copy(source, target)
+        with open(r.filename, 'rb', buffering=0) as source:
+            if target != '-':
+                self.restore_file(source, target)
+            else:
+                self.restore_stdout(source)
 
     def find(self, revision):
         """Locates `revision` and returns full path."""

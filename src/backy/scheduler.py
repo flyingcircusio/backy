@@ -1,11 +1,13 @@
 from .archive import Archive
 from .ext_deps import BACKY_CMD
 from .schedule import Schedule
+from .utils import SafeFile
 from prettytable import PrettyTable
 import asyncio
 import backy.utils
 import collections
 import fcntl
+import filecmp
 import hashlib
 import logging
 import os
@@ -110,7 +112,7 @@ class TaskPool(object):
             yield from self.workers.acquire()
             logger.debug("Got worker")
             task = yield from self.get()
-            logger.debug('Got task "{}"'.format(task.name))
+            logger.debug('Got task "%s"', task.name)
             task_future = asyncio.Future()
             self.loop.create_task(task.backup(task_future))
             task_future.add_done_callback(self.finish_task)
@@ -118,10 +120,9 @@ class TaskPool(object):
     def finish_task(self, future):
         task = future.result()
         if task.returncode > 0:
-            logger.error('{}: exit status {}'.format(
-                task.name, task.returncode))
+            logger.error('%s: exit status %s', task.name, task.returncode)
         else:
-            logger.debug('{}: success'.format(task.name))
+            logger.debug('%s: success'.format(task.name))
         self.workers.release()
 
 
@@ -191,9 +192,12 @@ class Job(object):
             # does not exist then we likely don't have a correctly
             # configured environment.
             os.mkdir(self.path)
-        with open(p.join(self.path, 'config'), 'w') as f:
-            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        config = p.join(self.path, 'config')
+        with SafeFile(config, encoding='utf-8') as f:
+            f.open_new('wb')
             yaml.safe_dump(self.source, f)
+            if p.exists(config) and filecmp.cmp(config, f.name):
+                raise ValueError('not changed')
 
     @asyncio.coroutine
     def generate_tasks(self):

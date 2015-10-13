@@ -7,6 +7,7 @@ import os
 import os.path
 import pytz
 import random
+import sys
 import tempfile
 
 
@@ -166,9 +167,16 @@ CHUNK_SIZE = 4 * MiB
 
 
 def safe_copy(source, target):
-    os.posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-    with open('/dev/zero', 'rb', buffering=0) as f:
-        zeroes = mmap.mmap(f.fileno(), PUNCH_SIZE, access=mmap.ACCESS_READ)
+    if sys.platform == 'darwin':
+        # OS X does not support this version of fadvise and we really don't
+        # run it in production there anyway. However, I want to be able to
+        # run backy there in general to help development.
+        zeroes = '\00' * PUNCH_SIZE
+    else:
+        # Assuming non-OS X platforms can do this, unless we prove otherwise.
+        with open('/dev/zero', 'rb', buffering=0) as f:
+            zeroes = mmap.mmap(f.fileno(), PUNCH_SIZE, access=mmap.ACCESS_READ)
+    fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
     while True:
         chunk = source.read(CHUNK_SIZE)
         if not chunk:
@@ -184,7 +192,8 @@ def safe_copy(source, target):
             pat_offset += PUNCH_SIZE
             if pat_offset > len(chunk):
                 break
-    zeroes.close()
+    if sys.platform != 'darwin':
+        zeroes.close()
     target.truncate()
     size = target.tell()
     os.fsync(target)
@@ -192,8 +201,9 @@ def safe_copy(source, target):
 
 
 def files_are_equal(a, b):
-    os.posix_fadvise(a.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-    os.posix_fadvise(b.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    if sys.platform != 'darwin':
+        os.posix_fadvise(a.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+        os.posix_fadvise(b.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
     position = 0
     errors = 0
     while True:
@@ -220,12 +230,13 @@ def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=16 * kiB):
     sample = range(0, max(blocks, 1))
     sample = random.sample(sample, max(int(samplesize * blocks), 1))
     sample.sort()
+
     # turn off readahead, but preload blocks selectively into page cache
     for fdesc in a.fileno(), b.fileno():
-        os.posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
+        fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
         for block in sample:
-            os.posix_fadvise(fdesc, block * blocksize, blocksize,
-                             os.POSIX_FADV_WILLNEED)
+            fadvise(fdesc, block * blocksize, blocksize,
+                    os.POSIX_FADV_WILLNEED)
     for block in sample:
         a.seek(block * blocksize)
         b.seek(block * blocksize)
@@ -258,3 +269,16 @@ def min_date():
 
 def format_timestamp(dt):
     return dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
+if hasattr(os, 'posix_fadvise'):
+    fadvise = os.posix_fadvise
+else:
+    logger.warn('Running without `posix_fadvise`.')
+    os.POSIX_FADV_RANDOM = None
+    os.POSIX_FADV_SEQUENTIAL = None
+    os.POSIX_FADV_WILLNEED = None
+    os.POSIX_FADV_DONTNEED = None
+
+    def fadvise(*args, **kw):
+        return

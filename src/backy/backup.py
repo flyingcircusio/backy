@@ -1,7 +1,7 @@
-from .revision import Revision
 from .archive import Archive
+from .revision import Revision
 from .sources import select_source
-from .utils import SafeFile, safe_copy, CHUNK_SIZE
+from .utils import SafeFile, safe_copy, CHUNK_SIZE, fadvise
 import fcntl
 import logging
 import os
@@ -99,13 +99,13 @@ class Backup(object):
         logger.debug('Copying from "%s" to "%s"...', source.name, target)
         t = open(target, 'wb', buffering=0)
         with t as target:
-            os.posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+            fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
             safe_copy(source, target)
 
     def restore_stdout(self, source):
         """Emit restore data to stdout (for pipe processing)."""
         logger.debug('Dumping from "%s" to stdout...', source.name)
-        os.posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+        fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
         with os.fdopen(os.dup(1), 'wb') as target:
             while True:
                 chunk = source.read(CHUNK_SIZE)

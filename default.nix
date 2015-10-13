@@ -1,10 +1,12 @@
 { pytest_args ? "",
-  use_btrfs ? true }:
+  use_btrfs ? true,
+  use_ceph ? true }:
 
 let
   pkgs = import <nixpkgs> { };
 
   btrfs_cmd = if use_btrfs then "${pkgs.btrfsProgs}/bin/btrfs" else "";
+  ceph_rbd_cmd = if use_ceph  then "${pkgs.ceph}/bin/rbd" else "";
 
   python = pythonPackages.python;
   pythonPackages = pkgs.python34Packages;
@@ -159,14 +161,14 @@ in pythonPackages.buildPythonPackage rec {
       --set BACKY_CMD "$tmp_path/bin/backy" \
       --set BACKY_BTRFS="${btrfs_cmd}" \
       --set BACKY_CP "${pkgs.coreutils}/bin/cp" \
-      --set BACKY_RBD "${pkgs.ceph}/bin/rbd" \
+      --set BACKY_RBD "${ceph_rbd_cmd}" \
       --set BACKY_BASH "${pkgs.bash}/bin/bash"
   '';
   postShellHook = ''
     export BACKY_CMD="$tmp_path/bin/backy"
     export BACKY_BTRFS="${btrfs_cmd}"
     export BACKY_CP="${pkgs.coreutils}/bin/cp"
-    export BACKY_RBD="${pkgs.ceph}/bin/rbd"
+    export BACKY_RBD="${ceph_rbd_cmd}"
     export BACKY_BASH="${pkgs.bash}/bin/bash"
   '';
 }

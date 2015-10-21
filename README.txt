@@ -56,7 +56,7 @@ The most important question is: I screwed up -- how do I get my data back?
 Here's the fast answer to make a full restore of the most recent backup::
 
     $ cd /srv/backy/my-virtual-machine
-    $ dd if=latest of=/srv/kvm/my-virtual-machine bs=4048000
+    $ dd if=latest of=/srv/kvm/my-virtual-machine bs=4096k
 
 If you like to pick a specific version, it's only a little more effort::
 
@@ -69,7 +69,7 @@ If you like to pick a specific version, it's only a little more effort::
     == Summary
     2 revisions
     20.02 GiB data (estimated)
-    $ dd if=96d8b001-0ffc-4149-8c35-cf003f5638d6 of=/srv/kvm/my-virtual-machine bs=4048000
+    $ dd if=96d8b001-0ffc-4149-8c35-cf003f5638d6 of=/srv/kvm/my-virtual-machine bs=4096k
 
 Restoring individual files
 --------------------------

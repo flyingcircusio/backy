@@ -33,4 +33,4 @@ on another filesystem, set the BACKY_FORGET_ABOUT_BTRFS environment variable
 prior to running tests::
 
     $ export BACKY_FORGET_ABOUT_BTRFS=1
-    $ bin/py.test 0m 1
+    $ bin/py.test -m 1

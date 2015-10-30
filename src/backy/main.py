@@ -4,7 +4,7 @@ from backy.utils import format_timestamp, format_bytes_flexible
 from prettytable import PrettyTable
 import argparse
 import backy.backup
-import backy.scheduler
+import backy.daemon
 import errno
 import logging
 import logging.handlers
@@ -80,10 +80,10 @@ class Commands(object):
         print(self._backup.find(revision))
 
     def scheduler(self, config):
-        backy.scheduler.main(config)
+        backy.daemon.main(config)
 
     def check(self, config):
-        backy.scheduler.check(config)
+        backy.daemon.check(config)
 
 
 def setup_argparser():

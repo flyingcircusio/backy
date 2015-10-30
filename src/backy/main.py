@@ -43,6 +43,7 @@ class Commands(object):
         total_bytes = 0
 
         t = PrettyTable(["Date", "ID", "Size", "Durat", "Tags"])
+        t.align = 'l'
         t.align['Size'] = 'r'
         t.align['Durat'] = 'r'
 

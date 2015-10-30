@@ -128,9 +128,9 @@ Restoring img_state2.img from level 2. Done.
 Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 3. Done.
 Diffing restore_state1.img against img_state1.img. Success.
-+-----...------+-----...----+------------+-------+------+
-| ... Date ... | ... ID ... |       Size | Durat | Tags |
-+-----...------+-----...----+------------+-------+------+
++------...-+----...-+------------+-------+------+
+| Date ... | ID ... |       Size | Durat | Tags |
++------...-+----...-+------------+-------+------+
 | ... | ... | 511.99 kiB | ... s | test |
 | ... | ... | 511.99 kiB | ... s | test |
 | ... | ... | 511.99 kiB | ... s | test |

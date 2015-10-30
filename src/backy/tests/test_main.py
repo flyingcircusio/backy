@@ -252,7 +252,7 @@ def test_commands_wrapper_status(commands, tmpdir, capsys, clock):
     assert err == ""
     assert out == """\
 +-------------------------+----+---------+-------+------+
-|           Date          | ID |    Size | Durat | Tags |
+| Date                    | ID |    Size | Durat | Tags |
 +-------------------------+----+---------+-------+------+
 | 2015-09-01 07:06:47 UTC | 1  | 0 Bytes |   0 s |      |
 +-------------------------+----+---------+-------+------+

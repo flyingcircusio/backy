@@ -399,6 +399,7 @@ class SchedulerShell(telnetlib3.Telsh):
                          "Last Dur",
                          "Next Backup",
                          "Next Tags"])
+        t.align = 'l'
         t.align['Last Dur'] = 'r'
         t.sortby = "Job"
 

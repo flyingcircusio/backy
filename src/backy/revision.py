@@ -1,5 +1,5 @@
 from .utils import SafeFile
-from .ext_deps import CP, BTRFS
+from .ext_deps import CP
 import backy.utils
 import datetime
 import glob
@@ -16,9 +16,7 @@ cmd = subprocess.check_output
 
 
 def cp_reflink(source, target):
-    if os.environ.get('BACKY_FORGET_ABOUT_BTRFS', None):
-        cmd([CP, source, target])
-        return
+    """Makes as COW copy of `source` if COW is supported."""
     # We can't tell if reflink is really supported. It depends on the
     # filesystem.
     try:
@@ -89,15 +87,6 @@ class Revision(object):
         parent = self.archive[self.parent]
         cp_reflink(parent.filename, self.filename)
         self.writable()
-
-    def defrag(self):
-        if os.environ.get('BACKY_FORGET_ABOUT_BTRFS', None):
-            return
-        try:
-            subprocess.check_call([BTRFS, 'filesystem', 'defragment',
-                                   '-r', os.path.dirname(self.filename)])
-        except subprocess.CalledProcessError:
-            logger.warn('Could not btrfs defrag. Is this a btrfs volume?')
 
     def write_info(self):
         metadata = {

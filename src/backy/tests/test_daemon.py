@@ -40,7 +40,7 @@ jobs:
 
 
 @pytest.mark.asyncio
-def test_run_backup(event_loop, daemon, forget_about_btrfs):
+def test_run_backup(event_loop, daemon):
     job = daemon.jobs['test01']
     t = Task(job)
     t.tags = set(['asdf'])

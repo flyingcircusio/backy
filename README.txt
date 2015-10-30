@@ -12,8 +12,8 @@ Backy is intended to be:
 
 To achieve this, we rely on:
 
-* using a copy-on-write filesystem (btrfs) as the target filesystem to achieve
-  space-efficiency
+* using a copy-on-write filesystem (btrfs, ZFS) as the target filesystem to
+  achieve space-efficiency
 * using a snapshot-capable main storage for our volumes (e.g.
   Ceph, LVM, ...) that allows easy extraction of changes between snapshots
 * leverage proven, existing low-level tools

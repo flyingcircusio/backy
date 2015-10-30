@@ -59,8 +59,3 @@ def archive(tmpdir):
 @pytest.fixture
 def backup(schedule, tmpdir):
     return backy.backup.Backup(str(tmpdir))
-
-
-@pytest.fixture
-def forget_about_btrfs(monkeypatch):
-    monkeypatch.setenv('BACKY_FORGET_ABOUT_BTRFS', '1')

@@ -15,7 +15,7 @@ def generate_test_data(target, size):
     f.close()
 
 
-def test_smoketest_internal(tmpdir, forget_about_btrfs):
+def test_smoketest_internal(tmpdir):
     # These copies of data are intended to be different versions of the same
     # file.
     source1 = str(tmpdir / 'image1.qemu')
@@ -97,7 +97,7 @@ def test_smoketest_internal(tmpdir, forget_about_btrfs):
 
 
 @pytest.mark.slow
-def test_smoketest_external(forget_about_btrfs):
+def test_smoketest_external():
     output = subprocess.check_output([
         BASH, os.path.dirname(__file__) + '/../../../smoketest.sh'])
     output = output.decode('utf-8')

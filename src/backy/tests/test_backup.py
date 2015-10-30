@@ -88,7 +88,7 @@ def test_find_should_raise_if_not_found(simple_file_config):
         backup.find('no such revision')
 
 
-def test_restore_target(simple_file_config, forget_about_btrfs):
+def test_restore_target(simple_file_config):
     backup = simple_file_config
     source = 'input-file'
     target = 'restore.img'
@@ -100,7 +100,7 @@ def test_restore_target(simple_file_config, forget_about_btrfs):
         assert s.read() == t.read()
 
 
-def test_restore_stdout(simple_file_config, forget_about_btrfs, capfd):
+def test_restore_stdout(simple_file_config, capfd):
     backup = simple_file_config
     source = 'input-file'
     with open(source, 'wb') as f:

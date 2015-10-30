@@ -29,7 +29,6 @@ setup(
     version=version(),
     install_requires=[
         'consulate',
-        'fallocate',
         'prettytable',
         'pytz',
         'PyYaml',

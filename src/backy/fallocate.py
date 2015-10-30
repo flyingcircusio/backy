@@ -1,45 +1,50 @@
-# Taken from
-# https://github.com/trbs/fallocate/issues/4 and adapted slightly to Python 3.4
+# Adapted from
+# https://github.com/trbs/fallocate/issues/4
 
 import ctypes
 import ctypes.util
 import logging
+import os
 
-logger = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
+
+FALLOC_FL_KEEP_SIZE = 0x01
+FALLOC_FL_PUNCH_HOLE = 0x02
 
 
-def make_fallocate():
-    c_off_t = ctypes.c_int64
+def _make_fallocate():
+    libc_name = ctypes.util.find_library('c')
+    libc = ctypes.CDLL(libc_name, use_errno=True)
     _fallocate = libc.fallocate
+    c_off_t = ctypes.c_size_t
     _fallocate.restype = ctypes.c_int
     _fallocate.argtypes = [ctypes.c_int, ctypes.c_int, c_off_t, c_off_t]
 
     def fallocate(fd, mode, offset, len_):
+        if len_ <= 0:
+            raise IOError('fallocate: length must be positive')
         res = _fallocate(fd.fileno(), mode, offset, len_)
         if res != 0:
-            raise IOError(res, 'fallocate')
-
+            errno = ctypes.get_errno()
+            raise OSError(errno, 'fallocate: ' + os.strerror(errno))
     return fallocate
 
 try:
-    libc_name = ctypes.util.find_library('c')
-    libc = ctypes.CDLL(libc_name)
-    _fallocate = libc.fallocate
-except AttributeError:
-    logger.debug('Falling back to non-hole-punching `fallocate`.')
+    fallocate = _make_fallocate()
+except AttributeError:  # pragma: no cover
+    _log.debug('Falling back to non-hole-punching `fallocate`.')
 
     def fallocate(fd, mode, offset, len_):
-        old = fd.tell()
-        fd.seek(offset)
-        fd.write(b'\x00' * len_)
-        fd.seek(old)
-else:
-    fallocate = make_fallocate()
-
-del make_fallocate
-
-FALLOC_FL_KEEP_SIZE = 0x01
-FALLOC_FL_PUNCH_HOLE = 0x02
+        if len_ <= 0:
+            raise IOError('fallocate: length must be positive')
+        if mode & FALLOC_FL_PUNCH_HOLE:
+            old = fd.tell()
+            fd.seek(offset)
+            fd.write(b'\x00' * len_)
+            fd.seek(old)
+        else:
+            raise NotImplementedError(
+                'fake fallocate() supports only hole punching')
 
 
 def punch_hole(f, from_, to):

@@ -1,4 +1,5 @@
 from .fallocate import punch_hole
+import contextlib
 import datetime
 import hashlib
 import logging
@@ -166,34 +167,50 @@ PUNCH_SIZE = 16 * kiB
 CHUNK_SIZE = 4 * MiB
 
 
-def safe_copy(source, target):
-    if sys.platform == 'darwin':
-        # OS X does not support this version of fadvise and we really don't
-        # run it in production there anyway. However, I want to be able to
-        # run backy there in general to help development.
-        zeroes = '\00' * PUNCH_SIZE
-    else:
-        # Assuming non-OS X platforms can do this, unless we prove otherwise.
+if hasattr(os, 'posix_fadvise'):
+    posix_fadvise = os.posix_fadvise
+else:  # pragma: no cover
+    logger.warn('Running without `posix_fadvise`.')
+    os.POSIX_FADV_RANDOM = None
+    os.POSIX_FADV_SEQUENTIAL = None
+    os.POSIX_FADV_WILLNEED = None
+    os.POSIX_FADV_DONTNEED = None
+
+    def posix_fadvise(*args, **kw):
+        return
+
+
+if sys.platform == 'darwin':  # pragma: no cover
+    @contextlib.contextmanager
+    def zeroes(size):
+        yield '\00' * size
+else:
+    @contextlib.contextmanager
+    def zeroes(size):
         with open('/dev/zero', 'rb', buffering=0) as f:
-            zeroes = mmap.mmap(f.fileno(), PUNCH_SIZE, access=mmap.ACCESS_READ)
-    fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-    while True:
-        chunk = source.read(CHUNK_SIZE)
-        if not chunk:
-            break
-        # Search for zeroes that we can make sparse.
-        pat_offset = 0
+            z = mmap.mmap(f.fileno(), size, access=mmap.ACCESS_READ)
+            yield z[0:size]
+            z.close()
+
+
+def safe_copy(source, target):
+    posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    with zeroes(PUNCH_SIZE) as z:
         while True:
-            if chunk[pat_offset:pat_offset + PUNCH_SIZE] == zeroes:
-                punch_hole(target, target.tell(), PUNCH_SIZE)
-                target.seek(PUNCH_SIZE, 1)
-            else:
-                target.write(chunk[pat_offset:pat_offset + PUNCH_SIZE])
-            pat_offset += PUNCH_SIZE
-            if pat_offset > len(chunk):
+            chunk = source.read(CHUNK_SIZE)
+            if not chunk:
                 break
-    if sys.platform != 'darwin':
-        zeroes.close()
+            # Search for zeroes that we can make sparse.
+            pat_offset = 0
+            while True:
+                if chunk[pat_offset:pat_offset + PUNCH_SIZE] == z:
+                    punch_hole(target, target.tell(), PUNCH_SIZE)
+                    target.seek(PUNCH_SIZE, 1)
+                else:
+                    target.write(chunk[pat_offset:pat_offset + PUNCH_SIZE])
+                pat_offset += PUNCH_SIZE
+                if pat_offset > len(chunk):
+                    break
     target.truncate()
     size = target.tell()
     os.fsync(target)
@@ -201,9 +218,8 @@ def safe_copy(source, target):
 
 
 def files_are_equal(a, b):
-    if sys.platform != 'darwin':
-        os.posix_fadvise(a.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-        os.posix_fadvise(b.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    posix_fadvise(a.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    posix_fadvise(b.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
     position = 0
     errors = 0
     while True:
@@ -233,10 +249,10 @@ def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=16 * kiB):
 
     # turn off readahead, but preload blocks selectively into page cache
     for fdesc in a.fileno(), b.fileno():
-        fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
+        posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
         for block in sample:
-            fadvise(fdesc, block * blocksize, blocksize,
-                    os.POSIX_FADV_WILLNEED)
+            posix_fadvise(fdesc, block * blocksize, blocksize,
+                          os.POSIX_FADV_WILLNEED)
     for block in sample:
         a.seek(block * blocksize)
         b.seek(block * blocksize)
@@ -269,16 +285,3 @@ def min_date():
 
 def format_timestamp(dt):
     return dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-
-
-if hasattr(os, 'posix_fadvise'):
-    fadvise = os.posix_fadvise
-else:
-    logger.warn('Running without `posix_fadvise`.')
-    os.POSIX_FADV_RANDOM = None
-    os.POSIX_FADV_SEQUENTIAL = None
-    os.POSIX_FADV_WILLNEED = None
-    os.POSIX_FADV_DONTNEED = None
-
-    def fadvise(*args, **kw):
-        return

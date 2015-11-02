@@ -156,6 +156,12 @@ def test_safe_writable_rename_writeprotect(tmpdir):
         open('asdf', 'wb')
 
 
+def test_safe_edit_noop(tmpdir):
+    with SafeFile(str(tmpdir / 'file')):
+        pass
+    assert not os.path.exists(str(tmpdir / 'file'))
+
+
 def test_safe_edit_copy_with_write_protection(tmpdir):
     os.chdir(str(tmpdir))
     open('asdf', 'wb').write(b'csdf')
@@ -254,14 +260,13 @@ def test_roughly_compare_files_1_changed_block(tmpdir):
 
 def test_safe_copy_correctly_makes_sparse_file(tmpdir):
     # Create a test file that contains random data, then we insert
-    # 1024 byte long blocks of zeroes. safe_copy will not break them
-    # and will make the file sparse.
+    # blocks of zeroes. safe_copy will not break them and will make the
+    # file sparse.
     source_name = str(tmpdir / 'input')
     with open(source_name, 'wb') as f:
         f.write(b'12345' * 1024 * 100)
-        f.seek(1024)
-        # holes are at least 4k. we need
-        f.write(b'\x00' * 1024 * 10)
+        f.seek(1024 * 16)
+        f.write(b'\x00' * 1024 * 16)
     source = open(source_name, 'rb')
     target_name = str(tmpdir / 'output')
     target = open(target_name, 'wb')

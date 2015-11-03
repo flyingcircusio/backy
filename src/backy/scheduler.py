@@ -102,7 +102,7 @@ class TaskPool(object):
         while True:
             # Ok, lets get a worker slot and a task
             yield from self.workers.acquire()
-            logger.debug("Got worker")
+            logger.debug('Got worker, %d idle', self.workers._value + 1)
             task = yield from self.get()
             logger.debug('Got task "%s"', task.name)
             task_future = asyncio.Future()
@@ -111,7 +111,7 @@ class TaskPool(object):
 
     def finish_task(self, future):
         task = future.result()
-        if task.returncode > 0:
+        if task.returncode > 0:  # pragma: no cover
             logger.error('%s: exit status %s', task.name, task.returncode)
         else:
             logger.debug('%s: success'.format(task.name))

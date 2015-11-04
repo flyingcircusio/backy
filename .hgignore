@@ -27,3 +27,4 @@ vagrant/.vagrant
 backy.log
 result
 pyvenv.cfg
+doc/_build

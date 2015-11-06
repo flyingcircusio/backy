@@ -2,8 +2,8 @@
 Changelog
 =========
 
-2.0b4 (unreleased)
-==================
+2.0 (2015-11-06)
+================
 
 - backy now accepts a `-l` option to specify a log file. If no such option is
   given, it logs to stdout.

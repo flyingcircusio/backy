@@ -2,6 +2,8 @@
 Backy
 =====
 
+Backup and restore for block devices.
+
 .. toctree::
    :maxdepth: 1
 

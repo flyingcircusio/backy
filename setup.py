@@ -61,7 +61,7 @@ setup(
     author=('Christian Theune <ct@flyingcircus.io>, '
             'Christian Kauhaus <kc@flyingcircus.io>, '
             'Daniel Kraft <daniel.kraft@d9t.de>'),
-    author_email='ct@flyingcircus.io',
+    author_email='mail@flyingcircus.io',
     license='GPL-3',
     url='https://bitbucket.org/flyingcircus/backy',
     keywords='backup',
@@ -73,7 +73,6 @@ License :: OSI Approved :: GNU General Public License v3 (GPLv3)
 Operating System :: POSIX
 Programming Language :: Python
 Programming Language :: Python :: 3
-Programming Language :: Python :: 3.3
 Programming Language :: Python :: 3.4
 Topic :: System :: Archiving :: Backup
 """[:-1].split('\n'),

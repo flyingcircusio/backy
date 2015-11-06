@@ -368,7 +368,7 @@ deleted, forcing the filesystem to adjust its references.
 
 Running **backy** for an extended amount of time causes extent trees of the
 underlying filesystem to fragment quite heavily. This may lead to severely
-degraded performance. In case of a **btrfs** backing store, we recommend to run
+degraded performance. In case of a btrfs backing store, we recommend to run
 both **btrfs filesystem defragment** and **btrfs balance** on a regular basis.
 
 It is also advisable to mount the underlying filesystem with data compression

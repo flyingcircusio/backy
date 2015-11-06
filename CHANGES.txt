@@ -28,13 +28,9 @@ Changelog
 
 - Improve telnet console.
 
-- If the envionment variable BACKY_FORGET_ABOUT_BTRFS is set, special btrfs
-  features (reflink copies, defrag) are not used. This is intended to run tests
-  on non-btrfs filesystems.
-
 - Provide Nix build script.
 
-- Generate requirements.txt automatically from buildout versions.cfg.
+- Generate `requirements.txt` automatically from buildout's `versions.cfg`.
 
 
 2.0b2 (2015-09-15)
@@ -78,3 +74,5 @@ Changelog
 - Compatible with Python 3.2-3.4.
 
 - Initial open source import as provided by Daniel Kraft (D9T).
+
+.. vim: set ft=rst spell spelllang=en:

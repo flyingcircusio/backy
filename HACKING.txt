@@ -2,18 +2,21 @@
 Hacking
 =======
 
-Development
-===========
+.. image:: https://builds.flyingcircus.io/job/backy/badge/icon
 
-Backy is intended to be compatible with Python 3.3 and 3.4. It is expected to
-work properly on Linux and Mac OS X, even though specific backends may not be
-avaible on some platforms::
+Development setup
+=================
+
+Backy is intended to be compatible with Python 3.4. It is expected to work
+properly on Linux and Mac OS X, even though specific backends may not be
+available on all platforms. Use `zc.buildout` to get a development setup::
 
     $ hg clone https://bitbucket.org/flyingcircus/backy
     $ cd backy
     $ virtualenv --python=python3.4 .
     $ bin/pip install zc.buildout
     $ bin/buildout
+
 
 Running tests
 =============
@@ -26,3 +29,14 @@ tests::
 To run all tests::
 
     $ bin/py.test -m 1
+
+
+Releasing
+=========
+
+Install `zest.releaser` on your workstation. Then use::
+
+    $ fullrelease
+    $ python setup.py upload_docs
+
+.. vim: set ft=rst spell spelllang=en:

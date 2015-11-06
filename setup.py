@@ -81,7 +81,7 @@ setup(
     url='https://bitbucket.org/flyingcircus/backy',
     keywords='backup',
     classifiers="""\
-Development Status :: 4 - Beta
+Development Status :: 5 - Production/Stable
 Environment :: Console
 Intended Audience :: System Administrators
 License :: OSI Approved :: GNU General Public License v3 (GPLv3)

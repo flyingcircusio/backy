@@ -29,7 +29,7 @@ def init_logging(logfile, verbose):  # pragma: no cover
         logger.info('$ %s', ' '.join(sys.argv))
 
 
-class Commands(object):
+class Command(object):
     """Proxy between CLI calls and actual backup code."""
 
     def __init__(self, path):
@@ -141,8 +141,8 @@ Copy backed up revision to TARGET. Use stdout if TARGET is "-".
     p = subparsers.add_parser('find', help="""\
 Print full path to a given revision's image file.
 """)
-    p.add_argument('revision', metavar='REVISION', nargs='?', default='latest',
-                   help='Select revision by UUID or relative from last')
+    p.add_argument('-r', '--revision', metavar='SPEC', default='latest',
+                   help='use revision SPEC as restore source')
     p.set_defaults(func='find')
 
     # STATUS
@@ -187,8 +187,8 @@ def main():
     if args.func != 'check':
         init_logging(args.logfile, args.verbose)
 
-    commands = Commands(args.backupdir)
-    func = getattr(commands, args.func)
+    command = Command(args.backupdir)
+    func = getattr(command, args.func)
 
     # Pass over to function
     func_args = dict(args._get_kwargs())

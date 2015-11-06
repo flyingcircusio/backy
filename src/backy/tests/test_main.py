@@ -63,7 +63,7 @@ def print_args(*args, **kw):
 
 
 def test_call_status(capsys, caplog, argv, monkeypatch):
-    monkeypatch.setattr(backy.main.Commands, 'status', print_args)
+    monkeypatch.setattr(backy.main.Command, 'status', print_args)
     argv.append('-v')
     argv.append('status')
     with pytest.raises(SystemExit) as exit:
@@ -71,7 +71,7 @@ def test_call_status(capsys, caplog, argv, monkeypatch):
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
-(<backy.main.Commands object at 0x...>,)
+(<backy.main.Command object at 0x...>,)
 {}
 """) == out
     assert err == ""
@@ -82,7 +82,7 @@ main.py                    ... DEBUG    backup.status(**{})
 
 
 def test_call_init(capsys, caplog, argv, monkeypatch):
-    monkeypatch.setattr(backy.main.Commands, 'init', print_args)
+    monkeypatch.setattr(backy.main.Command, 'init', print_args)
     argv.append('-v')
     argv.append('init')
     argv.append('ceph-rbd')
@@ -92,7 +92,7 @@ def test_call_init(capsys, caplog, argv, monkeypatch):
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
-(<backy.main.Commands object at ...>,)
+(<backy.main.Command object at ...>,)
 {'source': 'test/test04', 'type': 'ceph-rbd'}
 """) == out
     assert err == ""
@@ -131,14 +131,14 @@ main.py                    ... DEBUG    backup.backup(**{'tags': 'test'})
 
 
 def test_call_find(capsys, caplog, argv, monkeypatch):
-    monkeypatch.setattr(backy.main.Commands, 'find', print_args)
-    argv.extend(['-v', 'find', '1'])
+    monkeypatch.setattr(backy.main.Command, 'find', print_args)
+    argv.extend(['-v', 'find', '-r', '1'])
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
-(<backy.main.Commands object at ...>,)
+(<backy.main.Command object at ...>,)
 {'revision': '1'}
 """) == out
     assert err == ""
@@ -150,7 +150,7 @@ main.py                    ... DEBUG    backup.find(...
 
 
 def test_call_check(capsys, caplog, argv, monkeypatch):
-    monkeypatch.setattr(backy.main.Commands, 'check', print_args)
+    monkeypatch.setattr(backy.main.Command, 'check', print_args)
     argv.append('-v')
     argv.append('check')
     with pytest.raises(SystemExit) as exit:
@@ -158,7 +158,7 @@ def test_call_check(capsys, caplog, argv, monkeypatch):
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
-(<backy.main.Commands object at ...>,)
+(<backy.main.Command object at ...>,)
 {'config': '/etc/backy.conf'}
 """) == out
     assert err == ""
@@ -171,14 +171,14 @@ main.py                    ... DEBUG    backup.check(**{'config': \
 
 
 def test_call_scheduler(capsys, caplog, argv, monkeypatch):
-    monkeypatch.setattr(backy.main.Commands, 'scheduler', print_args)
+    monkeypatch.setattr(backy.main.Command, 'scheduler', print_args)
     argv.append('scheduler')
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
-(<backy.main.Commands object at ...>,)
+(<backy.main.Command object at ...>,)
 {'config': '/etc/backy.conf'}
 """) == out
     assert err == ""
@@ -193,7 +193,7 @@ main.py                    ... DEBUG    backup.scheduler(**{'config': \
 def test_call_unexpected_exception(capsys, caplog, argv, monkeypatch):
     def do_raise(*args, **kw):
         raise RuntimeError("test")
-    monkeypatch.setattr(backy.main.Commands, 'status', do_raise)
+    monkeypatch.setattr(backy.main.Command, 'status', do_raise)
     import os
     monkeypatch.setattr(os, '_exit', lambda x: None)
     import logging
@@ -221,7 +221,7 @@ main.py                    ... INFO     Backy operation failed.
 
 @pytest.fixture
 def commands(tmpdir):
-    commands = backy.main.Commands(str(tmpdir))
+    commands = backy.main.Command(str(tmpdir))
     commands.init('file', str(tmpdir) + '/source')
     return commands
 

@@ -8,10 +8,14 @@ logger = logging.getLogger(__name__)
 MINUTE = 60
 HOUR = 60 * MINUTE
 DAY = 24 * HOUR
+WEEK = 7 * DAY
 
 
 def parse_duration(duration):
-    if duration.endswith('d'):
+    if duration.endswith('w'):
+        duration = duration.replace('w', '')
+        duration = int(duration) * WEEK
+    elif duration.endswith('d'):
         duration = duration.replace('d', '')
         duration = int(duration) * DAY
     elif duration.endswith('h'):

@@ -13,40 +13,15 @@ Backy is intended to be:
 To achieve this, we rely on:
 
 * using a copy-on-write filesystem (btrfs, ZFS) as the target filesystem to
-  achieve space-efficiency
+  achieve space-efficiency,
 * using a snapshot-capable main storage for our volumes (e.g.
-  Ceph, LVM, ...) that allows easy extraction of changes between snapshots
-* leverage proven, existing low-level tools
+  Ceph, LVM, ...) that allows easy extraction of changes between snapshots,
+* leverage proven, existing low-level tools,
 * keep the code-base small, simple, and well-tested.
 
 
-Synopsis
+Recovery
 ========
-
-    backy --help
-
-    backy scheduler -c CONFIG
-
-    backy check -c CONFIG
-
-    backy [-b BACKUPDIR ] init
-
-    backy [-b BACKUPDIR ] backup TAGS
-
-    backy [-b BACKUPDIR ] restore -r REVISION TARGET
-
-    backy [-b BACKUPDIR ] find REVISION
-
-    backy [-b BACKUPDIR ] status
-
-Global options:
-
-* -l LOGFILE
-* --verbose
-
-
-Disaster recovery
-=================
 
 Full restore
 ------------
@@ -71,6 +46,7 @@ If you like to pick a specific version, it's only a little more effort::
     20.02 GiB data (estimated)
     $ dd if=96d8b001-0ffc-4149-8c35-cf003f5638d6 of=/srv/kvm/my-virtual-machine bs=4096k
 
+
 Restoring individual files
 --------------------------
 
@@ -78,7 +54,7 @@ The image files are exact copies of the data from the virtual disks. You can use
 regular Linux tools to interact with them::
 
     $ cd /srv/backy/my-virtual-machine
-    $ ls -lah latest
+    $ ls -lah last
     lrwxrwxrwx 1 root root  36 Apr 25 10:13 last -> d95e4f6c-cfef-48ee-aec2-d7c9e91c1bec
     $ kpartx -av d95e4f6c-cfef-48ee-aec2-d7c9e91c1bec
     add map loop0p1 (253:9): 0 41934815 linear /dev/loop0 8192
@@ -92,7 +68,7 @@ To clean up::
 
     $ cd /srv/backy/my-virtual-machine
     $ umount /root/restore
-    $ kpartx -av d95e4f6c-cfef-48ee-aec2-d7c9e91c1bec
+    $ kpartx -d d95e4f6c-cfef-48ee-aec2-d7c9e91c1bec
 
 
 Creating backups
@@ -106,7 +82,7 @@ init system::
 The scheduler runs in the foreground until it is shot by SIGTERM. On resume, the
 scheduler re-runs missed backup jobs to some degree.
 
-Log output goes to `backy.log` in the current directory.
+Log output goes to `backy.log` in the current directory by default.
 
 
 Interactive console
@@ -115,6 +91,10 @@ Interactive console
 Telnet into localhost port 6023 to get a console.
 
 .. XXX TBD
+
+
+Self-checking
+=============
 
 
 Configuration

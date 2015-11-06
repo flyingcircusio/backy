@@ -8,6 +8,8 @@ Changelog
 - backy now accepts a `-l` option to specify a log file. If no such option is
   given, it logs to stdout.
 
+- Add `backy find -r REVISION` subcommand to query image paths from shell scripts.
+
 - Fix monitoring bug where partially written images made the check go green
   (#30).
 
@@ -17,8 +19,6 @@ Changelog
   (#20).
 
 - The scheduler reports child failures (exit status > 0) now in the main log.
-
-- Add `backy find REVISION` subcommand to query image paths from shell scripts.
 
 - Fix fallocate() behaviour on 32 bit systems.
 

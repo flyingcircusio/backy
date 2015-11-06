@@ -8,6 +8,7 @@ import pytz
 
 
 def test_parse_duration():
+    assert parse_duration('1w') == timedelta(seconds=24 * 60 * 60 * 7)
     assert parse_duration('1d') == timedelta(seconds=24 * 60 * 60)
     assert parse_duration('2d') == timedelta(seconds=2 * 24 * 60 * 60)
     assert parse_duration('1h') == timedelta(seconds=60 * 60)

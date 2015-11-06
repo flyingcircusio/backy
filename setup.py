@@ -1,9 +1,24 @@
 """Backup and restore for block devices."""
 
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Command
 import codecs
 import glob
 import os.path as p
+import subprocess
+import sys
+
+
+class PyTest(Command):
+    """Invoke py.test from `bin/python setup.py test`."""
+    user_options = []
+    initialize_options = lambda self: None
+    finalize_options = lambda self: None
+
+    def run(self):
+        errno = subprocess.call([
+            sys.executable,
+            p.join(p.dirname(__file__), 'bin', 'py.test'), '-m1'])
+        raise SystemExit(errno)
 
 
 def open_project_path(filename):
@@ -83,4 +98,5 @@ Topic :: System :: Archiving :: Backup
     include_package_data=True,
     data_files=[('', glob.glob('*.txt'))],
     zip_safe=False,
+    cmdclass = {'test': PyTest},
 )

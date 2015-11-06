@@ -1,6 +1,6 @@
 from .rbd import RBDClient
-from backy.utils import safe_copy, SafeFile
-from backy.utils import files_are_roughly_equal
+from ...utils import safe_copy, SafeFile
+from ...utils import files_are_roughly_equal
 import logging
 
 logger = logging.getLogger(__name__)
@@ -11,7 +11,6 @@ class CephRBD(object):
 
     Manages snapshots corresponding to revisions and provides a verification
     that tries to balance reliability and performance.
-
     """
 
     def __init__(self, config):
@@ -21,7 +20,12 @@ class CephRBD(object):
 
     @staticmethod
     def config_from_cli(spec):
-        pool, image = spec.split('/')
+        logger.debug('CephRBD.config_from_cli(%s)', spec)
+        param = spec.split('/')
+        if len(param) != 2:
+            raise RuntimeError('ceph source must be initialized with '
+                               'POOL/IMAGE')
+        pool, image = param
         return dict(pool=pool, image=image)
 
     def __call__(self, revision):

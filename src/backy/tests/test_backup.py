@@ -42,7 +42,6 @@ def test_init_ceph(tmpdir):
 def test_init_file(tmpdir):
     backup = Backup(str(tmpdir))
     backup.init('file', '/dev/foo')
-
     with open(str(tmpdir / 'config')) as f:
         config = yaml.load(f)
     assert config == {

@@ -1,14 +1,20 @@
 from backy.ext_deps import RBD
 from backy.revision import Revision
 from backy.sources.ceph.source import CephRBD
+from backy.sources import select_source
 from unittest.mock import Mock, call
 import backy.utils
-import os.path
+import os.path as p
+import pytest
 import subprocess
 
 
-with open(os.path.dirname(__file__) + '/nodata.rbddiff') as f:
+with open(p.join(p.dirname(__file__), 'nodata.rbddiff'), 'rb') as f:
     SAMPLE_RBDDIFF = f.read()
+
+
+def test_select_ceph_source():
+    assert select_source('ceph-rbd') == CephRBD
 
 
 def test_assign_revision():
@@ -175,7 +181,7 @@ def test_diff_backup(monkeypatch, backup, tmpdir):
     with open(str(tmpdir / revision.parent), 'w') as f:
         f.write('asdf')
 
-    with open(str(tmpdir / revision.uuid) + '.rbddiff', 'w') as f:
+    with open(str(tmpdir / revision.uuid) + '.rbddiff', 'wb') as f:
         f.write(SAMPLE_RBDDIFF)
 
     backup.archive.scan()
@@ -330,3 +336,18 @@ def test_verify(monkeypatch, backup, tmpdir):
         call([RBD, '--no-progress', 'unmap', rbd_source]),
         call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
               'test/foo'])]
+
+
+def test_ceph_config_from_cli():
+    s = CephRBD.config_from_cli('rbd/vm.root')
+    assert s == {
+        'pool': 'rbd',
+        'image': 'vm.root',
+    }
+
+
+def test_ceph_config_from_cli_invalid():
+    with pytest.raises(RuntimeError) as exc:
+        CephRBD.config_from_cli('foobar')
+    assert str(exc.value) == ('ceph source must be initialized with '
+                              'POOL/IMAGE')

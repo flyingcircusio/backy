@@ -209,15 +209,12 @@ ceph
 
     Init syntax:
 
-        **backy init ceph** *POOL*/*IMAGE*
-
-    Note that it may be necessary to set additional environment variables like
-    **CEPH_CLUSTER**, **CEPH_ID** or **CEPH_ARGS** for proper Ceph access.
+        **backy init ceph-rbd** *POOL*/*IMAGE*
 
 flyingcircus
     Reads Ceph RBD images and provides integration with the hosting
     infrastructure at http://flyingcircus.io. This source type is probably not
-    useful for the general public. It accepts all parameters of the **ceph**
+    useful for the general public. It accepts all parameters of the **ceph-rbd**
     type.
 
     Additional configuration parameters:
@@ -245,9 +242,11 @@ Environment
 
 Several environment variable starting with *BACKY_* are used to specify paths to
 external utilities. See `exp_deps.py` in the source distribution for details.
-The *ceph* backup source type is influenced by several Ceph-specific variables.
 
-The **backy scheduler** process exits cleanly on *SIGTERM*.
+The **ceph-rbd** backup source type is influenced by several Ceph-specific
+environment variables like **CEPH_CLUSTER**, **CEPH_ID**, or **CEPH_ARGS**.
+
+**backy scheduler** processes exit cleanly on SIGTERM.
 
 
 Files
@@ -414,7 +413,7 @@ A main configuration file containing all source types may look like this::
         test02:
             schedule: default
             source:
-                type: ceph
+                type: ceph-rbd
                 pool: rbd
                 image: test02
         test03:

@@ -22,6 +22,8 @@ Changelog
 
 - Fix fallocate() behaviour on 32 bit systems.
 
+- The `flyingcircus` source type now requires 3 arguments: vm, pool, image.
+
 
 2.0b3 (2015-10-02)
 ==================

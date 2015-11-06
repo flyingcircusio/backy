@@ -118,10 +118,10 @@ Backy comes with a number of plug-ins which define block-file like sources:
 
 - **file** extracts data from simple image files living on a regular file
   system.
-- **ceph** pulls data from RBD images using Ceph features like snapshots.
-- **flyingcircus** is an extension to the `ceph` source which we use internally
-  on the `Flying Circus`_ hosting platform. It uses advanced features like
-  Consul integration.
+- **ceph-rbd** pulls data from RBD images using Ceph features like snapshots.
+- **flyingcircus** is an extension to the `ceph-rbd` source which we use
+  internally on the `Flying Circus`_ hosting platform. It uses advanced features
+  like Consul integration.
 
 .. _Flying Circus: http://flyingcircus.io/
 

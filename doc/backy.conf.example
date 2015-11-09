@@ -1,0 +1,44 @@
+global:
+    base-dir: /my/backydir
+    worker-limit: 3
+schedules:
+    default:
+        daily:
+            interval: 1d
+            keep: 7
+        weekly:
+            interval: 1w
+            keep: 4
+        monthly:
+            interval: 30d
+            keep: 3
+    frequent:
+        hourly:
+            interval: 1h
+            keep: 24
+        daily:
+            interval: 1d
+            keep: 7
+        weekly:
+            interval: 1w
+            keep: 12
+jobs:
+    test01:
+        schedule: default
+        source:
+            type: file
+            filename: /path/to/vm/image
+    test02:
+        schedule: default
+        source:
+            type: ceph-rbd
+            pool: rbd
+            image: test02
+    test03:
+        schedule: hourly
+        source:
+            type: flyingcircus,
+            consul_acl_token: a211c244-846b-11e5-999b-081196cf15b4
+            vm: test03,
+            pool: test
+            image: test03.root

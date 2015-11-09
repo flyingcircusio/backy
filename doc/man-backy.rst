@@ -40,7 +40,7 @@ scheduler.
 **backy** employs a flexible retention scheme. Each backup is tagged with a set
 of free-form tags. Tags are associated with retention times in the configuration
 file. When the retention time for a given tag has expired, the tag is marked
-invalid. Once all tags assiciated with a revision are invalidated, the scheduler
+invalid. Once all tags associated with a revision are invalidated, the scheduler
 removes that revision.
 
 
@@ -85,19 +85,6 @@ Action subcommands
     forked beforehand from the init system. If the scheduler is restarted after
     being off for a while, it will automatically catch up on jobs missed in the
     meantime.
-
-    The schedules opens a telnet server on localhost port 6023 for live
-    inspection. The telnet interface accepts the following commands:
-
-    jobs
-        Prints an overview of all configured jobs together with their last and
-        next backup run.
-
-    status
-        Dumps internal server status details.
-
-    quit
-        Exits the telnet shell.
 
 **check**
     Returns an overall status if all backup jobs are serviced in time. The
@@ -249,6 +236,23 @@ environment variables like **CEPH_CLUSTER**, **CEPH_ID**, or **CEPH_ARGS**.
 **backy scheduler** processes exit cleanly on SIGTERM.
 
 
+Telnet shell
+------------
+
+The schedules opens a telnet server on localhost port 6023 for live
+inspection. The telnet interface accepts the following commands:
+
+jobs
+    Prints an overview of all configured jobs together with their last and
+    next backup run.
+
+status
+    Dumps internal server status details.
+
+quit
+    Exits the telnet shell.
+
+
 Files
 -----
 
@@ -378,52 +382,9 @@ enabled.
 Example
 -------
 
-A main configuration file containing all source types may look like this::
+A main configuration file containing all source types may look like this:
 
-    global:
-        base-dir: /my/backydir
-        worker-limit: 3
-    schedules:
-        default:
-            daily:
-                interval: 1d
-                keep: 7
-            weekly:
-                interval: 1w
-                keep: 4
-            monthly:
-                interval: 30d
-                keep: 3
-        frequent:
-            hourly:
-                interval: 1h
-                keep: 24
-            daily:
-                interval: 1d
-                keep: 7
-            weekly:
-                interval: 1w
-                keep: 12
-    jobs:
-        test01:
-            schedule: default
-            source:
-                type: file
-                filename: /path/to/vm/image
-        test02:
-            schedule: default
-            source:
-                type: ceph-rbd
-                pool: rbd
-                image: test02
-        test03:
-            schedule: hourly
-            source:
-                type: flyingcircus,
-                consul_acl_token: a211c244-846b-11e5-999b-081196cf15b4
-                vm: test03,
-                pool: test
-                image: test03.root
+.. literalinclude:: backy.conf.example
 
 This configuration file defines two schedules: "default" and "frequent". The
 "default" schedule creates daily, weekly, and monthly backups with different

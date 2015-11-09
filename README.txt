@@ -128,6 +128,14 @@ Backy comes with a number of plug-ins which define block-file like sources:
 It should be easy to write plug-ins for additional sources.
 
 
+Adaptive verification
+---------------------
+
+Backy always verifies freshly created backups. Verification scale depends on
+the source type: file-based sources get fully verified. Ceph-based sources are
+verified based on random samples for runtime reasons.
+
+
 Authors
 =======
 

@@ -1,8 +1,8 @@
 from backy.revision import Revision
-from backy.schedule import parse_duration, next_in_interval
+from backy.schedule import parse_duration, next_in_interval, Schedule
 from datetime import datetime, timedelta
-import backy.utils
 from unittest import mock
+import backy.utils
 import os.path
 import pytz
 
@@ -193,3 +193,13 @@ def test_next_in_interval(clock):
     assert (
         datetime(2015, 9, 3, 0, 1, 40, tzinfo=pytz.UTC) ==
         next_in_interval(now, interval, 100))
+
+
+def test_sorted_tags():
+    s = Schedule()
+    s.configure({'daily': {'interval': '1d', 'keep': 5},
+                 'weekly': {'interval': '1w', 'keep': 4},
+                 'monthly': {'interval': '4w', 'keep': 3},
+                 })
+    assert ['daily', 'weekly', 'monthly'] == list(
+        s.sorted_tags(s.schedule.keys()))

@@ -242,9 +242,10 @@ Telnet shell
 The schedules opens a telnet server on localhost port 6023 for live
 inspection. The telnet interface accepts the following commands:
 
-jobs
+jobs [REGEX]
     Prints an overview of all configured jobs together with their last and
-    next backup run.
+    next backup run. An optional (extended) regular expression restricts output
+    to matching job names.
 
 status
     Dumps internal server status details.
@@ -454,7 +455,8 @@ See also
 
 :manpage:`btrfs(8)`,
 :manpage:`cp(1)`,
-:manpage:`fsfreeze(8)`
+:manpage:`fsfreeze(8)`,
+:manpage:`regex(7)`
 
 `Ceph <http://ceph.com/>`_
 

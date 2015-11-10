@@ -5,7 +5,7 @@ Changelog
 2.0.1 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Add optional regex filter to the `jobs` command in the telnet shell.
 
 
 2.0 (2015-11-06)

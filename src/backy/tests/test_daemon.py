@@ -1,12 +1,13 @@
+from backy.daemon import BackyDaemon
 from backy.revision import Revision
 from backy.scheduler import Task, TaskPool
-from backy.daemon import BackyDaemon
 from unittest import mock
 import asyncio
 import backy.utils
 import datetime
 import os
 import pytest
+import re
 
 
 @pytest.fixture
@@ -26,6 +27,11 @@ schedules:
             keep: 9
 jobs:
     test01:
+        source:
+            type: file
+            filename: {source}
+        schedule: default
+    foo00:
         source:
             type: file
             filename: {source}
@@ -181,3 +187,12 @@ def test_task_generator(daemon, clock, tmpdir, event_loop, monkeypatch):
             yield from asyncio.sleep(0.2)
 
     yield from wait_for_job_finished()
+
+
+def test_daemon_status(daemon):
+    assert {'test01', 'foo00'} == set([s['job'] for s in daemon.status()])
+
+
+def test_daemon_status_filter_re(daemon):
+    r = re.compile(r'foo\d\d')
+    assert {'foo00'} == set([s['job'] for s in daemon.status(r)])

@@ -9,6 +9,7 @@ import os
 import os.path as p
 import pkg_resources
 import prettytable
+import re
 import sys
 import telnetlib3
 import time
@@ -90,9 +91,11 @@ class BackyDaemon(object):
         for job in self.jobs.values():
             job.start()
 
-    def status(self):
+    def status(self, filter_re=None):
         result = []
-        for job in daemon.jobs.values():
+        for job in self.jobs.values():
+            if filter_re and not filter_re.search(job.name):
+                continue
             job.archive.scan()
             if job.archive.clean_history:
                 last = job.archive.clean_history[-1]
@@ -163,8 +166,12 @@ class SchedulerShell(telnetlib3.Telsh):
     shell_name = 'backy'
     shell_ver = pkg_resources.require("backy")[0].version
 
-    def cmdset_jobs(self, *_args):
-        """List status of all known jobs"""
+    def cmdset_jobs(self, filter_re=None, *args):
+        """List status of all known jobs. Optionally filter by regex."""
+        if len(args) > 0:
+            self.stream.write('Usage: jobs [REGEX]')
+            return 1
+        filter_re = re.compile(filter_re) if filter_re else None
         t = prettytable.PrettyTable([
             'Job', 'SLA', 'Status', 'Last Backup', 'Last Tags', 'Last Dur',
             'Next Backup', 'Next Tags'])
@@ -172,7 +179,7 @@ class SchedulerShell(telnetlib3.Telsh):
         t.align['Last Dur'] = 'r'
         t.sortby = 'Job'
 
-        for job in daemon.status():
+        for job in daemon.status(filter_re):
             t.add_row([job['job'],
                        job['sla'],
                        job['status'],

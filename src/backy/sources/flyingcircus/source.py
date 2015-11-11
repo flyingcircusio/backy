@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class FlyingCircusRootDisk(CephRBD):
 
-    snapshot_timeout = 30
+    snapshot_timeout = 60
 
     def __init__(self, config):
         self.config = config
@@ -35,8 +35,8 @@ class FlyingCircusRootDisk(CephRBD):
     def _create_snapshot(self, name):
         consul = consulate.Consul(token=self.consul_acl_token)
         snapshot_key = 'snapshot/{}'.format(str(uuid.uuid4()))
-        logger.info('Consul: requesting consistent snapshot of %s/%s via %s',
-                    snapshot_key)
+        logger.info('Consul: requesting consistent snapshot of %s@%s via %s',
+                    self.vm, name, snapshot_key)
         consul.kv[snapshot_key] = {'vm': self.vm, 'snapshot': name}
         try:
             timeout = TimeOut(self.snapshot_timeout, raise_on_timeout=True)

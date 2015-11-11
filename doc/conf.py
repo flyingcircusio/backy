@@ -43,7 +43,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Backy backup and restore utility'
-copyright = u'Christian Kauhaus, Christian Theune, Daniel Kraft'
+copyright = u'Flying Circus Internet Operations GmbH, D9T GmbH'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -236,8 +236,13 @@ htmlhelp_basename = 'backydoc'
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('man-backy', 'backy', 'Backup and restore for block devices',
-     ['Flying Circus Internet Operations'], 1)
+    ('man-backy',
+     'backy',
+     'Image-based backup and restore for block devices',
+     ['Christian Theune <ct@flyingcircus.io>',
+      'Christian Kauhaus <kc@flyingcircus.io>',
+      'Daniel Kraft <daniel.kraft@d9t.de>'],
+     1)
 ]
 
 # If true, show URL addresses after external links.

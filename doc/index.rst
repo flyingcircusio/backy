@@ -2,7 +2,7 @@
 Backy
 =====
 
-Backup and restore for block devices.
+Image-based backup and restore for block devices.
 
 .. include:: ../README.txt
 

@@ -74,18 +74,26 @@ To clean up::
     $ kpartx -d cErS5GJ5sLdsk9L6oCs4ia
 
 
-Creating backups
+Setting up backy
 ----------------
 
-Create a configuration file (see man page for details). Spawn the scheduler with
-your favourite init system::
+#. Create a sufficiently large backup partition using a COW-capable filesystem
+   like btrfs and mount it under `/srv/backy`.
 
-  backy scheduler -c /path/to/backy.conf
+#. Create a configuration file at `/etc/backy.conf`. See man page for details.
 
-The scheduler runs in the foreground until it is shot by SIGTERM. On resume, the
-scheduler re-runs missed backup jobs to some degree.
+#. Start the scheduler with your favourite init system::
 
-Log output goes to `backy.log` in the current directory by default.
+      backy -l /var/log/backy.log scheduler -c /path/to/backy.conf
+
+   The scheduler runs in the foreground until it is shot by SIGTERM.
+
+#. Set up monitoring using `backy check`.
+
+#. Set up log rotation for `/var/log/backy.conf` and `/srv/backy/*/backy.log`.
+
+The file paths given above match the built-in defaults, but paths are fully
+configurable.
 
 
 Features
@@ -135,13 +143,24 @@ Backy always verifies freshly created backups. Verification scale depends on
 the source type: file-based sources get fully verified. Ceph-based sources are
 verified based on random samples for runtime reasons.
 
+Zero-configuration scheduling
+-----------------------------
+
+The backy scheduler is intended to run continuously. It will spread jobs
+according to the configured run intervals over the day. After resuming from an
+interruption, it will reschedule missed jobs so that SLAs are still kept if
+possible.
+
+Backup jobs can be triggered at specific times as well: just invoke `backy
+backup` manually.
+
 
 Authors
 =======
 
-* Daniel Kraft <daniel.kraft@d9t.de>
 * Christian Theune <ct@flyingcircus.io>
 * Christian Kauhaus <kc@flyingcircus.io>
+* Daniel Kraft <daniel.kraft@d9t.de>
 
 
 License
@@ -158,4 +177,4 @@ Links
 * `Online docs <http://pythonhosted.org/backy/>`_
 * `Build server <https://builds.flyingcircus.io/job/backy/>`_
 
-.. vim: set ft=rst spell spelllang=en:
+.. vim: set ft=rst spell spelllang=en sw=3:

@@ -1,4 +1,4 @@
-"""Backup and restore for block devices."""
+"""Image-based backup and restore for block devices."""
 
 from setuptools import setup, find_packages, Command
 import codecs

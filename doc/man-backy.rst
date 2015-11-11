@@ -370,10 +370,14 @@ image. Unmodified portions are kept as shallow copies by the underlying
 filesystem. In addition, retention caused random copies in the chain to be
 deleted, forcing the filesystem to adjust its references.
 
-Running **backy** for an extended amount of time causes extent trees of the
-underlying filesystem to fragment quite heavily. This may lead to severely
-degraded performance. In case of a btrfs backing store, we recommend to run
-both **btrfs filesystem defragment** and **btrfs balance** on a regular basis.
+Running **backy** continuously causes extent trees of the underlying filesystem
+to fragment quite heavily. This may degrade performance. To mitigate this
+problem on a btrfs backing store, we suggest to run btrfs maintenance on a
+regular basis. A suitable cron job should include::
+
+    btrfs filesystem defragment -r /srv/backy
+    btrfs balance start /srv/backy
+    btrfs scrub start /srv/backy
 
 It is also advisable to mount the underlying filesystem with data compression
 enabled.

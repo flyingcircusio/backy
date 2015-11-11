@@ -4,7 +4,7 @@
 let
   pkgs = import <nixpkgs> { };
 
-  ceph_rbd_cmd = if use_ceph  then "${pkgs.ceph}/bin/rbd" else "";
+  ceph_rbd_cmd = if use_ceph then "${pkgs.ceph}/bin/rbd" else "";
 
   python = pythonPackages.python;
   pythonPackages = pkgs.python34Packages;

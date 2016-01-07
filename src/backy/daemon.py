@@ -118,13 +118,16 @@ class BackyDaemon(object):
                            if job.task else '-')))
         return result
 
+    def _write_status_file(self):
+        with SafeFile(self.status_file) as tmp:
+            tmp.protected_mode = 0o644
+            tmp.open_new('w')
+            yaml.safe_dump(self.status(), tmp.f)
+
     @asyncio.coroutine
     def save_status_file(self):
         while True:
-            with SafeFile(self.status_file) as tmp:
-                tmp.protected_mode = 0o644
-                tmp.open_new('w')
-                yaml.safe_dump(self.status(), tmp.f)
+            self._write_status_file()
             yield from asyncio.sleep(30)
 
     def check(self):
@@ -153,7 +156,8 @@ class BackyDaemon(object):
                 failed_jobs.append(job)
 
         if failed_jobs:
-            print("CRITICAL: {} jobs not within SLA".format(len(failed_jobs)))
+            print('CRITICAL: {} jobs not within SLA\n{}'.format(
+                len(failed_jobs), '\n'.join(f['job'] for f in failed_jobs)))
             logging.debug('failed jobs: %r', failed_jobs)
             sys.exit(2)
 
@@ -166,9 +170,9 @@ class SchedulerShell(telnetlib3.Telsh):
     shell_name = 'backy'
     shell_ver = pkg_resources.require("backy")[0].version
 
-    def cmdset_jobs(self, filter_re=None, *args):
+    def cmdset_jobs(self, filter_re=None, *extra_args):
         """List status of all known jobs. Optionally filter by regex."""
-        if len(args) > 0:
+        if len(extra_args) > 0:
             self.stream.write('Usage: jobs [REGEX]')
             return 1
         filter_re = re.compile(filter_re) if filter_re else None

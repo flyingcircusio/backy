@@ -196,3 +196,32 @@ def test_daemon_status(daemon):
 def test_daemon_status_filter_re(daemon):
     r = re.compile(r'foo\d\d')
     assert {'foo00'} == set([s['job'] for s in daemon.status(r)])
+
+
+def test_check_ok(daemon, capsys):
+    daemon._write_status_file()
+    try:
+        daemon.check()
+    except SystemExit as exit:
+        assert exit.code == 0
+    out, err = capsys.readouterr()
+    assert 'OK: 2 jobs within SLA\n' == out
+
+
+def test_check_critical(daemon, clock, tmpdir, capsys):
+    job = daemon.jobs['test01']
+    os.makedirs(str(tmpdir / 'test01'))
+    revision = Revision('1', job.archive)
+    revision.timestamp = backy.utils.now() - datetime.timedelta(hours=48)
+    revision.stats['duration'] = 60.0
+    revision.materialize()
+    daemon._write_status_file()
+    try:
+        daemon.check()
+    except SystemExit as exit:
+        assert exit.code == 2
+    out, err = capsys.readouterr()
+    assert out == """\
+CRITICAL: 1 jobs not within SLA
+test01
+"""

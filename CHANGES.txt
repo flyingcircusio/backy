@@ -6,7 +6,10 @@ Changelog
 ================
 
 - Add optional regex filter to the `jobs` command in the telnet shell.
+
 - Provide list of failed jobs in check output, not only the total number.
+
+- Use `{BASE_DIR}/.lock` as daemon lock file instead of the status file.
 
 
 2.0 (2015-11-06)

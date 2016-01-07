@@ -74,7 +74,7 @@ class BackyDaemon(object):
         """Starts the scheduler daemon."""
         # Ensure single daemon instance.
         self._read_config()
-        self._lock = open(self.status_file, 'a+b')
+        self._lock = open(p.join(self.base_dir, '.lock'), 'a+b')
         fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
         # semi-daemonize

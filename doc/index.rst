@@ -6,6 +6,7 @@
 
 .. toctree::
    :maxdepth: 1
+   :hidden:
 
    man-backy
    changelog

@@ -76,7 +76,7 @@ def test_call_status(capsys, caplog, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-backup.py                  ... DEBUG    Backup(".../backy")
+backup.py                  ... DEBUG    Backup("...")
 main.py                    ... DEBUG    backup.status(**{})
 """) == caplog.text()
 
@@ -97,7 +97,7 @@ def test_call_init(capsys, caplog, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-backup.py                  ... DEBUG    Backup(".../backy")
+backup.py                  ... DEBUG    Backup("...")
 main.py                    ... DEBUG    backup.init(**{...ceph-rbd...})
 """) == caplog.text()
 
@@ -124,7 +124,7 @@ filename: {}
 """) == out
     assert "" == err
     assert Ellipsis("""\
-backup.py                  ... DEBUG    Backup(".../backy")
+backup.py                  ... DEBUG    Backup("...")
 main.py                    ... DEBUG    backup.backup(**{'tags': 'test'})
 """) == caplog.text()
     assert exit.value.code == 0
@@ -143,7 +143,7 @@ def test_call_find(capsys, caplog, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-backup.py                  ... DEBUG    Backup(".../backy")
+backup.py                  ... DEBUG    Backup("...")
 main.py                    ... DEBUG    backup.find(...
 """) == caplog.text()
     assert exit.value.code == 0
@@ -163,7 +163,7 @@ def test_call_check(capsys, caplog, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-backup.py                  ... DEBUG    Backup(".../backy")
+backup.py                  ... DEBUG    Backup("...")
 main.py                    ... DEBUG    backup.check(**{'config': \
 '/etc/backy.conf'})
 """) == caplog.text()
@@ -183,7 +183,7 @@ def test_call_scheduler(capsys, caplog, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-backup.py                  ... DEBUG    Backup(".../backy")
+backup.py                  ... DEBUG    Backup("...")
 main.py                    ... DEBUG    backup.scheduler(**{'config': \
 '/etc/backy.conf'})
 """) == caplog.text()

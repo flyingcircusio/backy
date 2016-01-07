@@ -1,11 +1,8 @@
-=====
-Backy
-=====
-
-Image-based backup and restore for block devices.
+.. image:: _static/backy-stroke162.png
+   :alt: backy
+   :align: center
 
 .. include:: ../README.txt
-
 
 .. toctree::
    :maxdepth: 1

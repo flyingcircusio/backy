@@ -231,7 +231,7 @@ Several environment variable starting with *BACKY_* are used to specify paths to
 external utilities. See `exp_deps.py` in the source distribution for details.
 
 The **ceph-rbd** backup source type is influenced by several Ceph-specific
-environment variables like **CEPH_CLUSTER**, **CEPH_ID**, or **CEPH_ARGS**.
+environment variables like **CEPH_CLUSTER** or **CEPH_ARGS**.
 
 **backy scheduler** processes exit cleanly on SIGTERM.
 

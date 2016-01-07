@@ -42,7 +42,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'Backy backup and restore utility'
+project = u'backy'
 copyright = u'Flying Circus Internet Operations GmbH, D9T GmbH'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -105,6 +105,7 @@ html_theme = 'alabaster'
 # documentation.
 html_theme_options = {
     'github_button': False,
+    'logo': 'backy-logo300.png',
 }
 
 # Add any paths that contain custom themes here, relative to this directory.
@@ -119,7 +120,7 @@ html_title = u'{} {}'.format(project, version)
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-#html_logo = None
+# html_logo = 'backy300.png'
 
 # The name of an image file (within the static path) to use as favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32

@@ -37,6 +37,10 @@ Releasing
 Install `zest.releaser` on your workstation. Then use::
 
     $ fullrelease
-    $ python setup.py upload_docs
+
+To upload the docs, check out the last release tag and run::
+
+    $ bin/buildout
+    $ bin/python setup.py upload_docs --upload-dir doc/_build/html
 
 .. vim: set ft=rst spell spelllang=en:

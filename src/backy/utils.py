@@ -225,7 +225,11 @@ def safe_copy(source, target):
                 pat_offset += PUNCH_SIZE
                 if pat_offset > len(chunk):
                     break
-    target.truncate()
+    try:
+        target.truncate()
+    except OSError:
+        # truncate may not be supported, i.e. on special files
+        pass
     size = target.tell()
     os.fsync(target)
     return size

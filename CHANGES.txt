@@ -18,6 +18,8 @@ Changelog
 
 - Usability improvements: count jobs, more informative log output.
 
+- Support restoring to block special files like LVM volumes (#31).
+
 
 2.0 (2015-11-06)
 ================

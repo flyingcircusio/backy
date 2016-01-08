@@ -2,7 +2,7 @@
 Overview
 ========
 
-Backy is a block-based backup utility for virtual machines (i.e. volume files).
+Backy is a block-based backup and restore utility for virtual machine images.
 
 Backy is intended to be:
 
@@ -44,9 +44,7 @@ If you like to pick a specific version, it's only a little more effort::
    | 2015-11-05 10:32:03 | fPnbSvEHHy | 264.85 MiB |  88.1 s | daily        |
    | 2015-11-06 10:32:03 | cErS5GJ5sL | 172.34 MiB |  84.5 s | daily        |
    +---------------------+------------+------------+---------+--------------+
-   == Summary
-   3 revisions
-   60.43 GiB data (estimated)
+   3 revisions containing 60.43 GiB data (estimated)
    $ dd if=fPnbSvEHHymfztN9FuegLQ of=/srv/kvm/my-virtual-machine bs=4096k
 
 

@@ -239,7 +239,7 @@ environment variables like **CEPH_CLUSTER** or **CEPH_ARGS**.
 Telnet shell
 ------------
 
-The schedules opens a telnet server on localhost port 6023 for live
+The schedules opens a telnet server (default: localhost port 6023) for live
 inspection. The telnet interface accepts the following commands:
 
 jobs [REGEX]
@@ -277,8 +277,18 @@ config
         Defaults to 1 (no parallel backups).
 
     status-file
-        Path to a JSON status dump which is regularly updated by the scheduler
+        Path to a YAML status dump which is regularly updated by the scheduler
         and evaluated by **backy check**. Defaults to `{base-dir}/status`.
+
+    status-interval
+        Update status file every N seconds (default: 30).
+
+    telnet-addrs
+        Comma-separated list of listen addresses for the telnet server
+        (default: 127.0.0.1, ::1).
+
+    telnet-port
+        Port number of the telnet server (default: 6023).
 
 .. _schedules:
 
@@ -410,28 +420,26 @@ The running scheduler may now be inspected via telnet::
     Connected to localhost.
     Escape character is '^]'.
     backy-2.0 % jobs
-    +--------+-----+---------+-------------------------+-----------+----------+-------------------------+--------------+
-    | Job    | SLA | Status  | Last Backup             | Last Tags | Last Dur | Next Backup             | Next Tags    |
-    +--------+-----+---------+-------------------------+-----------+----------+-------------------------+--------------+
-    | test01 | OK  | waiting | 2015-11-05 11:56:10 UTC | daily     |   50.7 s | 2015-11-06 11:56:10 UTC | daily,weekly |
-    | test02 | OK  | waiting | 2015-11-05 10:32:03 UTC | daily     |   88.1 s | 2015-11-06 10:32:03 UTC | daily        |
-    | test03 | OK  | waiting | 2015-11-06 09:49:27 UTC | hourly    |   17.7 s | 2015-11-06 10:15:09 UTC | hourly       |
-    +--------+-----+---------+-------------------------+-----------+----------+-------------------------+--------------+
+    +--------+-----+---------+---------------------+-----------+----------+---------------------+--------------+
+    | Job    | SLA | Status  | Last Backup (UTC)   | Last Tags | Last Dur | Next Backup (UTC)   | Next Tags    |
+    +--------+-----+---------+---------------------+-----------+----------+---------------------+--------------+
+    | test01 | OK  | waiting | 2015-11-05 11:56:10 | daily     |   50.7 s | 2015-11-06 11:56:10 | daily,weekly |
+    | test02 | OK  | waiting | 2015-11-05 10:32:03 | daily     |   88.1 s | 2015-11-06 10:32:03 | daily        |
+    | test03 | OK  | waiting | 2015-11-06 09:49:27 | hourly    |   17.7 s | 2015-11-06 10:15:09 | hourly       |
+    +--------+-----+---------+---------------------+-----------+----------+---------------------+--------------+
 
 Information about individual revisions can be obtained using **backy status**::
 
     backy -b /my/backydir/test03 status
-    +-------------------------+------------------------+------------+---------+--------------+
-    | Date                    | ID                     |       Size |   Durat | Tags         |
-    +-------------------------+------------------------+------------+---------+--------------+
-    | 2015-11-04 20:09:32 UTC | Q5N5Ng5kFzNFVv6FDDDCHi |  10.00 GiB | 150.9 s | daily,weekly |
-    | 2015-11-05 06:15:09 UTC | FqZGAe6iG2hadwJoHdpigW | 149.31 MiB |  24.9 s | daily        |
-    | 2015-11-06 06:15:09 UTC | ENpdQfhQVgzoiWwT4KuQqP | 184.99 MiB |  28.7 s | daily        |
-    | 2015-11-06 09:49:27 UTC | ojtLPmKfGNhJQbaJYo6a4C |  44.61 MiB |  17.7 s | hourly       |
-    +-------------------------+------------------------+------------+---------+--------------+
-    == Summary
-    4 revisions
-    10.37 GiB data (estimated)
+    +---------------------+------------------------+------------+---------+--------------+
+    | Date (UTC)          | ID                     |       Size |   Durat | Tags         |
+    +---------------------+------------------------+------------+---------+--------------+
+    | 2015-11-04 20:09:32 | Q5N5Ng5kFzNFVv6FDDDCHi |  10.00 GiB | 150.9 s | daily,weekly |
+    | 2015-11-05 06:15:09 | FqZGAe6iG2hadwJoHdpigW | 149.31 MiB |  24.9 s | daily        |
+    | 2015-11-06 06:15:09 | ENpdQfhQVgzoiWwT4KuQqP | 184.99 MiB |  28.7 s | daily        |
+    | 2015-11-06 09:49:27 | ojtLPmKfGNhJQbaJYo6a4C |  44.61 MiB |  17.7 s | hourly       |
+    +---------------------+------------------------+------------+---------+--------------+
+    4 revisions containing 10.37 GiB data (estimated)
 
 Use **backy find** to print out the path to the last daily backup, for example::
 

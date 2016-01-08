@@ -136,7 +136,5 @@ Diffing restore_state1.img against img_state1.img. Success.
 | ... | ... | 511.99 kiB | ... s | test |
 | ... | ... | 511.99 kiB | ... s | test |
 +-----...------+-----...----+------------+-------+------+
-== Summary
-4 revisions
-2.00 MiB data (estimated)
+4 revisions containing 2.00 MiB data (estimated)
 """) == output

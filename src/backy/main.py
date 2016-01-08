@@ -42,14 +42,14 @@ class Command(object):
         self._backup.configure()
         total_bytes = 0
 
-        t = PrettyTable(["Date", "ID", "Size", "Durat", "Tags"])
+        t = PrettyTable(['Date (UTC)', 'ID', 'Size', 'Durat', 'Tags'])
         t.align = 'l'
         t.align['Size'] = 'r'
         t.align['Durat'] = 'r'
 
         for r in self._backup.archive.history:
             total_bytes += r.stats.get('bytes_written', 0)
-            t.add_row([format_timestamp(r.timestamp),
+            t.add_row([format_timestamp(r.timestamp).replace(' UTC', ''),
                        r.uuid,
                        format_bytes_flexible(r.stats.get('bytes_written', 0)),
                        str(round(r.stats.get('duration', 0), 1)) + ' s',
@@ -57,9 +57,8 @@ class Command(object):
 
         print(t)
 
-        print("== Summary")
-        print("{} revisions".format(len(self._backup.archive.history)))
-        print("{} data (estimated)".format(
+        print('{} revisions containing {} data (estimated)'.format(
+            len(self._backup.archive.history),
             format_bytes_flexible(total_bytes)))
 
     def backup(self, tags):

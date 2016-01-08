@@ -26,6 +26,8 @@ class BackyDaemon(object):
     base_dir = '/srv/backy'
     status_file = None
     status_interval = 30
+    telnet_addrs = '::1, 127.0.0.1'
+    telnet_port = 6023
 
     loop = None
     taskpool = None
@@ -50,15 +52,14 @@ class BackyDaemon(object):
 
         g = self.config.get('global', {})
         self.worker_limit = int(g.get('worker-limit', self.worker_limit))
-        logger.info("Worker limit: %s", self.worker_limit)
-
         self.base_dir = g.get('base-dir', self.base_dir)
-        logger.info("Backup location: %s", self.base_dir)
-
         if not self.status_file:
             self.status_file = p.join(self.base_dir, 'status')
         self.status_file = g.get('status-file', self.status_file)
-        logger.info("Status location: %s", self.status_file)
+        self.status_interval = int(g.get('status-interval',
+                                         self.status_interval))
+        self.telnet_addrs = g.get('telnet-addrs', self.telnet_addrs)
+        self.telnet_port = int(g.get('telnet-port', self.telnet_port))
 
         new = {}
         for name, config in self.config['schedules'].items():
@@ -68,19 +69,34 @@ class BackyDaemon(object):
                 new[name] = Schedule()
             new[name].configure(config)
         self.schedules = new
-        logger.info("Available schedules: %s", ', '.join(self.schedules))
 
         self.jobs = {}
         for name, config in self.config['jobs'].items():
             self.jobs[name] = Job(self, name)
             self.jobs[name].configure(config)
 
+        logger.debug('status interval: %s', self.status_interval)
+        logger.debug('status location: %s', self.status_file)
+        logger.debug('worker limit: %s', self.worker_limit)
+        logger.debug('backup location: %s', self.base_dir)
+        logger.debug('available schedules: %s', ', '.join(self.schedules))
+        logger.debug('configured jobs: %s', ', '.join(self.jobs.keys()))
+
+    def lock(self):
+        """Ensures that only a single daemon instance is active."""
+        lockfile = p.join(self.base_dir, '.lock')
+        self._lock = open(lockfile, 'a+b')
+        try:
+            fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except EnvironmentError as e:
+            logger.critical('failed to acquire lock %s: %s', lockfile, e)
+            sys.exit(69)
+
     def start(self, loop):  # pragma: no cover
         """Starts the scheduler daemon."""
         # Ensure single daemon instance.
         self._read_config()
-        self._lock = open(p.join(self.base_dir, '.lock'), 'a+b')
-        fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        self.lock()
 
         # semi-daemonize
         os.chdir(self.base_dir)
@@ -97,7 +113,20 @@ class BackyDaemon(object):
         for job in self.jobs.values():
             job.start()
 
+    def telnet_server(self):
+        """Starts to listen on all configured telnet addresses."""
+        assert self.loop, 'cannot start telnet server without event loop'
+        # silence telnet3 logging, which logs as root logger (we don't)
+        logging.getLogger().setLevel(logging.WARNING)
+        for addr in (a.strip() for a in self.telnet_addrs.split(',')):
+            logger.info('starting telnet server on %s:%i',
+                        addr, self.telnet_port)
+            asyncio.async(self.loop.create_server(
+                lambda: telnetlib3.TelnetServer(shell=SchedulerShell),
+                addr, self.telnet_port))
+
     def status(self, filter_re=None):
+        """Collects status information for all jobs."""
         result = []
         for job in self.jobs.values():
             if filter_re and not filter_re.search(job.name):
@@ -186,23 +215,25 @@ class SchedulerShell(telnetlib3.Telsh):
             return 1
         filter_re = re.compile(filter_re) if filter_re else None
         t = prettytable.PrettyTable([
-            'Job', 'SLA', 'Status', 'Last Backup', 'Last Tags', 'Last Dur',
-            'Next Backup', 'Next Tags'])
+            'Job', 'SLA', 'Status', 'Last Backup (UTC)', 'Last Tags',
+            'Last Dur', 'Next Backup (UTC)', 'Next Tags'])
         t.align = 'l'
         t.align['Last Dur'] = 'r'
         t.sortby = 'Job'
 
-        for job in daemon.status(filter_re):
+        jobs = daemon.status(filter_re)
+        for job in jobs:
             t.add_row([job['job'],
                        job['sla'],
                        job['status'],
-                       job['last_time'],
+                       job['last_time'].replace(' UTC', ''),
                        job['last_tags'],
                        job['last_duration'],
-                       job['next_time'],
+                       job['next_time'].replace(' UTC', ''),
                        job['next_tags']])
 
-        self.stream.write(t.get_string().replace('\n', '\r\n'))
+        self.stream.write(t.get_string().replace('\n', '\r\n') + '\r\n')
+        self.stream.write('{} jobs shown'.format(len(jobs)))
         return 0
 
     def cmdset_status(self, *_args):
@@ -234,17 +265,13 @@ def main(config_file):  # pragma: no cover
     loop = asyncio.get_event_loop()
     daemon = BackyDaemon(config_file)
     daemon.start(loop)
+    daemon.telnet_server()
 
-    logger.info('starting telnet server on localhost:6023')
-    func = loop.create_server(
-        lambda: telnetlib3.TelnetServer(shell=SchedulerShell),
-        '127.0.0.1', 6023)
-    loop.run_until_complete(func)
-
-    # Blocking call interrupted by loop.stop()
     try:
+        # Blocking call
         loop.run_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        loop.stop()
         loop.close()

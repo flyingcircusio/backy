@@ -9,9 +9,14 @@ Changelog
 
 - Provide list of failed jobs in check output, not only the total number.
 
-- Use `{BASE_DIR}/.lock` as daemon lock file instead of the status file.
+- Add `status-interval`, `telnet-addrs`, and `telnet-port` configuration
+  options.
 
 - Automatically recover from missing/damaged last or last.rev symlinks (#19532).
+
+- Use `{BASE_DIR}/.lock` as daemon lock file instead of the status file.
+
+- Usability improvements: count jobs, more informative log output.
 
 
 2.0 (2015-11-06)

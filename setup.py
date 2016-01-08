@@ -1,4 +1,4 @@
-"""Image-based backup and restore for block devices."""
+"""Block-based backup and restore utility for virtual machine images"""
 
 from setuptools import setup, find_packages, Command
 import codecs

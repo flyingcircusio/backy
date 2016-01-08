@@ -165,6 +165,15 @@ def test_diff_backup(monkeypatch, backup, tmpdir):
     revision.timestamp = backy.utils.now()
     revision.parent = parent.uuid
 
+    with open(str(tmpdir / revision.parent), 'w') as f:
+        f.write('asdf')
+
+    with open(str(tmpdir / revision.uuid) + '.rbddiff', 'wb') as f:
+        f.write(SAMPLE_RBDDIFF)
+
+    backup.archive.scan()
+    revision.materialize()
+
     check_output = Mock()
     check_output.side_effect = [
         # snap create
@@ -177,15 +186,6 @@ def test_diff_backup(monkeypatch, backup, tmpdir):
         # snap rm backy-ed96...
         b'{}']
     monkeypatch.setattr(subprocess, 'check_output', check_output)
-
-    with open(str(tmpdir / revision.parent), 'w') as f:
-        f.write('asdf')
-
-    with open(str(tmpdir / revision.uuid) + '.rbddiff', 'wb') as f:
-        f.write(SAMPLE_RBDDIFF)
-
-    backup.archive.scan()
-    revision.materialize()
 
     with source(revision):
         source.diff()

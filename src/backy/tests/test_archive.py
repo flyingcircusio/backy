@@ -1,5 +1,6 @@
 from backy.archive import Archive
 import pytest
+import shutil
 
 
 @pytest.fixture
@@ -63,6 +64,8 @@ def test_load_revisions(archive_with_revisions):
 def test_find_revision(archive_with_revisions):
     a = archive_with_revisions
     assert a['last'].uuid == '123-2'
+    with pytest.raises(KeyError):
+        a[-1]
     assert a[0].uuid == '123-2'
     assert a[1].uuid == '123-1'
     assert a[2].uuid == '123-0'
@@ -78,3 +81,10 @@ def test_find_revision(archive_with_revisions):
 
 def test_clean_history_should_exclude_incomplete_revs(archive_with_revisions):
     assert 2 == len(archive_with_revisions.clean_history)
+
+
+def test_ignore_duplicates(archive_with_revisions, tmpdir):
+    shutil.copy(str(tmpdir / '123-2.rev'), str(tmpdir / '123-3.rev'))
+    a = archive_with_revisions
+    a.scan()
+    assert 3 == len(a.history)

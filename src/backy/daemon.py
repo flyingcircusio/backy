@@ -25,6 +25,11 @@ class BackyDaemon(object):
     worker_limit = 1
     base_dir = '/srv/backy'
     status_file = None
+    status_interval = 30
+
+    loop = None
+    taskpool = None
+    running = False
 
     def __init__(self, config_file):
         self.config_file = config_file
@@ -70,7 +75,7 @@ class BackyDaemon(object):
             self.jobs[name] = Job(self, name)
             self.jobs[name].configure(config)
 
-    def start(self, loop):
+    def start(self, loop):  # pragma: no cover
         """Starts the scheduler daemon."""
         # Ensure single daemon instance.
         self._read_config()
@@ -84,6 +89,7 @@ class BackyDaemon(object):
 
         self.loop = loop
         self.taskpool = TaskPool(loop, self.worker_limit)
+        self.running = True
         asyncio.async(self.taskpool.run())
         asyncio.async(self.save_status_file())
 
@@ -126,24 +132,25 @@ class BackyDaemon(object):
 
     @asyncio.coroutine
     def save_status_file(self):
-        while True:
-            self._write_status_file()
-            yield from asyncio.sleep(30)
+        while self.running:
+            try:
+                self._write_status_file()
+            except Exception as e:  # pragma: no cover
+                logger.exception(e)
+            yield from asyncio.sleep(self.status_interval)
 
     def check(self):
-        # This should be transformed into the nagiosplugin output. I can't make
-        # myself wrap my head around its structure, though.
         self._read_config()
 
         if not p.exists(self.status_file):
-            print("UNKNOWN: No status file found at {}".format(
+            print('UNKNOWN: No status file found at {}'.format(
                 self.status_file))
             sys.exit(3)
 
         # The output should be relatively new. Let's say 5 min max.
         s = os.stat(self.status_file)
         if time.time() - s.st_mtime > 5 * 60:
-            print("CRITICAL: Status file is older than 5 minutes.")
+            print('CRITICAL: Status file is older than 5 minutes')
             sys.exit(2)
 
         failed_jobs = []
@@ -157,7 +164,9 @@ class BackyDaemon(object):
 
         if failed_jobs:
             print('CRITICAL: {} jobs not within SLA\n{}'.format(
-                len(failed_jobs), '\n'.join(f['job'] for f in failed_jobs)))
+                len(failed_jobs), '\n'.join(
+                    '{} (last time: {})'.format(f['job'], f['last_time'])
+                    for f in failed_jobs)))
             logging.debug('failed jobs: %r', failed_jobs)
             sys.exit(2)
 
@@ -214,12 +223,12 @@ class SchedulerShell(telnetlib3.Telsh):
         ('help', autocomplete_cmdset)]))
 
 
-def check(config_file):
+def check(config_file):  # pragma: no cover
     daemon = BackyDaemon(config_file)
     daemon.check()
 
 
-def main(config_file):
+def main(config_file):  # pragma: no cover
     global daemon
 
     loop = asyncio.get_event_loop()

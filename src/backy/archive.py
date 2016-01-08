@@ -18,8 +18,10 @@ class Archive(object):
     def scan(self):
         self.history = []
         self._by_uuid = {}
-        for file in glob.glob(p.join(self.path, '*.rev')):
-            r = Revision.load(file, self)
+        for f in glob.glob(p.join(self.path, '*.rev')):
+            if f.endswith('last.rev'):
+                continue
+            r = Revision.load(f, self)
             if r.uuid not in self._by_uuid:
                 self._by_uuid[r.uuid] = r
                 self.history.append(r)

@@ -98,7 +98,7 @@ class TaskPool(object):
 
     @asyncio.coroutine
     def run(self):
-        logger.info("Starting to work on queue")
+        logger.debug("starting to work on queue")
         while True:
             # Ok, lets get a worker slot and a task
             yield from self.workers.acquire()
@@ -114,7 +114,7 @@ class TaskPool(object):
         if task.returncode > 0:  # pragma: no cover
             logger.error('%s: exit status %s', task.name, task.returncode)
         else:
-            logger.debug('%s: success'.format(task.name))
+            logger.debug('%s: success', task.name)
         self.workers.release()
 
 

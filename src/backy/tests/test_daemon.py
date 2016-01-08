@@ -6,8 +6,10 @@ import asyncio
 import backy.utils
 import datetime
 import os
+import os.path as p
 import pytest
 import re
+import time
 
 
 @pytest.fixture
@@ -43,6 +45,12 @@ jobs:
 
     daemon._read_config()
     return daemon
+
+
+def test_fail_on_nonexistent_config():
+    daemon = BackyDaemon('/no/such/config')
+    with pytest.raises(SystemExit):
+        daemon._read_config()
 
 
 @pytest.mark.asyncio
@@ -184,9 +192,21 @@ def test_task_generator(daemon, clock, tmpdir, event_loop, monkeypatch):
     @asyncio.coroutine
     def wait_for_job_finished():
         while job._generator_handle is not None:
-            yield from asyncio.sleep(0.2)
+            yield from asyncio.sleep(.1)
 
     yield from wait_for_job_finished()
+
+
+@pytest.mark.asyncio
+def test_write_status_file(daemon, event_loop):
+    daemon.running = True
+    daemon.status_interval = .01
+    assert not p.exists(daemon.status_file)
+    asyncio.async(daemon.save_status_file())
+    yield from asyncio.sleep(.02)
+    daemon.running = False
+    yield from asyncio.sleep(.02)
+    assert p.exists(daemon.status_file)
 
 
 def test_daemon_status(daemon):
@@ -208,7 +228,7 @@ def test_check_ok(daemon, capsys):
     assert 'OK: 2 jobs within SLA\n' == out
 
 
-def test_check_critical(daemon, clock, tmpdir, capsys):
+def test_check_tooold(daemon, clock, tmpdir, capsys):
     job = daemon.jobs['test01']
     os.makedirs(str(tmpdir / 'test01'))
     revision = Revision('1', job.archive)
@@ -223,5 +243,25 @@ def test_check_critical(daemon, clock, tmpdir, capsys):
     out, err = capsys.readouterr()
     assert out == """\
 CRITICAL: 1 jobs not within SLA
-test01
+test01 (last time: 2015-08-30 07:06:47 UTC)
 """
+
+
+def test_check_no_status_file(daemon, capsys):
+    try:
+        daemon.check()
+    except SystemExit as exit:
+        assert exit.code == 3
+    out, err = capsys.readouterr()
+    assert out.startswith('UNKNOWN: No status file found at')
+
+
+def test_check_stale_status_file(daemon, capsys):
+    open(daemon.status_file, 'a').close()
+    os.utime(daemon.status_file, (time.time() - 301, time.time() - 301))
+    try:
+        daemon.check()
+    except SystemExit as exit:
+        assert exit.code == 2
+    out, err = capsys.readouterr()
+    assert out == 'CRITICAL: Status file is older than 5 minutes\n'

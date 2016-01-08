@@ -1,51 +1,33 @@
-from .utils import SafeFile
-from .ext_deps import CP
-import backy.utils
+from .utils import SafeFile, now, safe_symlink, cp_reflink
 import datetime
 import glob
 import logging
 import os
+import os.path as p
 import pytz
 import shortuuid
-import subprocess
 import yaml
 
 
 logger = logging.getLogger(__name__)
-cmd = subprocess.check_output
-
-
-def cp_reflink(source, target):
-    """Makes as COW copy of `source` if COW is supported."""
-    # We can't tell if reflink is really supported. It depends on the
-    # filesystem.
-    try:
-        with open('/dev/null', 'wb') as devnull:
-            cmd([CP, '--reflink=always', source, target], stderr=devnull)
-    except subprocess.CalledProcessError:
-        logger.warn('Performing non-COW copy: %s -> %s', source, target)
-        if os.path.exists(target):
-            os.unlink(target)
-        cmd([CP, source, target])
 
 
 class Revision(object):
 
     uuid = None
-    timestamp = None
     parent = None
     stats = None
     tags = ()
 
-    def __init__(self, uuid, archive):
+    def __init__(self, uuid, archive, timestamp=None):
         self.uuid = uuid
         self.archive = archive
+        self.timestamp = timestamp
         self.stats = {'bytes_written': 0}
 
     @classmethod
     def create(cls, archive):
-        r = Revision(shortuuid.uuid(), archive)
-        r.timestamp = backy.utils.now()
+        r = Revision(shortuuid.uuid(), archive, now())
         if archive.history:
             # XXX validate that this parent is a actually a good parent. need
             # to contact the source for this ...
@@ -82,11 +64,10 @@ class Revision(object):
         self.write_info()
         if not self.parent:
             open(self.filename, 'wb').close()
-            return
-
-        parent = self.archive[self.parent]
-        cp_reflink(parent.filename, self.filename)
-        self.writable()
+        else:
+            parent = self.archive[self.parent]
+            cp_reflink(parent.filename, self.filename)
+            self.writable()
 
     def write_info(self):
         metadata = {
@@ -101,15 +82,8 @@ class Revision(object):
 
     def set_link(self, name):
         path = self.archive.path
-        if os.path.exists(path + '/' + name):
-            os.unlink(path + '/' + name)
-        os.symlink(os.path.relpath(self.filename, path), path + '/' + name)
-
-        name = name + '.rev'
-        if os.path.exists(path + '/' + name):
-            os.unlink(path + '/' + name)
-        os.symlink(os.path.relpath(self.info_filename, path),
-                   path + '/' + name)
+        safe_symlink(self.filename, p.join(path, name))
+        safe_symlink(self.info_filename, p.join(path, name + '.rev'))
 
     def remove(self):
         for file in glob.glob(self.filename + '*'):

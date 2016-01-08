@@ -1,3 +1,4 @@
+from .ext_deps import CP
 from .fallocate import punch_hole
 import contextlib
 import datetime
@@ -8,6 +9,7 @@ import os
 import os.path
 import pytz
 import random
+import subprocess
 import sys
 import tempfile
 
@@ -27,7 +29,6 @@ class SafeFile(object):
     methods or use_write_protection() to enable the safety belts.
 
     use_write_protection() has to be called before opening.
-
     """
 
     protected_mode = 0o440
@@ -153,6 +154,19 @@ BYTE_UNITS = [
 ]
 
 
+def safe_symlink(realfile, link):
+    """Set a symlink unconditionally.
+
+    If the link used to exit before, replace it. Make the symlink
+    relative if possible.
+    """
+    try:
+        os.unlink(link)
+    except OSError:
+        pass
+    os.symlink(os.path.relpath(realfile, os.path.dirname(link)), link)
+
+
 def format_bytes_flexible(number):
     for factor, label, format, plurals in BYTE_UNITS:
         if (number / factor) < 1024:
@@ -217,6 +231,21 @@ def safe_copy(source, target):
     return size
 
 
+def cp_reflink(source, target):
+    """Makes as COW copy of `source` if COW is supported."""
+    # We can't tell if reflink is really supported. It depends on the
+    # filesystem.
+    try:
+        with open('/dev/null', 'wb') as devnull:
+            subprocess.check_output([CP, '--reflink=always', source, target],
+                                    stderr=devnull)
+    except subprocess.CalledProcessError:
+        logger.warn('Performing non-COW copy: %s -> %s', source, target)
+        if os.path.exists(target):
+            os.unlink(target)
+        subprocess.check_call([CP, source, target])
+
+
 def files_are_equal(a, b):
     posix_fadvise(a.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
     posix_fadvise(b.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
@@ -253,6 +282,7 @@ def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=16 * kiB):
         for block in sample:
             posix_fadvise(fdesc, block * blocksize, blocksize,
                           os.POSIX_FADV_WILLNEED)
+
     for block in sample:
         a.seek(block * blocksize)
         b.seek(block * blocksize)

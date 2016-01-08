@@ -11,6 +11,8 @@ Changelog
 
 - Use `{BASE_DIR}/.lock` as daemon lock file instead of the status file.
 
+- Automatically recover from missing/damaged last or last.rev symlinks (#19532).
+
 
 2.0 (2015-11-06)
 ================

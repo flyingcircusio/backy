@@ -22,9 +22,11 @@ def init_logging(logfile, verbose):  # pragma: no cover
             '%Y-%m-%d %H:%M:%S'))
     else:
         handler = logging.StreamHandler(sys.stdout)
-    root = logging.getLogger('')
-    root.setLevel(logging.DEBUG if verbose else logging.INFO)
-    root.addHandler(handler)
+    # silence telnet3 logging, which logs as root logger (we don't)
+    logging.getLogger().setLevel(logging.WARNING)
+    toplevel = logging.getLogger('backy')
+    toplevel.setLevel(logging.DEBUG if verbose else logging.INFO)
+    toplevel.addHandler(handler)
     if logfile:
         logger.info('$ %s', ' '.join(sys.argv))
 

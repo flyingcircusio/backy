@@ -10,6 +10,7 @@ import os.path as p
 import pkg_resources
 import prettytable
 import re
+import signal
 import sys
 import telnetlib3
 import time
@@ -32,6 +33,7 @@ class BackyDaemon(object):
     loop = None
     taskpool = None
     running = False
+    async_tasks = None
 
     def __init__(self, config_file):
         self.config_file = config_file
@@ -106,24 +108,38 @@ class BackyDaemon(object):
         self.loop = loop
         self.taskpool = TaskPool(loop, self.worker_limit)
         self.running = True
-        asyncio.async(self.taskpool.run())
-        asyncio.async(self.save_status_file())
+        self.async_tasks = set()
+        self.async_tasks.add(asyncio.async(self.taskpool.run()))
+        self.async_tasks.add(asyncio.async(self.save_status_file()))
 
         # Start jobs
         for job in self.jobs.values():
             job.start()
 
+        def sighandler(signum, _traceback):
+            logger.info('Received signal %s', signum)
+            self.terminate()
+
+        for sig in (signal.SIGHUP, signal.SIGINT, signal.SIGQUIT,
+                    signal.SIGTERM):
+            signal.signal(sig, sighandler)
+
     def telnet_server(self):
         """Starts to listen on all configured telnet addresses."""
         assert self.loop, 'cannot start telnet server without event loop'
-        # silence telnet3 logging, which logs as root logger (we don't)
-        logging.getLogger().setLevel(logging.WARNING)
         for addr in (a.strip() for a in self.telnet_addrs.split(',')):
             logger.info('starting telnet server on %s:%i',
                         addr, self.telnet_port)
-            asyncio.async(self.loop.create_server(
+            self.async_tasks.add(asyncio.async(self.loop.create_server(
                 lambda: telnetlib3.TelnetServer(shell=SchedulerShell),
-                addr, self.telnet_port))
+                addr, self.telnet_port)))
+
+    def terminate(self):
+        logger.info('Terminating all tasks')
+        self.running = False
+        for t in self.async_tasks:
+            t.cancel()
+        self.loop.stop()
 
     def status(self, filter_re=None):
         """Collects status information for all jobs."""
@@ -271,7 +287,8 @@ def main(config_file):  # pragma: no cover
         # Blocking call
         loop.run_forever()
     except KeyboardInterrupt:
-        pass
+        logger.warning('Caught keyboard interrupt')
+        daemon.terminate()
     finally:
         loop.stop()
         loop.close()

@@ -135,6 +135,9 @@ class SafeFile(object):
     def seek(self, *args, **kw):
         return self.f.seek(*args, **kw)
 
+    def tell(self, *args, **kw):
+        return self.f.tell(*args, **kw)
+
     def truncate(self, *args, **kw):
         return self.f.truncate(*args, **kw)
 

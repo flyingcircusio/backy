@@ -33,9 +33,12 @@ Here's the fast answer to make a full restore of the most recent backup::
    $ cd /srv/backy/my-virtual-machine
    $ dd if=last of=/srv/kvm/my-virtual-machine.img bs=4096k
 
+In case Ceph is used for image storage, just import the image directly::
+
+   $ rbd import last rbd/my-volume
+
 If you like to pick a specific version, it's only a little more effort::
 
-   $ cd /srv/backy/my-virtual-machine
    $ backy status
    +---------------------+------------+------------+---------+--------------+
    | Date                | ID         |       Size |   Durat | Tags         |
@@ -47,6 +50,10 @@ If you like to pick a specific version, it's only a little more effort::
    3 revisions containing 60.43 GiB data (estimated)
    $ dd if=fPnbSvEHHymfztN9FuegLQ of=/srv/kvm/my-virtual-machine bs=4096k
 
+Or try `backy find` to locate the latest backup for a specific tag::
+
+   $ rbd import $(backy find -r weekly) rbd/my-volume
+
 
 Restoring individual files
 --------------------------
@@ -54,22 +61,19 @@ Restoring individual files
 The image files are exact copies of the data from the virtual disks. You can use
 regular Linux tools to interact with them::
 
-    $ cd /srv/backy/my-virtual-machine
-    $ ls -l last
-    lrwxrwxrwx 1 root root  36 Apr 25 10:13 last -> cErS5GJ5sLdsk9L6oCs4ia
-    $ kpartx -av cErS5GJ5sLdsk9L6oCs4ia
+    $ kpartx -av last
     add map loop0p1 (253:9): 0 41934815 linear /dev/loop0 8192
-    $ mkdir /root/restore
-    $ mount -o ro /dev/mapper/loop0p1 /root/restore
-    $ cd /root/restore
+    $ mkdir /mnt/restore
+    $ mount -o ro /dev/mapper/loop0p1 /mnt/restore
+    $ cd /mnt/restore
     $ ls
     bin  boot  dev  etc  home  lib  lost+found  media  mnt  opt  proc  root  run
     sbin  srv  sys  tmp  usr  var
 
 To clean up::
 
-    $ umount /root/restore
-    $ kpartx -d cErS5GJ5sLdsk9L6oCs4ia
+    $ umount /mnt/restore
+    $ kpartx -d last
 
 
 Setting up backy

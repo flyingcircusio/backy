@@ -229,7 +229,7 @@ def test_safe_edit_truncate(tmpdir):
     assert open('asdf', 'rb').read() == b''
 
 
-def test_safe_seek_tell(tmpdir):
+def test_safefile_fileobj_api(tmpdir):
     os.chdir(str(tmpdir))
     with open('asdf', 'wb') as seed:
         seed.write(1024 * b'X')
@@ -237,6 +237,7 @@ def test_safe_seek_tell(tmpdir):
         f.open_inplace('r+b')
         f.seek(823)
         assert f.tell() == 823
+        assert int(f.fileno()) > 2
 
 
 def test_roughly_compare_files_same(tmpdir):

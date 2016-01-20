@@ -132,14 +132,17 @@ class SafeFile(object):
             data = data.encode(self.encoding)
         self.f.write(data)
 
-    def seek(self, *args, **kw):
-        return self.f.seek(*args, **kw)
+    def seek(self, offset, whence=0):
+        return self.f.seek(offset, whence)
 
-    def tell(self, *args, **kw):
-        return self.f.tell(*args, **kw)
+    def tell(self):
+        return self.f.tell()
 
-    def truncate(self, *args, **kw):
-        return self.f.truncate(*args, **kw)
+    def truncate(self, size=None):
+        return self.f.truncate(size)
+
+    def fileno(self):
+        return self.f.fileno()
 
 
 Bytes = 1

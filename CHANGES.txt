@@ -5,7 +5,7 @@ Changelog
 2.1.2 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Fix backup of images containing holes (#33).
 
 
 2.1.1 (2016-01-15)

@@ -10,6 +10,16 @@ class TimeOutError(RuntimeError):
 class TimeOut(object):
 
     def __init__(self, timeout, interval=1, raise_on_timeout=False):
+        """Creates a timeout controller.
+
+        TimeOut is typically used in a while loop to retry a command
+        for a while, e.g. for polling. Example::
+
+            timeout = TimeOut()
+            while timeout.tick():
+                do_something
+        """
+
         self.remaining = timeout
         self.cutoff = time.time() + timeout
         self.interval = interval
@@ -24,8 +34,8 @@ class TimeOut(object):
 
         Instead of returning False this can raise an exception
         if raise_on_timeout is set.
-
         """
+
         self.remaining = self.cutoff - time.time()
         self.timed_out = self.remaining <= 0
 
@@ -39,5 +49,4 @@ class TimeOut(object):
             self.first = False
         else:
             time.sleep(self.interval)
-
         return True

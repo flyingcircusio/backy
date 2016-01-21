@@ -2,6 +2,7 @@ from ..ceph.source import CephRBD
 from ...timeout import TimeOut
 import consulate
 import logging
+import time
 import uuid
 
 
@@ -38,8 +39,10 @@ class FlyingCircusRootDisk(CephRBD):
         logger.info('Consul: requesting consistent snapshot of %s@%s via %s',
                     self.vm, name, snapshot_key)
         consul.kv[snapshot_key] = {'vm': self.vm, 'snapshot': name}
+        time.sleep(1)
         try:
-            timeout = TimeOut(self.snapshot_timeout, raise_on_timeout=True)
+            timeout = TimeOut(self.snapshot_timeout, interval=2,
+                              raise_on_timeout=True)
             while timeout.tick():
                 for snapshot in self.rbd.snap_ls(self._image_name):
                     if snapshot['name'] == name:

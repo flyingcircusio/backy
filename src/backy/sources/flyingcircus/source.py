@@ -39,7 +39,7 @@ class FlyingCircusRootDisk(CephRBD):
         logger.info('Consul: requesting consistent snapshot of %s@%s via %s',
                     self.vm, name, snapshot_key)
         consul.kv[snapshot_key] = {'vm': self.vm, 'snapshot': name}
-        time.sleep(1)
+        time.sleep(3)
         try:
             timeout = TimeOut(self.snapshot_timeout, interval=2,
                               raise_on_timeout=True)

@@ -1,11 +1,14 @@
 syntax: glob
 
+backy.log
 bin/
+build/
 .cache
 .coverage
 .coverage.*
 develop-eggs/
 dist/
+doc/_build
 .DS_Store
 eggs/
 htmlcov/
@@ -17,14 +20,12 @@ local/
 pip-selfcheck.json
 *.py[co]
 .Python
+pyvenv.cfg
 report.xml
+result
 src/backy.egg-info/
 *.sublime*
-*.sw[po]
+*.sw?
 tags
-vagrant/.vagrant
 .todo
-backy.log
-result
-pyvenv.cfg
-doc/_build
+vagrant/.vagrant

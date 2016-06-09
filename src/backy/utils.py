@@ -279,25 +279,28 @@ def files_are_equal(a, b):
 
 
 def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=16 * kiB,
-                            timeout=5 * 60):
+                            timeout=5*60):
     # We limit this to a 5 minute operation to avoid clogging the storage
     # infinitely.
     started = now()
-    max_duration = datetime.timedelta(timeout)
+    max_duration = datetime.timedelta(seconds=timeout)
 
     a.seek(0, 2)
     size = a.tell()
     blocks = size // blocksize
     sample = range(0, max(blocks, 1))
     sample = random.sample(sample, max(int(samplesize * blocks), 1))
-    sample.sort()
 
     # turn off readahead
     for fdesc in a.fileno(), b.fileno():
         posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
 
     for block in sample:
-        if now() - started > max_duration:
+        logger.info('verifying chunk {}'.format(block))
+        duration = now() - started
+        logger.debug('running for {}'.format(duration))
+        if duration > max_duration:
+            logger.info('stopping verification after {}'.format(duration))
             return True
 
         # Pre-load full blocks

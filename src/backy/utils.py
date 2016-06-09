@@ -278,7 +278,13 @@ def files_are_equal(a, b):
     return not errors
 
 
-def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=16 * kiB):
+def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=16 * kiB,
+                            timeout=5 * 60):
+    # We limit this to a 5 minute operation to avoid clogging the storage
+    # infinitely.
+    started = now()
+    max_duration = datetime.timedelta(timeout)
+
     a.seek(0, 2)
     size = a.tell()
     blocks = size // blocksize
@@ -286,14 +292,19 @@ def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=16 * kiB):
     sample = random.sample(sample, max(int(samplesize * blocks), 1))
     sample.sort()
 
-    # turn off readahead, but preload blocks selectively into page cache
+    # turn off readahead
     for fdesc in a.fileno(), b.fileno():
         posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
-        for block in sample:
-            posix_fadvise(fdesc, block * blocksize, blocksize,
-                          os.POSIX_FADV_WILLNEED)
 
     for block in sample:
+        if now() - started > max_duration:
+            return True
+
+        # Pre-load full blocks
+        posix_fadvise(a.fileno(), block * blocksize, blocksize,
+                      os.POSIX_FADV_WILLNEED)
+        posix_fadvise(b.fileno(), block * blocksize, blocksize,
+                      os.POSIX_FADV_WILLNEED)
         a.seek(block * blocksize)
         b.seek(block * blocksize)
         chunk_a = a.read(blocksize)

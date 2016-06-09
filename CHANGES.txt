@@ -7,6 +7,10 @@ Changelog
 
 - Fix backup of images containing holes (#33).
 
+- Introduce a (short) timeout for partial image verification. Especially
+  very large images and images that are backed up frequently do not profit
+  from running for hours to verify them, blocking further backups.
+  (FC #21879)
 
 2.1.1 (2016-01-15)
 ==================

@@ -269,6 +269,20 @@ def test_roughly_compare_files_1_changed_block(tmpdir):
     assert detected > 0 and detected <= 20
 
 
+def test_roughly_compare_files_timeout(tmpdir):
+    os.chdir(str(tmpdir))
+    with open('a', 'wb') as f:
+        f.write(b'asdf' * 100)
+    with open('b', 'wb') as f:
+        f.write(b'bsdf' * 100)
+
+    # The files are different but we don't notice as we run into a timeout.
+    # That's fine.
+    assert files_are_roughly_equal(open('a', 'rb'), open('b', 'rb'), timeout=0)
+    # Without the timeout we do notice
+    assert not files_are_roughly_equal(open('a', 'rb'), open('b', 'rb'))
+
+
 def test_safe_copy_correctly_makes_sparse_file(tmpdir):
     # Create a test file that contains random data, then we insert
     # blocks of zeroes. safe_copy will not break them and will make the

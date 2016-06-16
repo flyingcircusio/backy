@@ -246,9 +246,8 @@ def cp_reflink(source, target):
     # We can't tell if reflink is really supported. It depends on the
     # filesystem.
     try:
-        with open('/dev/null', 'wb') as devnull:
-            subprocess.check_output([CP, '--reflink=always', source, target],
-                                    stderr=devnull)
+        subprocess.check_call([CP, '--reflink=always', source, target],
+                              stderr=subprocess.PIPE)
     except subprocess.CalledProcessError:
         logger.warn('Performing non-COW copy: %s -> %s', source, target)
         if os.path.exists(target):

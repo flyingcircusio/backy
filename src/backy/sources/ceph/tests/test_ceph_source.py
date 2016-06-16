@@ -13,6 +13,14 @@ with open(p.join(p.dirname(__file__), 'nodata.rbddiff'), 'rb') as f:
     SAMPLE_RBDDIFF = f.read()
 
 
+@pytest.fixture
+def check_output(monkeypatch):
+    check_output = Mock()
+    check_output.return_value = b'{}'
+    monkeypatch.setattr(subprocess, 'check_output', check_output)
+    return check_output
+
+
 def test_select_ceph_source():
     assert select_source('ceph-rbd') == CephRBD
 
@@ -24,12 +32,8 @@ def test_assign_revision():
     assert context_manager.revision is revision
 
 
-def test_context_manager(monkeypatch, backup):
+def test_context_manager(check_output, backup):
     source = CephRBD(dict(pool='test', image='foo'))
-
-    check_output = Mock()
-    check_output.return_value = b'{}'
-    monkeypatch.setattr(subprocess, 'check_output', check_output)
 
     revision = Revision(1, backup.archive)
     with source(revision):
@@ -42,10 +46,9 @@ def test_context_manager(monkeypatch, backup):
               'test/foo'])]
 
 
-def test_context_manager_cleans_out_snapshots(monkeypatch, backup):
+def test_context_manager_cleans_out_snapshots(check_output, backup):
     source = CephRBD(dict(pool='test', image='foo'))
 
-    check_output = Mock()
     check_output.side_effect = [
         # snap create
         b'{}',
@@ -53,8 +56,6 @@ def test_context_manager_cleans_out_snapshots(monkeypatch, backup):
         b'[{"name": "someother"}, {"name": "backy-1"}, {"name": "backy-2"}]',
         # snap rm backy-2
         b'{}']
-
-    monkeypatch.setattr(subprocess, 'check_output', check_output)
 
     revision = Revision('1', backup.archive)
     with source(revision):
@@ -71,17 +72,13 @@ def test_context_manager_cleans_out_snapshots(monkeypatch, backup):
         call([RBD, '--no-progress', 'snap', 'rm', 'test/foo@backy-2'])]
 
 
-def test_choose_full_without_parent(monkeypatch, backup):
+def test_choose_full_without_parent(check_output, backup):
     source = CephRBD(dict(pool='test', image='foo'))
 
     source.diff = Mock()
     source.full = Mock()
 
     revision = Revision('1', backup.archive)
-
-    check_output = Mock()
-    check_output.return_value = b'{}'
-    monkeypatch.setattr(subprocess, 'check_output', check_output)
 
     with source(revision):
         source.backup()
@@ -90,7 +87,7 @@ def test_choose_full_without_parent(monkeypatch, backup):
     assert source.full.called
 
 
-def test_choose_full_without_snapshot(monkeypatch, backup):
+def test_choose_full_without_snapshot(check_output, backup):
     source = CephRBD(dict(pool='test', image='foo'))
 
     source.diff = Mock()
@@ -104,10 +101,6 @@ def test_choose_full_without_snapshot(monkeypatch, backup):
 
     revision2 = Revision('a2', backup.archive)
     revision2.parent = 'a1'
-
-    check_output = Mock()
-    check_output.return_value = b'{}'
-    monkeypatch.setattr(subprocess, 'check_output', check_output)
 
     with source(revision2):
         source.backup()
@@ -116,7 +109,7 @@ def test_choose_full_without_snapshot(monkeypatch, backup):
     assert source.full.called
 
 
-def test_choose_diff_with_snapshot(monkeypatch, backup):
+def test_choose_diff_with_snapshot(check_output, backup):
     source = CephRBD(dict(pool='test', image='foo'))
 
     source.diff = Mock()
@@ -131,7 +124,6 @@ def test_choose_diff_with_snapshot(monkeypatch, backup):
     revision2 = Revision('a2', backup.archive)
     revision2.parent = 'a1'
 
-    check_output = Mock()
     check_output.side_effect = [
         # snap create
         b'{}',
@@ -142,8 +134,6 @@ def test_choose_diff_with_snapshot(monkeypatch, backup):
         # snap rm backy-a1
         b'{}']
 
-    monkeypatch.setattr(subprocess, 'check_output', check_output)
-
     with source(revision2):
         source.backup()
 
@@ -151,7 +141,7 @@ def test_choose_diff_with_snapshot(monkeypatch, backup):
     assert not source.full.called
 
 
-def test_diff_backup(monkeypatch, backup, tmpdir):
+def test_diff_backup(check_output, backup, tmpdir):
     source = CephRBD(dict(pool='test', image='foo'))
 
     parent = Revision('ed968696-5ab0-4fe0-af1c-14cadab44661', backup.archive)
@@ -174,7 +164,6 @@ def test_diff_backup(monkeypatch, backup, tmpdir):
     backup.archive.scan()
     revision.materialize()
 
-    check_output = Mock()
     check_output.side_effect = [
         # snap create
         b'{}',
@@ -185,7 +174,6 @@ def test_diff_backup(monkeypatch, backup, tmpdir):
            {"name": "backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802"}]',
         # snap rm backy-ed96...
         b'{}']
-    monkeypatch.setattr(subprocess, 'check_output', check_output)
 
     with source(revision):
         source.diff()
@@ -203,7 +191,7 @@ def test_diff_backup(monkeypatch, backup, tmpdir):
               'test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802'])]
 
 
-def test_full_backup(monkeypatch, backup, tmpdir):
+def test_full_backup(check_output, backup, tmpdir):
     source = CephRBD(dict(pool='test', image='foo'))
 
     # Those revision numbers are taken from the sample snapshot and need
@@ -218,7 +206,6 @@ def test_full_backup(monkeypatch, backup, tmpdir):
     with open(rbd_source, 'w') as f:
         f.write('Han likes Leia.')
 
-    check_output = Mock()
     check_output.side_effect = [
         # snap create
         b'{}',
@@ -231,7 +218,6 @@ def test_full_backup(monkeypatch, backup, tmpdir):
         b'{}',
         # snap ls
         b'[{"name": "backy-a0"}]']
-    monkeypatch.setattr(subprocess, 'check_output', check_output)
 
     with source(revision):
         source.full()
@@ -247,7 +233,7 @@ def test_full_backup(monkeypatch, backup, tmpdir):
               'test/foo'])]
 
 
-def test_verify_fail(monkeypatch, backup, tmpdir):
+def test_verify_fail(check_output, backup, tmpdir):
     source = CephRBD(dict(pool='test', image='foo'))
 
     # Those revision numbers are taken from the sample snapshot and need
@@ -262,7 +248,6 @@ def test_verify_fail(monkeypatch, backup, tmpdir):
     with open(rbd_source, 'w') as f:
         f.write('Han likes Leia.')
 
-    check_output = Mock()
     check_output.side_effect = [
         # snap create
         b'{}',
@@ -275,7 +260,6 @@ def test_verify_fail(monkeypatch, backup, tmpdir):
         b'{}',
         # snap ls
         b'[{"name": "backy-a0"}]']
-    monkeypatch.setattr(subprocess, 'check_output', check_output)
 
     # We never copied the data, so this has to fail.
     with source(revision):
@@ -291,7 +275,7 @@ def test_verify_fail(monkeypatch, backup, tmpdir):
               'test/foo'])]
 
 
-def test_verify(monkeypatch, backup, tmpdir):
+def test_verify(check_output, backup, tmpdir):
     source = CephRBD(dict(pool='test', image='foo'))
 
     # Those revision numbers are taken from the sample snapshot and need
@@ -310,7 +294,6 @@ def test_verify(monkeypatch, backup, tmpdir):
     with open(target, 'w') as f:
         f.write('Han likes Leia.')
 
-    check_output = Mock()
     check_output.side_effect = [
         # snap create
         b'{}',
@@ -323,7 +306,6 @@ def test_verify(monkeypatch, backup, tmpdir):
         b'{}',
         # snap ls
         b'[{"name": "backy-a0"}]']
-    monkeypatch.setattr(subprocess, 'check_output', check_output)
 
     with source(revision):
         assert source.verify()

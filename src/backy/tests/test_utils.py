@@ -1,7 +1,7 @@
 from backy.tests import Ellipsis
 from backy.utils import files_are_equal, files_are_roughly_equal
 from backy.utils import format_timestamp
-from backy.utils import SafeFile, format_bytes_flexible, safe_copy
+from backy.utils import SafeFile, format_bytes_flexible, copy_overwrite
 import backy.utils
 import datetime
 import os
@@ -283,30 +283,27 @@ def test_roughly_compare_files_timeout(tmpdir):
     assert not files_are_roughly_equal(open('a', 'rb'), open('b', 'rb'))
 
 
-def test_safe_copy_correctly_makes_sparse_file(tmpdir):
+def test_copy_overwrite_correctly_makes_sparse_file(tmpdir):
     # Create a test file that contains random data, then we insert
-    # blocks of zeroes. safe_copy will not break them and will make the
+    # blocks of zeroes. copy_overwrite will not break them and will make the
     # file sparse.
     source_name = str(tmpdir / 'input')
     with open(source_name, 'wb') as f:
         f.write(b'12345' * 1024 * 100)
         f.seek(1024 * 16)
         f.write(b'\x00' * 1024 * 16)
-    source = open(source_name, 'rb')
-    target_name = str(tmpdir / 'output')
-    target = open(target_name, 'wb')
-    # To actually ensure that we punch holes and truncate, lets
-    # fill the file with a predictable pattern that is non-zero and
-    # longer than the source.
-    target.write(b'1' * 1024 * 150)
-    target.close()
-    target = open(target_name, 'wb')
-    safe_copy(source, target)
-    source.close()
-    target.close()
-    source_current = open(source_name, 'rb').read()
-    target_current = open(target_name, 'rb').read()
-    assert (source_current == target_current)
+    with open(source_name, 'rb') as source:
+        target_name = str(tmpdir / 'output')
+        with open(target_name, 'wb') as target:
+            # To actually ensure that we punch holes and truncate, lets
+            # fill the file with a predictable pattern that is non-zero and
+            # longer than the source.
+            target.write(b'1' * 1024 * 150)
+        with open(target_name, 'r+b') as target:
+            copy_overwrite(source, target)
+    with open(source_name, 'rb') as source_current:
+        with open(target_name, 'rb') as target_current:
+            assert (source_current.read() == target_current.read())
     if sys.platform == 'linux2':
         assert os.stat(source_name).st_blocks > os.stat(target_name).st_blocks
     else:

@@ -8,6 +8,7 @@ import os.path as p
 import pytest
 import subprocess
 
+BLOCK = backy.utils.PUNCH_SIZE
 
 with open(p.join(p.dirname(__file__), 'nodata.rbddiff'), 'rb') as f:
     SAMPLE_RBDDIFF = f.read()
@@ -199,7 +200,6 @@ def test_full_backup(check_output, backup, tmpdir):
     revision = Revision('a0', backup.archive)
     revision.timestamp = backy.utils.now()
     revision.materialize()
-
     backup.archive.scan()
 
     rbd_source = str(tmpdir / '-dev-rbd0')
@@ -231,6 +231,61 @@ def test_full_backup(check_output, backup, tmpdir):
         call([RBD, '--no-progress', 'unmap', rbd_source]),
         call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
               'test/foo'])]
+
+
+def test_full_backup_integrates_changes(check_output, backup, tmpdir):
+    # The backup source changes between two consecutive full backups. Both
+    # backup images should reflect the state of the source at the time the
+    # backup was run. This test is here to detect regressions while optimizing
+    # the full backup algorithms (coping and applying deltas).
+    source = CephRBD(dict(pool='test', image='foo'))
+    content0 = BLOCK * b'A' + BLOCK * b'B' + BLOCK * b'C' + BLOCK * b'D'
+    content1 = BLOCK * b'A' + BLOCK * b'X' + BLOCK * b'\0' + BLOCK * b'D'
+
+    rev0 = Revision('a0', backup.archive)
+    rev0.timestamp = backy.utils.now()
+    rev0.materialize()
+    backup.archive.scan()
+
+    rev1 = Revision('a1', backup.archive)
+    rev1.parent = 'a0'
+    rev1.materialize()
+
+    rbd_source = str(tmpdir / '_dev_rbd0')
+
+    def returnvals(name):
+        return [
+            # snap create
+            b'{}',
+            # map
+            b'{}',
+            # showmapped
+            '{{"rbd0": {{"pool": "test", "name": "foo", "snap": "backy-{}", \
+                         "device": "{}"}}}}'.format(
+                            name, rbd_source).encode('ascii'),
+            # unmap
+            b'{}',
+            # snap ls
+            '[{{"name": "backy-{}"}}]'.format(name).encode('ascii'),
+        ]
+
+    check_output.side_effect = (
+        returnvals('a0') +
+        returnvals('a1') +
+        # snap rm
+        [b'{}']
+    )
+
+    # check fidelity
+    for content, rev in [(content0, rev0), (content1, rev1)]:
+        with open(rbd_source, 'wb') as f:
+            f.write(content)
+
+        with source(rev):
+            source.full()
+
+        with open(rev.filename, 'rb') as f:
+            assert content == f.read()
 
 
 def test_verify_fail(check_output, backup, tmpdir):

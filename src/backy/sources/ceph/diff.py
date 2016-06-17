@@ -25,7 +25,7 @@ class RBDDiffV1(object):
 
     def __init__(self, filename, nodata=False):
         self.filename = filename
-        self.f = open(self.filename, 'rb', buffering=0)
+        self.f = open(self.filename, 'rb')
 
         self.phase = 'header'
         self.read_header()

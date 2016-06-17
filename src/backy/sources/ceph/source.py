@@ -1,6 +1,6 @@
 from .rbd import RBDClient
-from ...utils import safe_copy, SafeFile
-from ...utils import files_are_roughly_equal
+from ...utils import copy_overwrite, SafeFile, files_are_roughly_equal
+from ...utils import CHUNK_SIZE
 import logging
 
 logger = logging.getLogger(__name__)
@@ -94,15 +94,15 @@ class CephRBD(object):
         logger.info('Performing full backup')
         s = self.rbd.image_reader('{}/{}@backy-{}'.format(
             self.pool, self.image, self.revision.uuid))
-        t = open(self.revision.filename, 'r+b', buffering=0)
+        t = open(self.revision.filename, 'r+b', buffering=CHUNK_SIZE)
         with s as source, t as target:
-            bytes = safe_copy(source, target)
+            bytes = copy_overwrite(source, target)
         self.revision.stats['bytes_written'] = bytes
 
     def verify(self):
         s = self.rbd.image_reader('{}/{}@backy-{}'.format(
             self.pool, self.image, self.revision.uuid))
-        t = open(self.revision.filename, 'rb', buffering=0)
+        t = open(self.revision.filename, 'rb')
 
         self.revision.stats['ceph-verification'] = 'partial'
 

@@ -88,12 +88,10 @@ class SafeFile(object):
 
         if os.path.exists(self.filename):
             self.open_new('wb')
-            with open(self.filename, 'rb', buffering=0) as source:
-                safe_copy(source, self.f)
-            os.fsync(self.f)
+            cp_reflink(self.filename, self.f.name)
             self.f.close()
 
-        self.f = open(self.f.name, mode, buffering=0)
+        self.f = open(self.f.name, mode)
 
     def open_inplace(self, mode):
         """Open as an existing file, in-place."""
@@ -103,7 +101,7 @@ class SafeFile(object):
             # you so far and doesn't try to get in your way if you really need
             # to do this.
             os.chmod(self.filename, 0o640)
-        self.f = open(self.filename, mode, buffering=0)
+        self.f = open(self.filename, mode)
 
     def use_write_protection(self):
         """Enable write-protection handling.
@@ -213,30 +211,34 @@ else:
             z.close()
 
 
-def safe_copy(source, target):
+def copy_overwrite(source, target):
+    """Efficiently overwrites `target` with a copy of `source`.
+
+    Identical regions won't be touched so this is COW-friendly. Assumes
+    that `target` is a shallow copy of a previous version of `source`.
+
+    Assumes that `target` exists and is open in read-write mode.
+    """
     posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
     with zeroes(PUNCH_SIZE) as z:
         while True:
-            chunk = source.read(CHUNK_SIZE)
+            chunk = source.read(PUNCH_SIZE)
             if not chunk:
                 break
-            # Search for zeroes that we can make sparse.
-            pat_offset = 0
-            while True:
-                if chunk[pat_offset:pat_offset + PUNCH_SIZE] == z:
-                    punch_hole(target, target.tell(), PUNCH_SIZE)
-                    target.seek(PUNCH_SIZE, 1)
+            startpos = source.tell() - len(chunk)
+            compare = target.read(PUNCH_SIZE)
+            if not compare or chunk != compare:
+                if chunk == z:
+                    punch_hole(target, startpos, len(chunk))
                 else:
-                    target.write(chunk[pat_offset:pat_offset + PUNCH_SIZE])
-                pat_offset += PUNCH_SIZE
-                if pat_offset > len(chunk):
-                    break
+                    target.seek(startpos)
+                    target.write(chunk)
     try:
         target.truncate()
     except OSError:
-        # truncate may not be supported, i.e. on special files
-        pass
+        pass  # truncate may not be supported, i.e. on special files
     size = target.tell()
+    target.flush()
     os.fsync(target)
     return size
 

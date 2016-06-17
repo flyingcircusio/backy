@@ -1,7 +1,7 @@
 from .archive import Archive
 from .revision import Revision
 from .sources import select_source
-from .utils import SafeFile, safe_copy, CHUNK_SIZE, posix_fadvise
+from .utils import SafeFile, copy_overwrite, CHUNK_SIZE, posix_fadvise
 import fcntl
 import logging
 import os
@@ -96,10 +96,10 @@ class Backup(object):
     def restore_file(self, source, target):
         """Bulk-copy from open revision `source` to target file."""
         logger.debug('Copying from "%s" to "%s"...', source.name, target)
-        t = open(target, 'wb', buffering=0)
-        with t as target:
+        open(target, 'ab').close()  # touch into existence
+        with open(target, 'r+b', buffering=CHUNK_SIZE) as target:
             posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
-            safe_copy(source, target)
+            copy_overwrite(source, target)
 
     def restore_stdout(self, source):
         """Emit restore data to stdout (for pipe processing)."""
@@ -115,7 +115,7 @@ class Backup(object):
     def restore(self, revision, target):
         self.archive.scan()
         r = self.archive[revision]
-        with open(r.filename, 'rb', buffering=0) as source:
+        with open(r.filename, 'rb') as source:
             if target != '-':
                 logger.info('Restoring revision @ %s [%s]', r.timestamp,
                             ','.join(r.tags))

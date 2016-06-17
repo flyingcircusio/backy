@@ -1,7 +1,6 @@
 from backy.ext_deps import RBD
 from backy.sources.ceph.diff import RBDDiffV1
 from backy.sources.ceph.rbd import RBDClient
-import io
 from unittest import mock
 import pytest
 import subprocess
@@ -137,7 +136,6 @@ def test_rbd_image_reader(rbdclient, tmpdir):
                'name': 'test04.root', 'snap': 'foo'}},
         None]
     with rbdclient.image_reader('test/test04.root@foo') as f:
-        assert isinstance(f, io.FileIO)
         assert f.name == device
     rbdclient._rbd.assert_has_calls([
         mock.call(['--read-only', 'map', 'test/test04.root@foo']),

@@ -16,6 +16,7 @@ class CephRBD(object):
     def __init__(self, config):
         self.pool = config['pool']
         self.image = config['image']
+        self.always_full = config.get('full-always', False)
         self.rbd = RBDClient()
 
     @staticmethod
@@ -33,7 +34,8 @@ class CephRBD(object):
         return self
 
     def __enter__(self):
-        self._create_snapshot('backy-{}'.format(self.revision.uuid))
+        snapname = 'backy-{}'.format(self.revision.uuid)
+        self.rbd.snap_create(self._image_name + '@' + snapname)
         return self
 
     @property
@@ -47,7 +49,7 @@ class CephRBD(object):
         # revision - which is wrong: broken new revisions would always cause
         # full backups instead of new deltas based on the most recent valid
         # one.
-        if self.revision.archive.history:
+        if not self.always_full and self.revision.archive.history:
             keep_snapshot_revision = self.revision.archive.history[-1]
             keep_snapshot_revision = keep_snapshot_revision.uuid
         else:
@@ -61,19 +63,19 @@ class CephRBD(object):
                 logger.info('Removing old snapshot %s', snapshot['name'])
                 self.rbd.snap_rm(self._image_name + '@' + snapshot['name'])
 
-    def _create_snapshot(self, name):
-        self.rbd.snap_create(self._image_name + '@' + name)
-
     def backup(self):
-        backup = self.diff
+        if self.always_full:
+            self.full()
+            return
         try:
             parent = self.revision.archive[self.revision.parent]
             if not self.rbd.exists(self._image_name + '@backy-' + parent.uuid):
                 raise KeyError()
         except KeyError:
             logger.info('Could not find snapshot for previous revision.')
-            backup = self.full
-        backup()
+            self.full()
+            return
+        self.diff()
 
     def diff(self):
         logger.info('Performing differential backup')

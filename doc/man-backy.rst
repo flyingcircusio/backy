@@ -194,6 +194,11 @@ ceph
     image
         The RBD image name to use.
 
+    full-always
+        Never create diffs but do always a full backup. No long-lived snapshots
+        are needed in this case. This option is meant for volumes with very high
+        change rates.
+
     Init syntax:
 
         **backy init ceph-rbd** *POOL*/*IMAGE*

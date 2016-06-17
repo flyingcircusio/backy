@@ -13,8 +13,25 @@ import subprocess
 import sys
 import tempfile
 
-
 logger = logging.getLogger(__name__)
+
+Bytes = 1
+kiB = Bytes * 1024
+MiB = kiB * 1024
+GiB = MiB * 1024
+TiB = GiB * 1024
+# Conversion, Suffix, Format,  Plurals
+BYTE_UNITS = [
+    (Bytes, 'Byte', '%d', True),
+    (kiB, 'kiB', '%0.2f', False),
+    (MiB, 'MiB', '%0.2f', False),
+    (GiB, 'GiB', '%0.2f', False),
+    (TiB, 'TiB', '%0.2f', False)
+]
+
+# 64 kiB blocks are a good compromise between sparsiness and fragmentation.
+PUNCH_SIZE = 64 * kiB
+CHUNK_SIZE = 4 * MiB
 
 
 class SafeFile(object):
@@ -143,21 +160,6 @@ class SafeFile(object):
         return self.f.fileno()
 
 
-Bytes = 1
-kiB = Bytes * 1024
-MiB = kiB * 1024
-GiB = MiB * 1024
-TiB = GiB * 1024
-# Conversion, Suffix, Format,  Plurals
-BYTE_UNITS = [
-    (Bytes, 'Byte', '%d', True),
-    (kiB, 'kiB', '%0.2f', False),
-    (MiB, 'MiB', '%0.2f', False),
-    (GiB, 'GiB', '%0.2f', False),
-    (TiB, 'TiB', '%0.2f', False)
-]
-
-
 def safe_symlink(realfile, link):
     """Set a symlink unconditionally.
 
@@ -178,11 +180,6 @@ def format_bytes_flexible(number):
     if plurals and number != 1:
         label += 's'
     return '%s %s' % (format % (number / factor), label)
-
-
-# 16 kiB blocks are a good compromise between sparsiness and fragmentation.
-PUNCH_SIZE = 16 * kiB
-CHUNK_SIZE = 4 * MiB
 
 
 if hasattr(os, 'posix_fadvise'):
@@ -279,7 +276,7 @@ def files_are_equal(a, b):
     return not errors
 
 
-def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=16 * kiB,
+def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=PUNCH_SIZE,
                             timeout=5*60):
     # We limit this to a 5 minute operation to avoid clogging the storage
     # infinitely.
@@ -297,18 +294,13 @@ def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=16 * kiB,
         posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
 
     for block in sample:
-        logger.info('verifying chunk {}'.format(block))
+        logger.debug('verifying chunk {}'.format(block))
         duration = now() - started
         logger.debug('running for {}'.format(duration))
         if duration > max_duration:
             logger.info('stopping verification after {}'.format(duration))
             return True
 
-        # Pre-load full blocks
-        posix_fadvise(a.fileno(), block * blocksize, blocksize,
-                      os.POSIX_FADV_WILLNEED)
-        posix_fadvise(b.fileno(), block * blocksize, blocksize,
-                      os.POSIX_FADV_WILLNEED)
         a.seek(block * blocksize)
         b.seek(block * blocksize)
         chunk_a = a.read(blocksize)
@@ -319,7 +311,7 @@ def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=16 * kiB,
                 format(hashlib.md5(chunk_a).hexdigest(),
                        hashlib.md5(chunk_b).hexdigest(),
                        a.tell()))
-            break
+            return False
     else:
         return True
     return False

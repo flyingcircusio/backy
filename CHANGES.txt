@@ -2,7 +2,7 @@
 Changelog
 =========
 
-2.1.4 (unreleased)
+2.1.4 (2016-06-20)
 ==================
 
 - Add "full-always" flag to Ceph and Flyingcircus sources. #21960

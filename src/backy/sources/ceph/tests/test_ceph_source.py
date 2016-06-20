@@ -7,6 +7,7 @@ import backy.utils
 import os.path as p
 import pytest
 import subprocess
+import time
 
 BLOCK = backy.utils.PUNCH_SIZE
 
@@ -20,6 +21,11 @@ def check_output(monkeypatch):
     check_output.return_value = b'{}'
     monkeypatch.setattr(subprocess, 'check_output', check_output)
     return check_output
+
+
+@pytest.fixture
+def nosleep(monkeypatch):
+    monkeypatch.setattr(time, 'sleep', lambda x: None)
 
 
 def test_select_ceph_source():
@@ -47,7 +53,7 @@ def test_context_manager(check_output, backup):
               'test/foo'])]
 
 
-def test_context_manager_cleans_out_snapshots(check_output, backup):
+def test_context_manager_cleans_out_snapshots(check_output, backup, nosleep):
     source = CephRBD(dict(pool='test', image='foo'))
 
     check_output.side_effect = [
@@ -110,7 +116,7 @@ def test_choose_full_without_snapshot(check_output, backup):
     assert source.full.called
 
 
-def test_choose_diff_with_snapshot(check_output, backup):
+def test_choose_diff_with_snapshot(check_output, backup, nosleep):
     source = CephRBD(dict(pool='test', image='foo'))
 
     source.diff = Mock()
@@ -142,7 +148,7 @@ def test_choose_diff_with_snapshot(check_output, backup):
     assert not source.full.called
 
 
-def test_diff_backup(check_output, backup, tmpdir):
+def test_diff_backup(check_output, backup, tmpdir, nosleep):
     source = CephRBD(dict(pool='test', image='foo'))
 
     parent = Revision('ed968696-5ab0-4fe0-af1c-14cadab44661', backup.archive)
@@ -233,7 +239,7 @@ def test_full_backup(check_output, backup, tmpdir):
               'test/foo'])]
 
 
-def test_full_backup_integrates_changes(check_output, backup, tmpdir):
+def test_full_backup_integrates_changes(check_output, backup, tmpdir, nosleep):
     # The backup source changes between two consecutive full backups. Both
     # backup images should reflect the state of the source at the time the
     # backup was run. This test is here to detect regressions while optimizing

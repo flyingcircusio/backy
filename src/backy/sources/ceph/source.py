@@ -2,6 +2,7 @@ from .rbd import RBDClient
 from ...utils import copy_overwrite, SafeFile, files_are_roughly_equal
 from ...utils import CHUNK_SIZE
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ class CephRBD(object):
                 continue
             uuid = snapshot['name'].replace('backy-', '')
             if uuid != keep_snapshot_revision:
+                time.sleep(1)  # avoid race condition while unmapping
                 logger.info('Removing old snapshot %s', snapshot['name'])
                 self.rbd.snap_rm(self._image_name + '@' + snapshot['name'])
 

@@ -5,7 +5,10 @@ Changelog
 2.1.4 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Add "full-always" flag to Ceph and Flyingcircus sources. #21960
+
+- Rewrite full backup code to make use of shallow copies to conserve disk space.
+  #21960
 
 
 2.1.3 (2016-06-09)

@@ -1,4 +1,5 @@
 from ...ext_deps import RBD
+from ...utils import CHUNK_SIZE
 from .diff import RBDDiffV1
 import contextlib
 import json
@@ -68,7 +69,7 @@ class RBDClient(object):
     @contextlib.contextmanager
     def image_reader(self, image):
         mapped = self.map(image, readonly=True)
-        source = open(mapped['device'], 'rb')
+        source = open(mapped['device'], 'rb', buffering=CHUNK_SIZE)
         try:
             yield source
         finally:

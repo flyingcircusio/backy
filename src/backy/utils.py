@@ -217,25 +217,32 @@ def copy_overwrite(source, target):
     Assumes that `target` exists and is open in read-write mode.
     """
     posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
     with zeroes(PUNCH_SIZE) as z:
         while True:
+            startpos = source.tell()
             chunk = source.read(PUNCH_SIZE)
             if not chunk:
                 break
-            startpos = source.tell() - len(chunk)
-            compare = target.read(PUNCH_SIZE)
+            target.seek(startpos)
+            compare = target.read(len(chunk))
             if not compare or chunk != compare:
                 if chunk == z:
+                    logger.debug('cp: hole punching @ %d+%d',
+                                 startpos, len(chunk))
+                    target.flush()
                     punch_hole(target, startpos, len(chunk))
                 else:
+                    logger.debug('cp: updating block @ %d+%d',
+                                 startpos, len(chunk))
                     target.seek(startpos)
                     target.write(chunk)
+    target.flush()
     try:
         target.truncate()
     except OSError:
         pass  # truncate may not be supported, i.e. on special files
     size = target.tell()
-    target.flush()
     os.fsync(target)
     return size
 
@@ -276,29 +283,28 @@ def files_are_equal(a, b):
     return not errors
 
 
-def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=PUNCH_SIZE,
+def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=CHUNK_SIZE,
                             timeout=5*60):
-    # We limit this to a 5 minute operation to avoid clogging the storage
-    # infinitely.
-    started = now()
-    max_duration = datetime.timedelta(seconds=timeout)
-
-    a.seek(0, 2)
+    a.seek(0, os.SEEK_END)
     size = a.tell()
     blocks = size // blocksize
-    sample = range(0, max(blocks, 1))
-    sample = random.sample(sample, max(int(samplesize * blocks), 1))
+    blocklist = range(0, max(blocks, 1))
+    sample = random.sample(blocklist, max(int(samplesize * blocks), 1))
 
     # turn off readahead
     for fdesc in a.fileno(), b.fileno():
         posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
 
+    # We limit this to a 5 minute operation to avoid clogging the storage
+    # infinitely.
+    started = now()
+    max_duration = datetime.timedelta(seconds=timeout)
+
     for block in sample:
-        logger.debug('verifying chunk {}'.format(block))
+        logger.debug('Verifying chunk @ %d', block * blocksize)
         duration = now() - started
-        logger.debug('running for {}'.format(duration))
         if duration > max_duration:
-            logger.info('stopping verification after {}'.format(duration))
+            logger.info('Stopping verification after %s', duration)
             return True
 
         a.seek(block * blocksize)
@@ -307,10 +313,10 @@ def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=PUNCH_SIZE,
         chunk_b = b.read(blocksize)
         if chunk_a != chunk_b:
             logger.error(
-                "Chunk A (md5: {}) != Chunk B (md5: {}) at position {}".
+                "Chunk A (md5: %s) != Chunk B (md5: %s) at position %d".
                 format(hashlib.md5(chunk_a).hexdigest(),
                        hashlib.md5(chunk_b).hexdigest(),
-                       a.tell()))
+                       block * blocksize))
             return False
     else:
         return True

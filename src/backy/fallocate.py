@@ -49,13 +49,13 @@ except AttributeError:  # pragma: no cover
     fallocate = _fake_fallocate
 
 
-def punch_hole(f, from_, to):
+def punch_hole(f, offset, len_):
     """Ensure that the specified byte range is zeroed.
 
     Depending on the availability of fallocate(), this is either
     delegated to the kernel or done manualy.
     """
-    params = (f, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE, from_, to)
+    params = (f, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE, offset, len_)
     try:
         fallocate(*params)
     except OSError:

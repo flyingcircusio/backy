@@ -1,6 +1,5 @@
 from .rbd import RBDClient
 from ...utils import copy_overwrite, SafeFile, files_are_roughly_equal
-from ...utils import CHUNK_SIZE
 import logging
 import time
 
@@ -61,7 +60,7 @@ class CephRBD(object):
                 continue
             uuid = snapshot['name'].replace('backy-', '')
             if uuid != keep_snapshot_revision:
-                time.sleep(1)  # avoid race condition while unmapping
+                time.sleep(3)  # avoid race condition while unmapping
                 logger.info('Removing old snapshot %s', snapshot['name'])
                 self.rbd.snap_rm(self._image_name + '@' + snapshot['name'])
 
@@ -98,7 +97,7 @@ class CephRBD(object):
         logger.info('Performing full backup')
         s = self.rbd.image_reader('{}/{}@backy-{}'.format(
             self.pool, self.image, self.revision.uuid))
-        t = open(self.revision.filename, 'r+b', buffering=CHUNK_SIZE)
+        t = open(self.revision.filename, 'r+b')
         with s as source, t as target:
             bytes = copy_overwrite(source, target)
         self.revision.stats['bytes_written'] = bytes

@@ -66,6 +66,7 @@ class CephRBD(object):
 
     def backup(self):
         if self.always_full:
+            logger.debug('Running always full backups')
             self.full()
             return
         try:

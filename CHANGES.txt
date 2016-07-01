@@ -2,7 +2,7 @@
 Changelog
 =========
 
-2.1.5 (unreleased)
+2.1.5 (2016-07-01)
 ==================
 
 - Bugfix release: fix data corruption bug in the new full-always mode. (FC

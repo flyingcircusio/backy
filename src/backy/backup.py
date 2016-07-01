@@ -83,12 +83,7 @@ class Backup(object):
             if not source.verify():
                 logger.error('New revision does not match source '
                              '- removing it.')
-                # new_revision.remove()
-                os.rename(new_revision.filename,
-                          new_revision.filename + '.broken')
-                # XXX avoid snapshot cleanup for the moment
-                import sys
-                sys.exit(1)
+                new_revision.remove()
             else:
                 logger.info('Revision {} verification OK.'.format(
                     new_revision.uuid))

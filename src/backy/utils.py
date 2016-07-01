@@ -228,21 +228,17 @@ def copy_overwrite(source, target):
             compare = target.read(len(chunk))
             if not compare or chunk != compare:
                 if chunk == z:
-                    logger.debug('cp: hole punching @ %d+%d',
-                                 startpos, len(chunk))
                     target.flush()
                     punch_hole(target, startpos, len(chunk))
                 else:
-                    logger.debug('cp: updating block @ %d+%d',
-                                 startpos, len(chunk))
                     target.seek(startpos)
                     target.write(chunk)
+    size = source.tell()
     target.flush()
     try:
-        target.truncate()
+        target.truncate(size)
     except OSError:
         pass  # truncate may not be supported, i.e. on special files
-    size = target.tell()
     os.fsync(target)
     return size
 

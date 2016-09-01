@@ -2,6 +2,8 @@ from .archive import Archive
 from .revision import Revision
 from .sources import select_source
 from .utils import SafeFile, copy_overwrite, CHUNK_SIZE, posix_fadvise
+from .backends.cowfile import COWFileBackend
+from .backends.chunked import ChunkedFileBackend
 import fcntl
 import logging
 import os
@@ -36,6 +38,12 @@ class Backup(object):
                 self.config['type']))
         self.source = source_factory(self.config)
         self.archive.scan()
+
+        backend_type = self.config.get('backend', 'cowfile')
+        if backend_type == 'cowfile':
+            self.backend_factory = COWFileBackend
+        elif backend_type == 'chunked':
+            self.backend_factory = ChunkedFileBackend
 
     def _lock(self):
         self._lock_file = open(p.join(self.path, 'config'), 'rb')
@@ -78,9 +86,11 @@ class Backup(object):
         logger.info('New revision {} [{}]'.format(
                     new_revision.uuid, ','.join(new_revision.tags)))
 
+        backend = self.backend_factory(new_revision)
+
         with self.source(new_revision) as source:
-            source.backup()
-            if not source.verify():
+            source.backup(backend)
+            if not source.verify(backend):
                 logger.error('New revision does not match source '
                              '- removing it.')
                 new_revision.remove()
@@ -98,13 +108,19 @@ class Backup(object):
         logger.debug('Copying from "%s" to "%s"...', source.name, target)
         open(target, 'ab').close()  # touch into existence
         with open(target, 'r+b', buffering=CHUNK_SIZE) as target:
-            posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+            try:
+                posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+            except Exception:
+                pass
             copy_overwrite(source, target)
 
     def restore_stdout(self, source):
         """Emit restore data to stdout (for pipe processing)."""
         logger.debug('Dumping from "%s" to stdout...', source.name)
-        posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+        try:
+            posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+        except Exception:
+            pass
         with os.fdopen(os.dup(1), 'wb') as target:
             while True:
                 chunk = source.read(CHUNK_SIZE)
@@ -115,7 +131,9 @@ class Backup(object):
     def restore(self, revision, target):
         self.archive.scan()
         r = self.archive[revision]
-        with open(r.filename, 'rb') as source:
+        backend = self.backend_factory(r)
+        s = backend.open('rb')
+        with s as source:
             if target != '-':
                 logger.info('Restoring revision @ %s [%s]', r.timestamp,
                             ','.join(r.tags))

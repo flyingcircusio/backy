@@ -1,5 +1,5 @@
 from .rbd import RBDClient
-from ...utils import copy_overwrite, SafeFile, files_are_roughly_equal
+from ...utils import copy_overwrite, files_are_roughly_equal
 import logging
 import time
 
@@ -64,10 +64,10 @@ class CephRBD(object):
                 logger.info('Removing old snapshot %s', snapshot['name'])
                 self.rbd.snap_rm(self._image_name + '@' + snapshot['name'])
 
-    def backup(self):
+    def backup(self, target):
         if self.always_full:
             logger.debug('Running always full backups')
-            self.full()
+            self.full(target)
             return
         try:
             parent = self.revision.archive[self.revision.parent]
@@ -75,38 +75,36 @@ class CephRBD(object):
                 raise KeyError()
         except KeyError:
             logger.info('Could not find snapshot for previous revision.')
-            self.full()
+            self.full(target)
             return
-        self.diff()
+        self.diff(target)
 
-    def diff(self):
+    def diff(self, target):
         logger.info('Performing differential backup')
         snap_from = 'backy-' + self.revision.parent
         snap_to = 'backy-' + self.revision.uuid
         d = self.rbd.export_diff(self._image_name + '@' + snap_to,
                                  snap_from,
                                  self.revision.filename + '.rbddiff')
-        t = SafeFile(self.revision.filename)
+        t = target.open('r+b')
         with t as target:
-            t.use_write_protection()
-            t.open_inplace('r+b')
             bytes = d.integrate(target, snap_from, snap_to)
 
         self.revision.stats['bytes_written'] = bytes
 
-    def full(self):
+    def full(self, target):
         logger.info('Performing full backup')
         s = self.rbd.image_reader('{}/{}@backy-{}'.format(
             self.pool, self.image, self.revision.uuid))
-        t = open(self.revision.filename, 'r+b')
+        t = target.open('r+b')
         with s as source, t as target:
             bytes = copy_overwrite(source, target)
         self.revision.stats['bytes_written'] = bytes
 
-    def verify(self):
+    def verify(self, target):
         s = self.rbd.image_reader('{}/{}@backy-{}'.format(
             self.pool, self.image, self.revision.uuid))
-        t = open(self.revision.filename, 'rb')
+        t = target.open('rb')
 
         self.revision.stats['ceph-verification'] = 'partial'
 

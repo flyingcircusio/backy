@@ -82,9 +82,12 @@ def test_delete_revision(tmpdir):
     a = Archive(str(tmpdir))
     r = Revision('123-456', a, backy.utils.now())
     r.materialize()
-    assert p.exists(str(tmpdir / '123-456'))
     assert p.exists(str(tmpdir / '123-456.rev'))
     a.scan()
+    open(str(tmpdir / '123-456'), 'w')
+    assert p.exists(str(tmpdir / '123-456.rev'))
     r.remove()
+    # Ensure the revision data file exists - we do not implicitly create
+    # it any longer.
     assert not p.exists(str(tmpdir / '123-456'))
     assert not p.exists(str(tmpdir / '123-456.rev'))

@@ -1,4 +1,4 @@
-from .utils import SafeFile, now, safe_symlink, cp_reflink
+from .utils import SafeFile, now, safe_symlink
 import datetime
 import glob
 import logging
@@ -62,12 +62,7 @@ class Revision(object):
 
     def materialize(self):
         self.write_info()
-        if not self.parent:
-            open(self.filename, 'wb').close()
-        else:
-            parent = self.archive[self.parent]
-            cp_reflink(parent.filename, self.filename)
-            self.writable()
+        self.writable()
 
     def write_info(self):
         metadata = {
@@ -92,9 +87,11 @@ class Revision(object):
             self.archive.history.remove(self)
 
     def writable(self):
-        os.chmod(self.filename, 0o640)
+        if os.path.exists(self.filename):
+            os.chmod(self.filename, 0o640)
         os.chmod(self.info_filename, 0o640)
 
     def readonly(self):
-        os.chmod(self.filename, 0o440)
+        if os.path.exists(self.filename):
+            os.chmod(self.filename, 0o440)
         os.chmod(self.info_filename, 0o440)

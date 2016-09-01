@@ -144,22 +144,22 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
     # This revision is more than keep and also outside the interval.
     # It gets its tag removed and disappears.
     r = add_revision(datetime(2014, 5, 4, 11, 0))
-    assert os.path.exists(r.filename)
+    assert os.path.exists(r.filename + '.rev')
     assert [r] == schedule.expire(archive)
     archive.scan()
     assert [{'daily'}] * 6 == [rev.tags for rev in history]
-    assert not os.path.exists(r.filename)
+    assert not os.path.exists(r.filename + '.rev')
 
     # If we have unknown tags, then those do not expire. However, the
     # known tag disappears but then the file remains because there's still
     # a tag left.
     r = add_revision(datetime(2014, 5, 4, 11, 0))
     r.tags = {'daily', 'test'}
-    assert os.path.exists(r.filename)
+    assert os.path.exists(r.filename + '.rev')
     assert [] == schedule.expire(archive)
     archive.scan()
     assert [{'test'}] + [{'daily'}] * 6 == [rev.tags for rev in history]
-    assert os.path.exists(r.filename)
+    assert os.path.exists(r.filename + '.rev')
 
 
 def test_next_in_interval(clock):

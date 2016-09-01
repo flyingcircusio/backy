@@ -2,10 +2,17 @@
 Changelog
 =========
 
-2.1.6 (unreleased)
-==================
+2.2 (unreleased)
+================
 
-- Nothing changed yet.
+- Introduce a new backend storage mechanism, independent of BTRFS: instead of
+  using COW, use a directory with content-hashed 4MiB chunks of the file.
+  Deduplication happens automatically based on the 4MiB chunks.
+
+TODO
+
+  - trigger cleanup after removing revisions
+  - provide ability for general chunk verification
 
 
 2.1.5 (2016-07-01)

@@ -2,6 +2,7 @@ from backy.ext_deps import RBD
 from backy.revision import Revision
 from backy.sources.ceph.source import CephRBD
 from backy.sources import select_source
+from backy.backends.cowfile import COWFileBackend
 from unittest.mock import Mock, call
 import backy.utils
 import os.path as p
@@ -86,9 +87,10 @@ def test_choose_full_without_parent(check_output, backup):
     source.full = Mock()
 
     revision = Revision('1', backup.archive)
+    backend = COWFileBackend(revision)
 
     with source(revision):
-        source.backup()
+        source.backup(backend)
 
     assert not source.diff.called
     assert source.full.called
@@ -109,8 +111,9 @@ def test_choose_full_without_snapshot(check_output, backup):
     revision2 = Revision('a2', backup.archive)
     revision2.parent = 'a1'
 
+    backend = COWFileBackend(revision2)
     with source(revision2):
-        source.backup()
+        source.backup(backend)
 
     assert not source.diff.called
     assert source.full.called
@@ -141,8 +144,9 @@ def test_choose_diff_with_snapshot(check_output, backup, nosleep):
         # snap rm backy-a1
         b'{}']
 
+    backend = COWFileBackend(revision2)
     with source(revision2):
-        source.backup()
+        source.backup(backend)
 
     assert source.diff.called
     assert not source.full.called
@@ -182,8 +186,9 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep):
         # snap rm backy-ed96...
         b'{}']
 
+    backend = COWFileBackend(revision)
     with source(revision):
-        source.diff()
+        source.diff(backend)
 
     assert check_output.call_args_list == [
         call([RBD, '--no-progress', 'snap', 'create',
@@ -225,8 +230,9 @@ def test_full_backup(check_output, backup, tmpdir):
         # snap ls
         b'[{"name": "backy-a0"}]']
 
+    backend = COWFileBackend(revision)
     with source(revision):
-        source.full()
+        source.full(backend)
 
     assert check_output.call_args_list == [
         call([RBD, '--no-progress', 'snap', 'create',
@@ -287,8 +293,9 @@ def test_full_backup_integrates_changes(check_output, backup, tmpdir, nosleep):
         with open(rbd_source, 'wb') as f:
             f.write(content)
 
+        backend = COWFileBackend(rev)
         with source(rev):
-            source.full()
+            source.full(backend)
 
         with open(rev.filename, 'rb') as f:
             assert content == f.read()
@@ -323,8 +330,9 @@ def test_verify_fail(check_output, backup, tmpdir):
         b'[{"name": "backy-a0"}]']
 
     # We never copied the data, so this has to fail.
+    backend = COWFileBackend(revision)
     with source(revision):
-        assert not source.verify()
+        assert not source.verify(backend)
 
     assert check_output.call_args_list == [
         call([RBD, '--no-progress', 'snap', 'create', 'test/foo@backy-a0']),
@@ -368,8 +376,9 @@ def test_verify(check_output, backup, tmpdir):
         # snap ls
         b'[{"name": "backy-a0"}]']
 
+    backend = COWFileBackend(revision)
     with source(revision):
-        assert source.verify()
+        assert source.verify(backend)
 
     assert check_output.call_args_list == [
         call([RBD, '--no-progress', 'snap', 'create', 'test/foo@backy-a0']),

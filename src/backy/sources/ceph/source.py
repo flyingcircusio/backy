@@ -35,8 +35,14 @@ class CephRBD(object):
 
     def __enter__(self):
         snapname = 'backy-{}'.format(self.revision.uuid)
-        self.rbd.snap_create(self._image_name + '@' + snapname)
+        self.create_snapshot(snapname)
         return self
+
+    def create_snapshot(self, snapname):
+        """An overridable method to allow different ways of creating the
+        snapshot.
+        """
+        self.rbd.snap_create(self._image_name + '@' + snapname)
 
     @property
     def _image_name(self):

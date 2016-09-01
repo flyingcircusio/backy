@@ -9,6 +9,9 @@ Changelog
   using COW, use a directory with content-hashed 4MiB chunks of the file.
   Deduplication happens automatically based on the 4MiB chunks.
 
+- Made the use of fadvise features more opportunistic: don't fail if they are
+  not supported by the backend as they are only optimizations anyway.
+
 TODO
 
   - trigger cleanup after removing revisions

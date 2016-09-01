@@ -144,7 +144,6 @@ class ChunkedFile(object):
         return True
 
     def read(self, size=-1):
-        assert size == -1, 'Limited reads not implemented yet'
         result = b''
         while self._position < self.size:
             chunk, offset = self._current_chunk_offset()
@@ -160,6 +159,12 @@ class ChunkedFile(object):
 
             self._position += len(chunk_data)
             result += chunk_data
+
+            if size > -1 and len(result) > size:
+                    too_far = len(result) - size
+                    result = result[:size]
+                    self._position -= too_far
+                    break
 
         return result
 

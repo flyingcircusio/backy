@@ -13,6 +13,15 @@ def test_simple_open_write_read_seek(tmpdir):
 
     f = ChunkedFile(str(tmpdir / 'asdf'), store)
     assert f.read() == b'asdf'
+    f.seek(0)
+    assert f.read(0) == b''
+    assert f.tell() == 0
+    assert f.read(1) == b'a'
+    assert f.tell() == 1
+    assert f.read(2) == b'sd'
+    assert f.tell() == 3
+    assert f.read(5) == b'f'
+    assert f.tell() == 4
     f.close()
 
 

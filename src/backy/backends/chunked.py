@@ -203,7 +203,7 @@ class ChunkedFile(object):
     def __enter__(self):
         return self
 
-    def __exit__(self):
+    def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
         self.close()
 
 
@@ -214,4 +214,4 @@ class ChunkedFileBackend(object):
         self.store = ChunkStore(path=self.revision.archive.path + '/chunks')
 
     def open(self, mode='rb'):
-        return ChunkedFile(self.revision.filename, mode, store=self.store)
+        return ChunkedFile(self.revision.filename, self.store, mode)

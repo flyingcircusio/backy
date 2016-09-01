@@ -216,8 +216,11 @@ def copy_overwrite(source, target):
 
     Assumes that `target` exists and is open in read-write mode.
     """
-    posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-    posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    try:
+        posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+        posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    except Exception:
+        pass
     with zeroes(PUNCH_SIZE) as z:
         while True:
             startpos = source.tell()
@@ -258,8 +261,11 @@ def cp_reflink(source, target):
 
 
 def files_are_equal(a, b):
-    posix_fadvise(a.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-    posix_fadvise(b.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    try:
+        posix_fadvise(a.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+        posix_fadvise(b.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    except Exception:
+        pass
     position = 0
     errors = 0
     while True:
@@ -289,7 +295,10 @@ def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=CHUNK_SIZE,
 
     # turn off readahead
     for fdesc in a.fileno(), b.fileno():
-        posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
+        try:
+            posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
+        except Exception:
+            pass
 
     # We limit this to a 5 minute operation to avoid clogging the storage
     # infinitely.

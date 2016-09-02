@@ -244,8 +244,9 @@ class ChunkedFileBackend(object):
         if 'w' in mode or '+' in mode:
             if (self.revision.parent and
                     not os.path.exists(self.revision.filename)):
+                parent = self.revision.archive[self.revision.parent]
                 with open(self.revision.filename, 'wb') as new:
-                    with open(self.revision.parent.filename, 'rb') as old:
+                    with open(parent.filename, 'rb') as old:
                         new.write(old.read())
         self.revision.writable()
         return ChunkedFile(self.revision.filename, self.store, mode)

@@ -221,28 +221,23 @@ def copy_overwrite(source, target):
         posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
     except Exception:
         pass
-    with zeroes(PUNCH_SIZE) as z:
-        while True:
-            startpos = source.tell()
-            chunk = source.read(PUNCH_SIZE)
-            if not chunk:
-                break
-            target.seek(startpos)
-            compare = target.read(len(chunk))
-            if not compare or chunk != compare:
-                if chunk == z:
-                    target.flush()
-                    punch_hole(target, startpos, len(chunk))
-                else:
-                    target.seek(startpos)
-                    target.write(chunk)
+    while True:
+        startpos = source.tell()
+        chunk = source.read(CHUNK_SIZE)
+        if not chunk:
+            break
+        target.seek(startpos)
+        target.write(chunk)
     size = source.tell()
     target.flush()
     try:
         target.truncate(size)
     except OSError:
         pass  # truncate may not be supported, i.e. on special files
-    os.fsync(target)
+    try:
+        os.fsync(target)
+    except OSError:
+        pass  # fsync may not be supported, i.e. on special files
     return size
 
 
@@ -294,11 +289,11 @@ def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=CHUNK_SIZE,
     sample = random.sample(blocklist, max(int(samplesize * blocks), 1))
 
     # turn off readahead
-    for fdesc in a.fileno(), b.fileno():
-        try:
+    try:
+        for fdesc in a.fileno(), b.fileno():
             posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
-        except Exception:
-            pass
+    except Exception:
+        pass
 
     # We limit this to a 5 minute operation to avoid clogging the storage
     # infinitely.

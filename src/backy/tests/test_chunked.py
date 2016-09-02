@@ -60,3 +60,43 @@ def test_continuously_updated_file(tmpdir):
     data = sample.read()
     chunked_data = f.read()
     assert data == chunked_data
+
+
+def test_seeky_updated_file(tmpdir):
+    store = ChunkStore(str(tmpdir))
+
+    sample = open(str(tmpdir / 'bsdf'), 'wb')
+    f = ChunkedFile(str(tmpdir / 'asdf'), store)
+    for i in range(20):
+        chunk = ((random.randint(0, 255),) *
+                 random.randint(1, 5 * ChunkedFile.CHUNK_SIZE))
+        chunk = bytes(chunk)
+        offset = random.randint(0, f.size)
+        sample.seek(offset)
+        sample.write(chunk)
+        f.seek(offset)
+        f.write(chunk)
+        assert sample.tell() == f.tell()
+
+    f.close()
+    sample.close()
+
+    sample = open(str(tmpdir / 'bsdf'), 'rb')
+    f = ChunkedFile(str(tmpdir / 'asdf'), store)
+    data = sample.read()
+    chunked_data = f.read()
+    assert data == chunked_data
+
+    store.validate()
+
+    store.users.append(f)
+    store.expunge()
+
+    sample.close()
+    f.close()
+
+    sample = open(str(tmpdir / 'bsdf'), 'rb')
+    f = ChunkedFile(str(tmpdir / 'asdf'), store)
+    data = sample.read()
+    chunked_data = f.read()
+    assert data == chunked_data

@@ -241,4 +241,11 @@ class ChunkedFileBackend(object):
         self.store = ChunkStore(path=self.revision.archive.path + '/chunks')
 
     def open(self, mode='rb'):
+        if 'w' in mode or '+' in mode:
+            if (self.revision.parent and
+                    not os.path.exists(self.revision.filename)):
+                with open(self.revision.filename, 'wb') as new:
+                    with open(self.revision.parent.filename, 'rb') as old:
+                        new.write(old.read())
+        self.revision.writable()
         return ChunkedFile(self.revision.filename, self.store, mode)

@@ -136,7 +136,7 @@ class ChunkedFile(object):
 
     def truncate(self, size=None):
         if size is None:
-            size = self.position
+            size = self._position
         # Update content hash
         self.size = size
 

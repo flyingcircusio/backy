@@ -1,5 +1,4 @@
 from .ext_deps import CP
-from .fallocate import punch_hole
 import contextlib
 import datetime
 import hashlib
@@ -281,7 +280,7 @@ def files_are_equal(a, b):
 
 
 def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=CHUNK_SIZE,
-                            timeout=5*60):
+                            timeout=5 * 60):
     a.seek(0, os.SEEK_END)
     size = a.tell()
     blocks = size // blocksize

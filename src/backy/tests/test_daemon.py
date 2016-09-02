@@ -1,6 +1,7 @@
 from backy.daemon import BackyDaemon
 from backy.revision import Revision
 from backy.scheduler import Task, TaskPool
+from backy.backends.chunked import ChunkedFileBackend
 from unittest import mock
 import asyncio
 import backy.utils
@@ -63,18 +64,22 @@ def test_run_backup(event_loop, daemon):
     task_future = asyncio.Future()
     yield from t.backup(task_future)
     assert len(job.archive.history) == 1
-    assert job.archive.history[0].tags == set(['asdf'])
-    with open(job.archive.history[0].filename, 'r') as f:
-        assert f.read() == 'I am your father, Luke!'
+    revision = job.archive.history[0]
+    assert revision.tags == set(['asdf'])
+    backend = ChunkedFileBackend(revision)
+    with backend.open('r') as f:
+        assert f.read() == b'I am your father, Luke!'
 
     # Run again. This also covers the code path that works if
     # the target backup directory exists already.
     task_future = asyncio.Future()
     yield from t.backup(task_future)
     assert len(job.archive.history) == 2
-    assert job.archive.history[1].tags == set(['asdf'])
-    with open(job.archive.history[1].filename, 'r') as f:
-        assert f.read() == 'I am your father, Luke!'
+    revision = job.archive.history[1]
+    assert revision.tags == set(['asdf'])
+    backend = ChunkedFileBackend(revision)
+    with backend.open('r') as f:
+        assert f.read() == b'I am your father, Luke!'
 
 
 def test_spread(daemon):

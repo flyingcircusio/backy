@@ -75,6 +75,13 @@ class ChunkedFile(object):
         self.closed = False
         self._position = 0
 
+        if '+' in mode:
+            mode += 'w'
+        self.mode = mode
+
+        if not os.path.exists(name) and 'w' not in mode:
+            raise RuntimeError('File not found: {}'.format(self.name))
+
         if not os.path.exists(name):
             # The mapping will have integers represented as strings as its
             # keys -> json doesn't support integer keys.
@@ -86,29 +93,37 @@ class ChunkedFile(object):
                 self._mapping = meta['mapping']
                 self.size = meta['size']
 
+        if '+' in mode:
+            self._position = self.size
+
     def fileno(self):
         raise OSError('ChunkedFile does not support use through a file '
                       'descriptor.')
 
     def flush(self):
+        assert 'w' in self.mode and not self.closed
         with open(self.name, 'w') as f:
             json.dump({'mapping': self._mapping,
                        'size': self.size}, f)
 
     def close(self):
-        self.flush()
+        assert not self.closed
+        if 'w' in self.mode:
+            self.flush()
         self.closed = True
 
     def isatty(self):
         return False
 
     def readable(self):
-        return True
+        return 'r' in self.mode and not self.closed
 
     # def readline(size=-1)
     # def readlines(hint=-1)
 
     def seek(self, offset, whence=io.SEEK_SET):
+        assert not self.closed
+
         position = self._position
         if whence == io.SEEK_SET:
             position = offset
@@ -132,18 +147,21 @@ class ChunkedFile(object):
         return True
 
     def tell(self):
+        assert not self.closed
         return self._position
 
     def truncate(self, size=None):
+        assert 'w' in self.mode and not self.closed
         if size is None:
             size = self._position
         # Update content hash
         self.size = size
 
     def writable(self):
-        return True
+        return 'w' in self.mode and not self.closed
 
     def read(self, size=-1):
+        assert 'r' in self.mode and not self.closed
         result = b''
         while self._position < self.size:
             chunk, offset = self._current_chunk_offset()
@@ -169,6 +187,7 @@ class ChunkedFile(object):
         return result
 
     def write(self, b):
+        assert 'w' in self.mode and not self.closed
         while b:
             chunk, offset = self._current_chunk_offset()
 
@@ -192,6 +211,8 @@ class ChunkedFile(object):
                 _, tmp_target = tempfile.mkstemp(dir=self.store.path)
                 open(tmp_target, 'wb').write(new_chunk_data)
                 os.rename(tmp_target, target)
+            else:
+                print("Ignoring existing chunk.")
 
             self._position += len(new_part)
             if self._position > self.size:
@@ -206,6 +227,7 @@ class ChunkedFile(object):
         return chunk, offset
 
     def __enter__(self):
+        assert not self.closed
         return self
 
     def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):

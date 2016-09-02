@@ -39,7 +39,7 @@ class Backup(object):
         self.source = source_factory(self.config)
         self.archive.scan()
 
-        backend_type = self.config.get('backend', 'cowfile')
+        backend_type = self.config.get('backend', 'chunked')
         if backend_type == 'cowfile':
             self.backend_factory = COWFileBackend
         elif backend_type == 'chunked':

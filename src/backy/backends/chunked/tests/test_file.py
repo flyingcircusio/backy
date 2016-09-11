@@ -1,17 +1,19 @@
-from backy.backends.chunked import ChunkedFile, ChunkStore
+from backy.backends.chunked.file import File
+from backy.backends.chunked.store import Store
+from backy.backends.chunked.chunk import Chunk
 import random
 
 
 def test_simple_open_write_read_seek(tmpdir):
-    store = ChunkStore(str(tmpdir))
+    store = Store(str(tmpdir))
 
-    f = ChunkedFile(str(tmpdir / 'asdf'), store)
+    f = File(str(tmpdir / 'asdf'), store)
     f.write(b'asdf')
     f.seek(0)
     assert f.read() == b'asdf'
     f.close()
 
-    f = ChunkedFile(str(tmpdir / 'asdf'), store)
+    f = File(str(tmpdir / 'asdf'), store)
     assert f.read() == b'asdf'
     f.seek(0)
     assert f.read(0) == b''
@@ -26,13 +28,12 @@ def test_simple_open_write_read_seek(tmpdir):
 
 
 def test_continuously_updated_file(tmpdir):
-    store = ChunkStore(str(tmpdir))
-
+    store = Store(str(tmpdir))
     sample = open(str(tmpdir / 'bsdf'), 'wb')
-    f = ChunkedFile(str(tmpdir / 'asdf'), store)
+    f = File(str(tmpdir / 'asdf'), store)
     for i in range(20):
         chunk = ((random.randint(0, 255),) *
-                 random.randint(1, 5 * ChunkedFile.CHUNK_SIZE))
+                 random.randint(1, 5 * Chunk.CHUNK_SIZE))
         chunk = bytes(chunk)
         sample.write(chunk)
         f.write(chunk)
@@ -42,7 +43,7 @@ def test_continuously_updated_file(tmpdir):
     sample.close()
 
     sample = open(str(tmpdir / 'bsdf'), 'rb')
-    f = ChunkedFile(str(tmpdir / 'asdf'), store)
+    f = File(str(tmpdir / 'asdf'), store)
     data = sample.read()
     chunked_data = f.read()
     assert data == chunked_data
@@ -56,20 +57,20 @@ def test_continuously_updated_file(tmpdir):
     f.close()
 
     sample = open(str(tmpdir / 'bsdf'), 'rb')
-    f = ChunkedFile(str(tmpdir / 'asdf'), store)
+    f = File(str(tmpdir / 'asdf'), store)
     data = sample.read()
     chunked_data = f.read()
     assert data == chunked_data
 
 
 def test_seeky_updated_file(tmpdir):
-    store = ChunkStore(str(tmpdir))
+    store = Store(str(tmpdir))
 
     sample = open(str(tmpdir / 'bsdf'), 'wb')
-    f = ChunkedFile(str(tmpdir / 'asdf'), store)
+    f = File(str(tmpdir / 'asdf'), store)
     for i in range(20):
         chunk = ((random.randint(0, 255),) *
-                 random.randint(1, 5 * ChunkedFile.CHUNK_SIZE))
+                 random.randint(1, 5 * Chunk.CHUNK_SIZE))
         chunk = bytes(chunk)
         offset = random.randint(0, f.size)
         sample.seek(offset)
@@ -82,7 +83,7 @@ def test_seeky_updated_file(tmpdir):
     sample.close()
 
     sample = open(str(tmpdir / 'bsdf'), 'rb')
-    f = ChunkedFile(str(tmpdir / 'asdf'), store)
+    f = File(str(tmpdir / 'asdf'), store)
     data = sample.read()
     chunked_data = f.read()
     assert data == chunked_data
@@ -96,7 +97,30 @@ def test_seeky_updated_file(tmpdir):
     f.close()
 
     sample = open(str(tmpdir / 'bsdf'), 'rb')
-    f = ChunkedFile(str(tmpdir / 'asdf'), store)
+    f = File(str(tmpdir / 'asdf'), store)
     data = sample.read()
     chunked_data = f.read()
     assert data == chunked_data
+
+
+def test_truncate(tmpdir):
+    store = Store(str(tmpdir))
+
+    f = File(str(tmpdir / 'asdf'), store)
+    for i in range(5):
+        # Write 20 chunks
+        chunk = b' ' * Chunk.CHUNK_SIZE
+        f.write(chunk)
+
+    f.flush()
+
+    space_hash = (
+        'b7a6434d497ad38396f731f01623496e52cefa88063bcb80cb802c2827c31f8a')
+    assert f._mapping == {i: space_hash for i in range(5)}
+
+    f.truncate(50)
+    f.seek(0)
+    assert f.read() == b' ' * 50
+    # Interesting optimization: truncating re-uses the existing
+    # chunk and only limits how much we read from it.
+    assert f._mapping == {0: space_hash}

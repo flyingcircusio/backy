@@ -147,9 +147,9 @@ class BackyDaemon(object):
         for job in self.jobs.values():
             if filter_re and not filter_re.search(job.name):
                 continue
-            job.archive.scan()
-            if job.archive.clean_history:
-                last = job.archive.clean_history[-1]
+            job.backup.scan()
+            if job.backup.clean_history:
+                last = job.backup.clean_history[-1]
             else:
                 last = None
             result.append(dict(

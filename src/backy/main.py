@@ -35,13 +35,13 @@ class Command(object):
     """Proxy between CLI calls and actual backup code."""
 
     def __init__(self, path):
-        self._backup = backy.backup.Backup(path)
+        self.path = path
 
     def init(self, type, source):
-        self._backup.init(type, source)
+        self._backup = backy.backup.Backup.init(self.path, type, source)
 
     def status(self):
-        self._backup.configure()
+        self._backup = backy.backup.Backup(self.path)
         total_bytes = 0
 
         t = PrettyTable(['Date (UTC)', 'ID', 'Size', 'Durat', 'Tags'])
@@ -49,7 +49,7 @@ class Command(object):
         t.align['Size'] = 'r'
         t.align['Durat'] = 'r'
 
-        for r in self._backup.archive.history:
+        for r in self._backup.history:
             total_bytes += r.stats.get('bytes_written', 0)
             t.add_row([format_timestamp(r.timestamp).replace(' UTC', ''),
                        r.uuid,
@@ -60,12 +60,13 @@ class Command(object):
         print(t)
 
         print('{} revisions containing {} data (estimated)'.format(
-            len(self._backup.archive.history),
+            len(self._backup.history),
             format_bytes_flexible(total_bytes)))
 
     def backup(self, tags):
-        self._backup.configure()
+        self._backup = backy.backup.Backup(self.path)
         try:
+            tags = set(t.strip() for t in tags.split(','))
             self._backup.backup(tags)
         except IOError as e:
             if e.errno not in [errno.EDEADLK, errno.EAGAIN]:
@@ -73,17 +74,19 @@ class Command(object):
             logger.info('Backup already in progress.')
 
     def restore(self, revision, target):
-        self._backup.configure()
+        self._backup = backy.backup.Backup(self.path)
         self._backup.restore(revision, target)
 
     def find(self, revision):
-        self._backup.configure()
-        print(self._backup.find(revision))
+        self._backup = backy.backup.Backup(self.path)
+        print(self._backup.find(revision).filename)
 
     def scheduler(self, config):
+        self._backup = backy.backup.Backup(self.path)
         backy.daemon.main(config)
 
     def check(self, config):
+        self._backup = backy.backup.Backup(self.path)
         backy.daemon.check(config)
 
 

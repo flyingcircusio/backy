@@ -16,8 +16,7 @@ TODO
 
   - trigger cleanup after removing revisions
   - provide ability for general chunk verification
-  - hierarchical chunk path and directories, at least one byte
-  - better exception reporting
+  - conversion script
 
 2.1.5 (2016-07-01)
 ==================

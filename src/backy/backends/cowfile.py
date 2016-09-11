@@ -12,7 +12,7 @@ class COWFileBackend(object):
             if not self.revision.parent:
                 open(self.revision.filename, 'wb').close()
             else:
-                parent = self.revision.archive[self.revision.parent]
+                parent = self.revision.backup.find(self.revision.parent)
                 cp_reflink(parent.filename, self.revision.filename)
             self.revision.writable()
         return open(self.revision.filename, mode, buffering=CHUNK_SIZE)

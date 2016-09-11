@@ -55,8 +55,8 @@ class CephRBD(object):
         # revision - which is wrong: broken new revisions would always cause
         # full backups instead of new deltas based on the most recent valid
         # one.
-        if not self.always_full and self.revision.archive.history:
-            keep_snapshot_revision = self.revision.archive.history[-1]
+        if not self.always_full and self.revision.backup.history:
+            keep_snapshot_revision = self.revision.backup.history[-1]
             keep_snapshot_revision = keep_snapshot_revision.uuid
         else:
             keep_snapshot_revision = None
@@ -76,7 +76,7 @@ class CephRBD(object):
             self.full(target)
             return
         try:
-            parent = self.revision.archive[self.revision.parent]
+            parent = self.revision.backup.find(self.revision.parent)
             if not self.rbd.exists(self._image_name + '@backy-' + parent.uuid):
                 raise KeyError()
         except KeyError:

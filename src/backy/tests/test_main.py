@@ -62,9 +62,10 @@ def print_args(*args, **kw):
     pprint.pprint(kw)
 
 
-def test_call_status(capsys, caplog, backup, argv, monkeypatch):
+def test_call_status(capsys, caplog, argv, monkeypatch):
     monkeypatch.setattr(backy.main.Command, 'status', print_args)
-    argv.extend(['-v', '-b', backup.path, 'status'])
+    argv.append('-v')
+    argv.append('status')
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
@@ -80,9 +81,12 @@ main.py                    ... DEBUG    backup.status(**{})
 """) == caplog.text()
 
 
-def test_call_init(capsys, caplog, backup, argv, monkeypatch):
+def test_call_init(capsys, caplog, argv, monkeypatch):
     monkeypatch.setattr(backy.main.Command, 'init', print_args)
-    argv.extend(['-v', '-b', backup.path, 'init', 'ceph-rbd', 'test/test04'])
+    argv.append('-v')
+    argv.append('init')
+    argv.append('ceph-rbd')
+    argv.append('test/test04')
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
@@ -114,21 +118,21 @@ filename: {}
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     out, err = capsys.readouterr()
-    assert "" == err
     assert Ellipsis("""\
-(<backy.backup.Backup object at 0x...>, {'test'})
+(<backy.backup.Backup object at 0x...>, 'test')
 {}
 """) == out
+    assert "" == err
     assert Ellipsis("""\
-main.py                    ... DEBUG    backup.backup(**{'tags': 'test'})
 backup.py                  ... DEBUG    Backup("...")
+main.py                    ... DEBUG    backup.backup(**{'tags': 'test'})
 """) == caplog.text()
     assert exit.value.code == 0
 
 
-def test_call_find(capsys, caplog, backup, argv, monkeypatch):
+def test_call_find(capsys, caplog, argv, monkeypatch):
     monkeypatch.setattr(backy.main.Command, 'find', print_args)
-    argv.extend(['-v', '-b', backup.path, 'find', '-r', '1'])
+    argv.extend(['-v', 'find', '-r', '1'])
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
@@ -145,9 +149,10 @@ main.py                    ... DEBUG    backup.find(...
     assert exit.value.code == 0
 
 
-def test_call_check(capsys, caplog, backup, argv, monkeypatch):
+def test_call_check(capsys, caplog, argv, monkeypatch):
     monkeypatch.setattr(backy.main.Command, 'check', print_args)
-    argv.extend(['-v', '-b', backup.path, 'check'])
+    argv.append('-v')
+    argv.append('check')
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
@@ -165,9 +170,9 @@ main.py                    ... DEBUG    backup.check(**{'config': \
     assert exit.value.code == 0
 
 
-def test_call_scheduler(capsys, caplog, backup, argv, monkeypatch):
+def test_call_scheduler(capsys, caplog, argv, monkeypatch):
     monkeypatch.setattr(backy.main.Command, 'scheduler', print_args)
-    argv.extend(['-b', backup.path, 'scheduler'])
+    argv.append('scheduler')
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
@@ -185,7 +190,7 @@ main.py                    ... DEBUG    backup.scheduler(**{'config': \
     assert exit.value.code == 0
 
 
-def test_call_unexpected_exception(capsys, backup, caplog, argv, monkeypatch):
+def test_call_unexpected_exception(capsys, caplog, argv, monkeypatch):
     def do_raise(*args, **kw):
         raise RuntimeError("test")
     monkeypatch.setattr(backy.main.Command, 'status', do_raise)
@@ -194,7 +199,7 @@ def test_call_unexpected_exception(capsys, backup, caplog, argv, monkeypatch):
     import logging
     monkeypatch.setattr(logging, 'error', print_args)
     monkeypatch.setattr(logging, 'exception', print_args)
-    argv.extend(['-l', 'logfile', '-b', backup.path, 'status'])
+    argv.extend(['-l', 'logfile', 'status'])
     with pytest.raises(SystemExit):
         backy.main.main()
     out, err = capsys.readouterr()
@@ -237,7 +242,7 @@ def test_commands_wrapper_init(commands, tmpdir):
 
 
 def test_commands_wrapper_status(commands, tmpdir, capsys, clock):
-    revision = Revision(commands._backup, 1)
+    revision = Revision(1, commands._backup.archive)
     revision.timestamp = backy.utils.now()
     revision.materialize()
 

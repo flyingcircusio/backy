@@ -33,7 +33,7 @@ class FlyingCircusRootDisk(CephRBD):
         c['consul_acl_token'] = consul_acl_token
         return c
 
-    def create_snapshot(self, name):
+    def _create_snapshot(self, name):
         consul = consulate.Consul(token=self.consul_acl_token)
         snapshot_key = 'snapshot/{}'.format(str(uuid.uuid4()))
         logger.info('Consul: requesting consistent snapshot of %s@%s via %s',

@@ -1,135 +1,86 @@
-from .backends.chunked import ChunkedFileBackend
-from .backends.cowfile import COWFileBackend
+from .archive import Archive
 from .revision import Revision
 from .sources import select_source
 from .utils import SafeFile, copy_overwrite, CHUNK_SIZE, posix_fadvise
-from backy.utils import min_date
 import fcntl
-import glob
 import logging
 import os
 import os.path as p
 import time
 import yaml
 
-
 logger = logging.getLogger(__name__)
 
 
-def locked(f):
-    def locked(self, *args, **kw):
-        if not getattr(self, '_configfile_fd', None):
-            config_path = p.join(self.path, 'config')
-            self._configfile_fd = os.open(config_path, os.O_RDONLY)
-        fcntl.flock(self._configfile_fd, fcntl.LOCK_EX)
-        try:
-            return f(self, *args, **kw)
-        finally:
-            fcntl.flock(self._configfile_fd, fcntl.LOCK_UN)
-    return locked
-
-
 class Backup(object):
-    """A backup of a VM.
-
-    Provides access to methods to
-
-    - backup, restore, and list revisions
-
-    """
+    """Access to backup images."""
 
     config = None
+    _lock_file = None
 
     def __init__(self, path):
         self.path = p.realpath(path)
-        self.scan()
-
+        self.archive = Archive(self.path)
         logger.debug('Backup("{}")'.format(self.path))
 
-        # Load config from file
+    def configure(self):
+        if self.config is not None:
+            return
+
         with open(p.join(self.path, 'config'), encoding='utf-8') as f:
             self.config = yaml.safe_load(f)
-
-        # Initialize our source
         try:
             source_factory = select_source(self.config['type'])
         except IndexError:
             logger.error("No source type named `{}` exists.".format(
                 self.config['type']))
         self.source = source_factory(self.config)
+        self.archive.scan()
 
-        # Initialize our backend
-        backend_type = self.config.get('backend', 'chunked')
-        if backend_type == 'cowfile':
-            self.backend_factory = COWFileBackend
-        elif backend_type == 'chunked':
-            self.backend_factory = ChunkedFileBackend
+    def _lock(self):
+        self._lock_file = open(p.join(self.path, 'config'), 'rb')
+        fcntl.flock(self._lock_file, fcntl.LOCK_EX)
 
-    @classmethod
-    def init(cls, path, type, source):
-        config_path = p.join(path, 'config')
-        if p.exists(config_path):
+    def init(self, type, source):
+        # Allow re-configuration in this case.
+        if self.config:
+            raise RuntimeError("Can not initialize configured backup objects.")
+        if not p.exists(self.path):
+            os.makedirs(self.path)
+        if p.exists(p.join(self.path, 'config')):
             raise RuntimeError('Refusing to initialize with existing config.')
-
-        if not p.exists(path):
-            os.makedirs(path)
 
         source_factory = select_source(type)
         source_config = source_factory.config_from_cli(source)
         source_config['type'] = type
 
-        with SafeFile(config_path, encoding='utf-8') as f:
+        with SafeFile(p.join(self.path, 'config'), encoding='utf-8') as f:
             f.open_new('wb')
             yaml.safe_dump(source_config, f)
 
-        return Backup(path)
+    def backup(self, tags):
+        self._lock()
+        start = time.time()
 
-    def scan(self):
-        self.history = []
-        self._by_uuid = {}
-        for f in glob.glob(p.join(self.path, '*.rev')):
-            if os.path.islink(f):
-                # Ignore links that are used to create readable pointers
-                continue
-            r = Revision.load(f, self)
-            if r.uuid not in self._by_uuid:
-                self._by_uuid[r.uuid] = r
-                self.history.append(r)
-        self.history.sort(key=lambda r: r.timestamp)
-
-    @property
-    def clean_history(self):
-        """History without incomplete revisions."""
-        return [rev for rev in self.history if 'duration' in rev.stats]
-
-    #################
-    # Making backups
-
-    @locked
-    def _clean(self):
-        """Clean-up incomplete revisions."""
-        for revision in self.history:
+        # Clean-up incomplete revisions
+        self.archive.scan()
+        for revision in self.archive.history:
             if 'duration' not in revision.stats:
                 logger.warning('Removing incomplete revision {}'.
                                format(revision.uuid))
                 revision.remove()
 
-    @locked
-    def backup(self, tags):
-        start = time.time()
-
-        self._clean()
-
-        new_revision = Revision.create(self, tags)
+        tags = set(t.strip() for t in tags.split(','))
+        new_revision = Revision.create(self.archive)
+        new_revision.tags = tags
         new_revision.materialize()
+
         logger.info('New revision {} [{}]'.format(
                     new_revision.uuid, ','.join(new_revision.tags)))
 
-        # XXX
-        backend = self.backend_factory(new_revision)
         with self.source(new_revision) as source:
-            source.backup(backend)
-            if not source.verify(backend):
+            source.backup()
+            if not source.verify():
                 logger.error('New revision does not match source '
                              '- removing it.')
                 new_revision.remove()
@@ -140,42 +91,20 @@ class Backup(object):
                 new_revision.stats['duration'] = time.time() - start
                 new_revision.write_info()
                 new_revision.readonly()
-                self.scan()
-
-    #################
-    # Restoring
-
-    def restore(self, revision, target):
-        self.scan()
-        r = self.history[revision]
-        backend = self.backend_factory(r)
-        s = backend.open('rb')
-        with s as source:
-            if target != '-':
-                logger.info('Restoring revision @ %s [%s]', r.timestamp,
-                            ','.join(r.tags))
-                self.restore_file(source, target)
-            else:
-                self.restore_stdout(source)
+                self.archive.history.append(new_revision)
 
     def restore_file(self, source, target):
         """Bulk-copy from open revision `source` to target file."""
         logger.debug('Copying from "%s" to "%s"...', source.name, target)
         open(target, 'ab').close()  # touch into existence
         with open(target, 'r+b', buffering=CHUNK_SIZE) as target:
-            try:
-                posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
-            except Exception:
-                pass
+            posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
             copy_overwrite(source, target)
 
     def restore_stdout(self, source):
         """Emit restore data to stdout (for pipe processing)."""
         logger.debug('Dumping from "%s" to stdout...', source.name)
-        try:
-            posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-        except Exception:
-            pass
+        posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
         with os.fdopen(os.dup(1), 'wb') as target:
             while True:
                 chunk = source.read(CHUNK_SIZE)
@@ -183,79 +112,23 @@ class Backup(object):
                     break
                 target.write(chunk)
 
-    ######################
-    # Looking up revisions
+    def restore(self, revision, target):
+        self.archive.scan()
+        r = self.archive[revision]
+        with open(r.filename, 'rb') as source:
+            if target != '-':
+                logger.info('Restoring revision @ %s [%s]', r.timestamp,
+                            ','.join(r.tags))
+                self.restore_file(source, target)
+            else:
+                self.restore_stdout(source)
 
-    def last_by_tag(self):
-        """Return a dictionary showing the last time each tag was
-        backed up.
-
-        Tags that have never been backed up won't show up here.
-
-        """
-        last_times = {}
-        for revision in self.history:
-            for tag in revision.tags:
-                last_times.setdefault(tag, min_date())
-                last_times[tag] = max([last_times[tag], revision.timestamp])
-        return last_times
-
-    def find_revisions(self, spec):
-        """Get a sorted list of revisions, oldest first, that match the given
-        specification.
-        """
-        if isinstance(spec, str) and spec.startswith('tag:'):
-            tag = spec.replace('tag:', '')
-            result = [r for r in self.history
-                      if tag in r.tags]
-        elif spec == 'all':
-            result = self.history[:]
-        else:
-            result = [self.find(spec)]
-        return result
-
-    def find_by_number(self, spec):
-        """Returns revision by relative number from the end.
-
-        Raises IndexError or ValueError if no revision is found.
-        """
-        spec = int(spec)
-        if spec < 0:
-            raise KeyError('Integer revisions must be positive')
-        return self.history[-spec - 1]
-
-    def find_by_tag(self, spec):
-        """Returns the latest revision matching a given tag.
-
-        Raises IndexError or ValueError if no revision is found.
-        """
-        if spec in ['last', 'latest']:
-            return self.history[-1]
-        matching = [r for r in self.history if spec in r.tags]
-        return max((r.timestamp, r) for r in matching)[1]
-
-    def find_by_uuid(self, spec):
-        """Returns revision matched by UUID.
-
-        Raises IndexError if no revision is found.
-        """
+    def find(self, revision):
+        """Locates `revision` and returns full path."""
+        self.archive.scan()
         try:
-            return self._by_uuid[spec]
-        except KeyError:
-            raise IndexError()
-
-    def find(self, spec):
-        """Flexible revision search.
-
-        Locates a revision by relative number, by tag, or by uuid.
-
-        """
-        if spec is None or spec == '' or not self.history:
-            raise KeyError(spec)
-
-        for find in (self.find_by_number, self.find_by_uuid, self.find_by_tag):
-            try:
-                return find(spec)
-            except (ValueError, IndexError):
-                pass
-        raise KeyError(spec)
+            rev = self.archive[revision]
+            return rev.filename
+        except KeyError as e:
+            raise RuntimeError('Cannot find revision in {}: {}'.format(
+                self.path, str(e)))

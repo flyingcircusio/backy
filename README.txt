@@ -12,22 +12,12 @@ Backy is intended to be:
 
 To achieve this, we rely on:
 
-* space-efficient storages (CoW filesystems, content-hashed chunking)
-* using a snapshot-capable source for our volumes (i.e. Ceph RBD)
-  that allows easy extraction of changes between snapshots,
+* using a copy-on-write filesystem (btrfs, ZFS) as the target filesystem to
+  achieve space-efficiency,
+* using a snapshot-capable main storage for our volumes (e.g.
+  Ceph, LVM, ...) that allows easy extraction of changes between snapshots,
 * leverage proven, existing low-level tools,
 * keep the code-base small, simple, and well-tested.
-
-We also have a few ground rules for the implementation:
-
-* VM data is stored self-contained on the filesystem and can be
-  moved between servers using regular FS tools like copy, rsync, or such.
-
-* No third party daemons are required to interact with backy: no database
-  server. The scheduler daemon is only responsible for scheduling and simply
-  calls regular CLI commands to perform a backup. Backy may interact with
-  external daemons like Ceph or Consul, depending on the source storage
-  implementation.
 
 
 Operations

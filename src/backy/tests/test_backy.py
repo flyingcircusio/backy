@@ -27,69 +27,72 @@ def test_smoketest_internal(tmpdir):
 
     backup_dir = str(tmpdir / 'image1.backup')
     os.mkdir(backup_dir)
-    backup = backy.backup.Backup.init(backup_dir, 'file', source1)
+    backup = backy.backup.Backup(backup_dir)
+    backup.init('file', source1)
 
     # Backup first state
-    backup.backup(tags={'test'})
+    backup.configure()
+    backup.source.filename = source1
+    backup.backup(tags='test')
 
     # Restore first state from level 0
     restore_target = str(tmpdir / 'image1.restore')
     backup.restore(0, restore_target)
     with pytest.raises(IOError):
-        open(backup.history[-1].filename, 'wb')
+        open(backup.archive.history[-1].filename, 'wb')
     with pytest.raises(IOError):
-        open(backup.history[-1].info_filename, 'wb')
+        open(backup.archive.history[-1].info_filename, 'wb')
     assert open(source1, 'rb').read() == open(restore_target, 'rb').read()
 
     # Backup second state
     backup.source.filename = source2
-    backup.backup(tags={'test'})
-    assert len(backup.history) == 2
+    backup.backup(tags='test')
+    assert len(backup.archive.history) == 2
 
-    # Restore second state from revision 1
-    backup.restore(1, restore_target)
+    # Restore second state from level 0
+    backup.restore(0, restore_target)
     assert open(source2, 'rb').read() == open(restore_target, 'rb').read()
 
     # Our original backup has now become level 1. Lets restore that again.
-    backup.restore(0, restore_target)
+    backup.restore(1, restore_target)
     assert open(source1, 'rb').read() == open(restore_target, 'rb').read()
 
     # Backup second state again
     backup.source.filename = source2
-    backup.backup(tags={'test'})
-    assert len(backup.history) == 3
+    backup.backup(tags='test')
+    assert len(backup.archive.history) == 3
 
-    # Restore image2 from revision 0 again
-    backup.restore(2, restore_target)
+    # Restore image2 from level 0 again
+    backup.restore(0, restore_target)
     assert open(source2, 'rb').read() == open(restore_target, 'rb').read()
 
-    # Restore image2 from revision 1
+    # Restore image2 from level 1
     backup.restore(1, restore_target)
     assert open(source2, 'rb').read() == open(restore_target, 'rb').read()
 
-    # Our original backup from revision 0. Lets restore that again.
-    backup.restore(0, restore_target)
+    # Our original backup has now become level 2. Lets restore that again.
+    backup.restore(2, restore_target)
     assert open(source1, 'rb').read() == open(restore_target, 'rb').read()
 
     # Backup third state
     backup.source.filename = source3
-    backup.backup(tags={'test'})
-    assert len(backup.history) == 4
+    backup.backup(tags='test')
+    assert len(backup.archive.history) == 4
 
-    # Restore image3 from level 3
-    backup.restore(3, restore_target)
+    # Restore image3 from level 0
+    backup.restore(0, restore_target)
     assert open(source3, 'rb').read() == open(restore_target, 'rb').read()
+
+    # Restore image2 from level 1
+    backup.restore(1, restore_target)
+    assert open(source2, 'rb').read() == open(restore_target, 'rb').read()
 
     # Restore image2 from level 2
     backup.restore(2, restore_target)
     assert open(source2, 'rb').read() == open(restore_target, 'rb').read()
 
-    # Restore image2 from revision 1
-    backup.restore(1, restore_target)
-    assert open(source2, 'rb').read() == open(restore_target, 'rb').read()
-
-    # Restore image1 from revision -
-    backup.restore(0, restore_target)
+    # Restore image1 from level 3
+    backup.restore(3, restore_target)
     assert open(source1, 'rb').read() == open(restore_target, 'rb').read()
 
 

@@ -1,3 +1,5 @@
+from backy.archive import Archive
+from backy.backup import Backup
 from backy.revision import Revision
 import backy
 import datetime
@@ -10,57 +12,60 @@ import yaml
 SAMPLE_DIR = p.join(p.dirname(__file__), 'samples')
 
 
-def test_revision_base(backup):
-    revision = Revision(backup, 'uuid')
+def archive():
+    return mock.MagicMock(Archive)
+
+
+def test_revision_base(archive):
+    revision = Revision('uuid', archive)
     assert revision.uuid == 'uuid'
-    assert revision.backup is backup
+    assert revision.archive is archive
 
 
-def test_revision_create(backup):
-    backup.history = []
-    r = Revision.create(backup, set(['1', '2']))
+def test_revision_create(archive):
+    archive.history = []
+    r = Revision.create(archive)
     assert r.uuid is not None
-    assert r.tags == set(['1', '2'])
     assert (backy.utils.now() - r.timestamp).total_seconds() < 10
-    assert r.backup is backup
+    assert r.archive is archive
 
 
-def test_revision_create_child(backup):
-    backup.history = [Revision(backup, 'asdf')]
-    r = Revision.create(backup, tags={'test'})
+def test_revision_create_child(archive):
+    archive.history = [Revision('asdf', archive)]
+    r = Revision.create(archive)
     assert r.uuid is not None
-    assert r.tags == {'test'}
     assert r.parent == 'asdf'
     assert (backy.utils.now() - r.timestamp).total_seconds() < 10
-    assert r.backup is backup
+    assert r.archive is archive
 
 
-def test_load_sample1(backup):
-    r = Revision.load(SAMPLE_DIR + '/sample1.rev', backup)
+def test_load_sample1(archive):
+    r = Revision.load(SAMPLE_DIR + '/sample1.rev', archive)
     assert r.uuid == 'asdf'
     assert r.timestamp == datetime.datetime(2015, 8, 1, 20, 0, tzinfo=pytz.UTC)
     assert r.parent is None
-    assert r.backup is backup
+    assert r.archive is archive
 
 
-def test_load_sample2(backup):
-    r = Revision.load(SAMPLE_DIR + '/sample2.rev', backup)
+def test_load_sample2(archive):
+    r = Revision.load(SAMPLE_DIR + '/sample2.rev', archive)
     assert r.uuid == 'asdf2'
     assert r.timestamp == datetime.datetime(2015, 8, 1, 21, 0, tzinfo=pytz.UTC)
     assert r.parent == 'asdf'
-    assert r.backup is backup
+    assert r.archive is archive
 
 
 def test_filenames_based_on_uuid_and_backup_dir():
     backup = mock.Mock()
     backup.path = '/srv/backup/foo'
-    r = Revision(backup, 'asdf')
+    r = Revision('asdf', backup)
     assert r.filename == '/srv/backup/foo/asdf'
     assert r.info_filename == '/srv/backup/foo/asdf.rev'
 
 
-def test_store_revision_data(backup, clock):
-    r = Revision(backup, 'asdf2', backy.utils.now())
+def test_store_revision_data(tmpdir, clock):
+    backup = Backup(str(tmpdir))
+    r = Revision('asdf2', backup, backy.utils.now())
     r.parent = 'asdf'
     r.backup = backup
     r.write_info()
@@ -73,15 +78,13 @@ def test_store_revision_data(backup, clock):
             "timestamp": datetime.datetime(2015, 9, 1, 7, 6, 47)}
 
 
-def test_delete_revision(backup):
-    r = Revision(backup, '123-456', backy.utils.now())
+def test_delete_revision(tmpdir):
+    a = Archive(str(tmpdir))
+    r = Revision('123-456', a, backy.utils.now())
     r.materialize()
-    assert p.exists(backup.path + '/123-456.rev')
-    backup.scan()
-    open(backup.path + '/123-456', 'w')
-    assert p.exists(backup.path + '/123-456.rev')
+    assert p.exists(str(tmpdir / '123-456'))
+    assert p.exists(str(tmpdir / '123-456.rev'))
+    a.scan()
     r.remove()
-    # Ensure the revision data file exists - we do not implicitly create
-    # it any longer.
-    assert not p.exists(backup.path + '/123-456')
-    assert not p.exists(backup.path + '/123-456.rev')
+    assert not p.exists(str(tmpdir / '123-456'))
+    assert not p.exists(str(tmpdir / '123-456.rev'))

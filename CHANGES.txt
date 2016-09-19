@@ -2,21 +2,11 @@
 Changelog
 =========
 
-2.2 (unreleased)
-================
+2.1.6 (unreleased)
+==================
 
-- Introduce a new backend storage mechanism, independent of BTRFS: instead of
-  using COW, use a directory with content-hashed 4MiB chunks of the file.
-  Deduplication happens automatically based on the 4MiB chunks.
+- Nothing changed yet.
 
-- Made the use of fadvise features more opportunistic: don't fail if they are
-  not supported by the backend as they are only optimizations anyway.
-
-TODO
-
-  - trigger cleanup after removing revisions
-  - provide ability for general chunk verification
-  - conversion script
 
 2.1.5 (2016-07-01)
 ==================

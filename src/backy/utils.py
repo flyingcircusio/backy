@@ -1,4 +1,5 @@
 from .ext_deps import CP
+from .fallocate import punch_hole
 import contextlib
 import datetime
 import hashlib
@@ -215,28 +216,30 @@ def copy_overwrite(source, target):
 
     Assumes that `target` exists and is open in read-write mode.
     """
-    try:
-        posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-        posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-    except Exception:
-        pass
-    while True:
-        startpos = source.tell()
-        chunk = source.read(CHUNK_SIZE)
-        if not chunk:
-            break
-        target.seek(startpos)
-        target.write(chunk)
+    posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    with zeroes(PUNCH_SIZE) as z:
+        while True:
+            startpos = source.tell()
+            chunk = source.read(PUNCH_SIZE)
+            if not chunk:
+                break
+            target.seek(startpos)
+            compare = target.read(len(chunk))
+            if not compare or chunk != compare:
+                if chunk == z:
+                    target.flush()
+                    punch_hole(target, startpos, len(chunk))
+                else:
+                    target.seek(startpos)
+                    target.write(chunk)
     size = source.tell()
     target.flush()
     try:
         target.truncate(size)
     except OSError:
         pass  # truncate may not be supported, i.e. on special files
-    try:
-        os.fsync(target)
-    except OSError:
-        pass  # fsync may not be supported, i.e. on special files
+    os.fsync(target)
     return size
 
 
@@ -255,11 +258,8 @@ def cp_reflink(source, target):
 
 
 def files_are_equal(a, b):
-    try:
-        posix_fadvise(a.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-        posix_fadvise(b.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-    except Exception:
-        pass
+    posix_fadvise(a.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    posix_fadvise(b.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
     position = 0
     errors = 0
     while True:
@@ -280,7 +280,7 @@ def files_are_equal(a, b):
 
 
 def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=CHUNK_SIZE,
-                            timeout=5 * 60):
+                            timeout=5*60):
     a.seek(0, os.SEEK_END)
     size = a.tell()
     blocks = size // blocksize
@@ -288,11 +288,8 @@ def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=CHUNK_SIZE,
     sample = random.sample(blocklist, max(int(samplesize * blocks), 1))
 
     # turn off readahead
-    try:
-        for fdesc in a.fileno(), b.fileno():
-            posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
-    except Exception:
-        pass
+    for fdesc in a.fileno(), b.fileno():
+        posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
 
     # We limit this to a 5 minute operation to avoid clogging the storage
     # infinitely.

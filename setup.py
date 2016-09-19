@@ -65,7 +65,6 @@ setup(
     entry_points="""
         [console_scripts]
             backy = backy.main:main
-            backy-file2chunk = backy.scripts:file2chunk
 
         [backy.sources]
             ceph-rbd = backy.sources.ceph.source:CephRBD

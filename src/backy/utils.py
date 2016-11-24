@@ -30,7 +30,7 @@ BYTE_UNITS = [
 ]
 
 # 64 kiB blocks are a good compromise between sparsiness and fragmentation.
-PUNCH_SIZE = 64 * kiB
+PUNCH_SIZE = 4 * MiB
 CHUNK_SIZE = 4 * MiB
 
 
@@ -216,12 +216,18 @@ def copy_overwrite(source, target):
 
     Assumes that `target` exists and is open in read-write mode.
     """
+    punch_size = PUNCH_SIZE
+    source.seek(0, 2)
+    size = source.tell()
+    if size > 500 * GiB:
+        punch_size *= 10
+    source.seek(0)
     posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
     posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-    with zeroes(PUNCH_SIZE) as z:
+    with zeroes(punch_size) as z:
         while True:
             startpos = source.tell()
-            chunk = source.read(PUNCH_SIZE)
+            chunk = source.read(punch_size)
             if not chunk:
                 break
             target.seek(startpos)

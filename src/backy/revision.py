@@ -7,6 +7,19 @@ import os.path as p
 import pytz
 import shortuuid
 import yaml
+import threading
+
+
+class Remover(threading.Thread):
+
+    def __init__(self, remove):
+        super().__init__()
+        self.remove = remove
+
+    def run(self):
+        for filename in self.remove:
+            if os.path.exists(filename):
+                os.remove(filename)
 
 
 logger = logging.getLogger(__name__)
@@ -86,8 +99,9 @@ class Revision(object):
         safe_symlink(self.info_filename, p.join(path, name + '.rev'))
 
     def remove(self):
-        for file in glob.glob(self.filename + '*'):
-            os.unlink(file)
+        remover = Remover(glob.glob(self.filename + '*'))
+        remover.start()
+        self._remover = remover  # test support
         if self in self.archive.history:
             self.archive.history.remove(self)
 

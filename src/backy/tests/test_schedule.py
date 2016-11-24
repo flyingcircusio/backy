@@ -148,6 +148,7 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
     assert [r] == schedule.expire(archive)
     archive.scan()
     assert [{'daily'}] * 6 == [rev.tags for rev in history]
+    r._remover.join()
     assert not os.path.exists(r.filename)
 
     # If we have unknown tags, then those do not expire. However, the

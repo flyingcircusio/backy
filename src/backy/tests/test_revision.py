@@ -86,5 +86,6 @@ def test_delete_revision(tmpdir):
     assert p.exists(str(tmpdir / '123-456.rev'))
     a.scan()
     r.remove()
+    r._remover.join()
     assert not p.exists(str(tmpdir / '123-456'))
     assert not p.exists(str(tmpdir / '123-456.rev'))

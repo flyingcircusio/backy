@@ -43,26 +43,7 @@ class CephRBD(object):
         return '{}/{}'.format(self.pool, self.image)
 
     def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
-        # Clean up all snapshots except the one for the most recent valid
-        # revision.
-        # Previously we used to remove all snapshots but the one for this
-        # revision - which is wrong: broken new revisions would always cause
-        # full backups instead of new deltas based on the most recent valid
-        # one.
-        if not self.always_full and self.revision.archive.history:
-            keep_snapshot_revision = self.revision.archive.history[-1]
-            keep_snapshot_revision = keep_snapshot_revision.uuid
-        else:
-            keep_snapshot_revision = None
-        for snapshot in self.rbd.snap_ls(self._image_name):
-            if not snapshot['name'].startswith('backy-'):
-                # Do not touch non-backy snapshots
-                continue
-            uuid = snapshot['name'].replace('backy-', '')
-            if uuid != keep_snapshot_revision:
-                time.sleep(3)  # avoid race condition while unmapping
-                logger.info('Removing old snapshot %s', snapshot['name'])
-                self.rbd.snap_rm(self._image_name + '@' + snapshot['name'])
+        self._delete_old_snapshots()
 
     def backup(self):
         if self.always_full:
@@ -86,6 +67,7 @@ class CephRBD(object):
         d = self.rbd.export_diff(self._image_name + '@' + snap_to,
                                  snap_from,
                                  self.revision.filename + '.rbddiff')
+        self._delete_old_snapshots()
         t = SafeFile(self.revision.filename)
         with t as target:
             t.use_write_protection()
@@ -113,3 +95,25 @@ class CephRBD(object):
         with s as source, t as target:
             logger.info('Performing partial verification')
             return files_are_roughly_equal(source, target)
+
+    def _delete_old_snapshots(self):
+        # Clean up all snapshots except the one for the most recent valid
+        # revision.
+        # Previously we used to remove all snapshots but the one for this
+        # revision - which is wrong: broken new revisions would always cause
+        # full backups instead of new deltas based on the most recent valid
+        # one.
+        if not self.always_full and self.revision.archive.history:
+            keep_snapshot_revision = self.revision.archive.history[-1]
+            keep_snapshot_revision = keep_snapshot_revision.uuid
+        else:
+            keep_snapshot_revision = None
+        for snapshot in self.rbd.snap_ls(self._image_name):
+            if not snapshot['name'].startswith('backy-'):
+                # Do not touch non-backy snapshots
+                continue
+            uuid = snapshot['name'].replace('backy-', '')
+            if uuid != keep_snapshot_revision:
+                time.sleep(3)  # avoid race condition while unmapping
+                logger.info('Removing old snapshot %s', snapshot['name'])
+                self.rbd.snap_rm(self._image_name + '@' + snapshot['name'])

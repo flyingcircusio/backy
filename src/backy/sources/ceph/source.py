@@ -1,6 +1,8 @@
-from .rbd import RBDClient
 from ...utils import copy_overwrite, SafeFile, files_are_roughly_equal
+from .rbd import RBDClient
+import backy.utils
 import logging
+import os
 import time
 
 logger = logging.getLogger(__name__)
@@ -67,11 +69,16 @@ class CephRBD(object):
         d = self.rbd.export_diff(self._image_name + '@' + snap_to,
                                  snap_from,
                                  self.revision.filename + '.rbddiff')
+        stat = os.stat(d.filename)
+        logger.info(
+            'RBD diff done (%s)',
+            backy.utils.format_bytes_flexible(stat.st_size))
         t = SafeFile(self.revision.filename)
         with t as target:
             t.use_write_protection()
             t.open_inplace('r+b')
             bytes = d.integrate(target, snap_from, snap_to)
+        logger.info('Integration finished.')
 
         self.revision.stats['bytes_written'] = bytes
 

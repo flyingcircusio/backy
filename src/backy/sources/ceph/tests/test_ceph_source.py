@@ -180,7 +180,9 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep):
         b'[{"name": "backy-ed968696-5ab0-4fe0-af1c-14cadab44661"}, \
            {"name": "backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802"}]',
         # snap rm backy-ed96...
-        b'{}']
+        b'{}',
+        # snap ls
+        b'[{"name": "backy-ed968696-5ab0-4fe0-af1c-14cadab44661"}]']
 
     with source(revision):
         source.diff()
@@ -195,7 +197,9 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep):
         call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
               'test/foo']),
         call([RBD, '--no-progress', 'snap', 'rm',
-              'test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802'])]
+              'test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802']),
+        call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
+              'test/foo'])]
 
 
 def test_full_backup(check_output, backup, tmpdir):

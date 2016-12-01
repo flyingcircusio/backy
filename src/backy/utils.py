@@ -352,4 +352,6 @@ class Remover(threading.Thread):
     def run(self):
         for filename in self.remove:
             if os.path.exists(filename):
+                logging.info('Removing %s', filename)
                 os.remove(filename)
+                logging.info('Removed %s', filename)

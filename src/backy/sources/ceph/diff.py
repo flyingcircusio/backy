@@ -1,7 +1,7 @@
-from collections import namedtuple
-import os
-import struct
 from backy.fallocate import punch_hole
+from collections import namedtuple
+import backy.utils
+import struct
 
 
 def unpack_from(fmt, f):
@@ -157,6 +157,10 @@ class RBDDiffV1(object):
             bytes += record.length
 
         if clean:
-            os.unlink(self.filename)
+            # Delete in thread: on btrfs ist takes *long* to delete files. This
+            # way the we can at least parallelize verification.
+            remover = backy.utils.Remover(self.filename)
+            remover.start()
+            self._remover = remover  # test support
 
         return bytes

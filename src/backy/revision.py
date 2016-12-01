@@ -1,4 +1,4 @@
-from .utils import SafeFile, now, safe_symlink, cp_reflink
+from .utils import SafeFile, now, safe_symlink, cp_reflink, Remover
 import datetime
 import glob
 import logging
@@ -7,19 +7,6 @@ import os.path as p
 import pytz
 import shortuuid
 import yaml
-import threading
-
-
-class Remover(threading.Thread):
-
-    def __init__(self, remove):
-        super().__init__()
-        self.remove = remove
-
-    def run(self):
-        for filename in self.remove:
-            if os.path.exists(filename):
-                os.remove(filename)
 
 
 logger = logging.getLogger(__name__)

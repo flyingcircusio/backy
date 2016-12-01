@@ -67,7 +67,6 @@ class CephRBD(object):
         d = self.rbd.export_diff(self._image_name + '@' + snap_to,
                                  snap_from,
                                  self.revision.filename + '.rbddiff')
-        self._delete_old_snapshots()
         t = SafeFile(self.revision.filename)
         with t as target:
             t.use_write_protection()

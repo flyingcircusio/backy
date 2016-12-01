@@ -3,6 +3,7 @@ from backy.sources.ceph.diff import FromSnap, ToSnap, SnapSize
 from backy.sources.ceph.diff import unpack_from, RBDDiffV1
 import io
 import os
+import os.path
 import pytest
 import struct
 
@@ -239,3 +240,16 @@ def test_read_empty_diff(tmpdir):
         'backy-ed968696-5ab0-4fe0-af1c-14cadab44661',
         'backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802',
         clean=False)
+
+
+def test_integrate_should_delete_diff(sample_diff, tmpdir):
+    diff = RBDDiffV1(sample_diff)
+
+    target = open(str(tmpdir/'target'), 'wb')
+    target.write(b'\1'*600)
+    target.seek(0)
+
+    with target:
+        diff.integrate(target, 'fromsnapshot', 'tosnapshot')
+    diff._remover.join()
+    assert not os.path.exists(diff.filename)

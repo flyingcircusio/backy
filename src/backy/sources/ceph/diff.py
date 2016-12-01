@@ -159,7 +159,7 @@ class RBDDiffV1(object):
         if clean:
             # Delete in thread: on btrfs ist takes *long* to delete files. This
             # way the we can at least parallelize verification.
-            remover = backy.utils.Remover(self.filename)
+            remover = backy.utils.Remover([self.filename])
             remover.start()
             self._remover = remover  # test support
 

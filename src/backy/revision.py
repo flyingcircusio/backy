@@ -99,5 +99,8 @@ class Revision(object):
 
     def get_parent(self):
         if self.parent:
-            return self.backup.find_by_uuid(self.parent)
+            try:
+                return self.backup.find_by_uuid(self.parent)
+            except (KeyError, IndexError):
+                pass
         return

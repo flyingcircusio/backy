@@ -63,7 +63,6 @@ class Chunk(object):
         if not self.write_file:
             return
         self._update_hash()
-        os.fsync(self.write_file.fileno())
         self.write_file.close()
         target = self.store.chunk_path(self.hash)
         if not os.path.exists(target):

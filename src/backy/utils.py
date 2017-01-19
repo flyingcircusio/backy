@@ -215,6 +215,7 @@ def copy_overwrite(source, target):
 
     Assumes that `target` exists and is open in read-write mode.
     """
+    loops = 0
     try:
         posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
         posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
@@ -227,6 +228,10 @@ def copy_overwrite(source, target):
             break
         target.seek(startpos)
         target.write(chunk)
+        if not loops % 200:
+            print("flush")
+            target.flush()
+        loops += 1
     size = source.tell()
     target.flush()
     try:
@@ -312,7 +317,7 @@ def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=CHUNK_SIZE,
         chunk_b = b.read(blocksize)
         if chunk_a != chunk_b:
             logger.error(
-                "Chunk A (md5: %s) != Chunk B (md5: %s) at position %d".
+                "Chunk A (md5: {}) != Chunk B (md5: {}) at position {}".
                 format(hashlib.md5(chunk_a).hexdigest(),
                        hashlib.md5(chunk_b).hexdigest(),
                        block * blocksize))

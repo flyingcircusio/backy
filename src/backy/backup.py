@@ -147,7 +147,7 @@ class Backup(object):
 
     def restore(self, revision, target):
         self.scan()
-        r = self.history[revision]
+        r = self.find(revision)
         backend = self.backend_factory(r)
         s = backend.open('rb')
         with s as source:

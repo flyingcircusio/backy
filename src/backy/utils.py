@@ -229,7 +229,6 @@ def copy_overwrite(source, target):
         target.seek(startpos)
         target.write(chunk)
         if not loops % 200:
-            print("flush")
             target.flush()
         loops += 1
     size = source.tell()

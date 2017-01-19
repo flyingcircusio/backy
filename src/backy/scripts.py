@@ -1,6 +1,6 @@
 import argparse
 from backy.backup import Backup
-from backy.source.file import File
+from backy.sources.file import File
 import os
 
 
@@ -20,5 +20,31 @@ def file2chunk():
     os.rename(revision.filename, revision.filename + '.old')
     revision.writable()
     new = backup.backend_factory(revision)
+    new.clone_parent = False
     source = File(dict(filename=revision.filename + '.old'))(revision)
     source.backup(new)
+    revision.readonly()
+
+def purge():
+    backup = Backup('.')
+    backup.scan()
+    backend = backup.backend_factory(backup.history[0])
+    store = backend.store
+    for revision in backup.history:
+        store.users.append(backup.backend_factory(revision).open())
+    store.expunge()
+
+def validate():
+    backup = Backup('.')
+    backup.scan()
+    backend = backup.backend_factory(backup.history[0])
+    store = backend.store
+    print("Validating chunks")
+    #store.validate()
+    print("Validating revisions")
+    for revision in backup.history:
+        backend = backup.backend_factory(revision).open()
+        for hash in backend._mapping.values():
+            if not os.path.exists(backend.store.chunk_path(hash)):
+                print("Missing chunk {} in revision {}".format(hash, revision.uuid))
+

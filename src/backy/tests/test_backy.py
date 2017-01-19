@@ -6,12 +6,12 @@ import pytest
 import subprocess
 
 
-def generate_test_data(target, size):
+def generate_test_data(target, size, marker):
     f = open(target, 'wb')
     block = 8 * 1024
     for chunk in range(size // block):
-        f.write(os.urandom(block))
-    f.write(os.urandom(size % block))
+        f.write(marker * block)
+    f.write(marker * (size % block))
     f.close()
 
 
@@ -19,11 +19,11 @@ def test_smoketest_internal(tmpdir):
     # These copies of data are intended to be different versions of the same
     # file.
     source1 = str(tmpdir / 'image1.qemu')
-    generate_test_data(source1, 2 * 1024 ** 2)
+    generate_test_data(source1, 2 * 1024 ** 2, b'1')
     source2 = str(tmpdir / 'image2.qemu')
-    generate_test_data(source2, 2 * 1024 ** 2)
+    generate_test_data(source2, 2 * 1024 ** 2, b'2')
     source3 = str(tmpdir / 'image3.qemu')
-    generate_test_data(source3, 2 * 1024 ** 2)
+    generate_test_data(source3, 2 * 1024 ** 2, b'3')
 
     backup_dir = str(tmpdir / 'image1.backup')
     os.mkdir(backup_dir)
@@ -32,7 +32,7 @@ def test_smoketest_internal(tmpdir):
     # Backup first state
     backup.backup(tags={'test'})
 
-    # Restore first state from level 0
+    # Restore first state form newest revision at position 0
     restore_target = str(tmpdir / 'image1.restore')
     backup.restore(0, restore_target)
     with pytest.raises(IOError):
@@ -46,12 +46,14 @@ def test_smoketest_internal(tmpdir):
     backup.backup(tags={'test'})
     assert len(backup.history) == 2
 
-    # Restore second state from revision 1
-    backup.restore(1, restore_target)
-    assert open(source2, 'rb').read() == open(restore_target, 'rb').read()
-
-    # Our original backup has now become level 1. Lets restore that again.
+    # Restore second state from second backup which is the newest at position 0
     backup.restore(0, restore_target)
+    d1 = open(source2, 'rb').read()
+    d2 = open(restore_target, 'rb').read()
+    assert d1 == d2
+
+    # Our original backup is now at position 1. Lets restore that again.
+    backup.restore(1, restore_target)
     assert open(source1, 'rb').read() == open(restore_target, 'rb').read()
 
     # Backup second state again
@@ -59,16 +61,16 @@ def test_smoketest_internal(tmpdir):
     backup.backup(tags={'test'})
     assert len(backup.history) == 3
 
-    # Restore image2 from revision 0 again
-    backup.restore(2, restore_target)
+    # Restore image2 from its most recent at position 0
+    backup.restore(0, restore_target)
     assert open(source2, 'rb').read() == open(restore_target, 'rb').read()
 
-    # Restore image2 from revision 1
+    # Restore image2 from its previous backup, now at position 1
     backup.restore(1, restore_target)
     assert open(source2, 'rb').read() == open(restore_target, 'rb').read()
 
-    # Our original backup from revision 0. Lets restore that again.
-    backup.restore(0, restore_target)
+    # Our original backup is now at position 2. Lets restore that again.
+    backup.restore(2, restore_target)
     assert open(source1, 'rb').read() == open(restore_target, 'rb').read()
 
     # Backup third state
@@ -76,20 +78,19 @@ def test_smoketest_internal(tmpdir):
     backup.backup(tags={'test'})
     assert len(backup.history) == 4
 
-    # Restore image3 from level 3
-    backup.restore(3, restore_target)
+    # Restore image3 from the most curent state
+    backup.restore(0, restore_target)
     assert open(source3, 'rb').read() == open(restore_target, 'rb').read()
 
-    # Restore image2 from level 2
-    backup.restore(2, restore_target)
-    assert open(source2, 'rb').read() == open(restore_target, 'rb').read()
-
-    # Restore image2 from revision 1
+    # Restore image2 from position 1 and 2
     backup.restore(1, restore_target)
     assert open(source2, 'rb').read() == open(restore_target, 'rb').read()
 
-    # Restore image1 from revision -
-    backup.restore(0, restore_target)
+    backup.restore(2, restore_target)
+    assert open(source2, 'rb').read() == open(restore_target, 'rb').read()
+
+    # Restore image1 from position 3
+    backup.restore(3, restore_target)
     assert open(source1, 'rb').read() == open(restore_target, 'rb').read()
 
 

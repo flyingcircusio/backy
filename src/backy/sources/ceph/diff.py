@@ -139,6 +139,7 @@ class RBDDiffV1(object):
         bytes = 0
 
         for record in self.read_metadata():
+            print('m')
             if isinstance(record, SnapSize):
                 target.seek(record.size)
                 target.truncate()
@@ -148,11 +149,13 @@ class RBDDiffV1(object):
                 assert record.snapshot == snapshot_to
 
         for record in self.read_data():
+            print('d')
             target.seek(record.start)
             if isinstance(record, Zero):
                 punch_hole(target, target.tell(), record.length)
             elif isinstance(record, Data):
                 for chunk in record.stream():
+                    print(len(chunk))
                     target.write(chunk)
             bytes += record.length
 

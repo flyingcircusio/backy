@@ -67,7 +67,8 @@ setup(
             backy = backy.main:main
             backy-file2chunk = backy.scripts:file2chunk
             backy-purge = backy.scripts:purge
-            backy-validate= backy.scripts:validate
+            backy-validate-revisions= backy.scripts:validate_revisions
+            backy-validate-chunks= backy.scripts:validate_chunks
 
         [backy.sources]
             ceph-rbd = backy.sources.ceph.source:CephRBD

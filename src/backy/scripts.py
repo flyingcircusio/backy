@@ -5,7 +5,8 @@ import os
 
 
 def file2chunk():
-    """A very lightweight script to manually convert revisions to a chunk store."""
+    """A very lightweight script to manually convert revisions to a
+    chunk store."""
     parser = argparse.ArgumentParser(
         description='Convert a revision from CoW file to chunked.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -16,9 +17,9 @@ def file2chunk():
     # Rename the old data file so that we can use it as a new input
     # and re-create the old revision.
     backup = Backup('.')
-    revision = backup.find(args.revision)
-    os.rename(revision.filename, revision.filename + '.old')
-    revision.writable()
-    new = backup.backend_factory(revision)
-    source = File(dict(filename=revision.filename + '.old'))(revision)
+    old = backup.find(args.revision)
+    os.rename(old.filename, old.filename + '.old')
+    old.writable()
+    new = backup.backend_factory(old)
+    source = File(dict(filename=old.filename + '.old'))(old)
     source.backup(new)

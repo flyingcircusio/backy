@@ -223,8 +223,11 @@ def copy_overwrite(source, target):
     if size > 500 * GiB:
         punch_size *= 10
     source.seek(0)
-    posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-    posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    try:
+        posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+        posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    except Exception:
+        pass
     with zeroes(punch_size) as z:
         while True:
             startpos = source.tell()
@@ -246,7 +249,10 @@ def copy_overwrite(source, target):
         target.truncate(size)
     except OSError:
         pass  # truncate may not be supported, i.e. on special files
-    os.fsync(target)
+    try:
+        os.fsync(target)
+    except OSError:
+        pass  # fsync may not be supported, i.e. on special files
     return size
 
 
@@ -265,8 +271,11 @@ def cp_reflink(source, target):
 
 
 def files_are_equal(a, b):
-    posix_fadvise(a.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-    posix_fadvise(b.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    try:
+        posix_fadvise(a.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+        posix_fadvise(b.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    except Exception:
+        pass
     position = 0
     errors = 0
     while True:
@@ -287,7 +296,7 @@ def files_are_equal(a, b):
 
 
 def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=CHUNK_SIZE,
-                            timeout=5*60):
+                            timeout=5 * 60):
     a.seek(0, os.SEEK_END)
     size = a.tell()
     blocks = size // blocksize
@@ -295,8 +304,11 @@ def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=CHUNK_SIZE,
     sample = random.sample(blocklist, max(int(samplesize * blocks), 1))
 
     # turn off readahead
-    for fdesc in a.fileno(), b.fileno():
-        posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
+    try:
+        for fdesc in a.fileno(), b.fileno():
+            posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
+    except Exception:
+        pass
 
     # We limit this to a 5 minute operation to avoid clogging the storage
     # infinitely.

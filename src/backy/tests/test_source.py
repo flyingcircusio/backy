@@ -11,7 +11,6 @@ def test_configure_ceph_source(tmpdir):
     image: test04
 """)
     backup = Backup(str(tmpdir))
-    backup.configure()
     assert isinstance(backup.source, CephRBD)
     assert backup.source.pool == 'test'
     assert backup.source.image == 'test04'

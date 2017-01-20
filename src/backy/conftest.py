@@ -1,5 +1,4 @@
 from unittest import mock
-import backy.archive
 import backy.backup
 import backy.main
 import backy.schedule
@@ -50,12 +49,7 @@ def schedule():
 
 
 @pytest.fixture
-def archive(tmpdir):
-    a = backy.archive.Archive(str(tmpdir))
-    a.scan = lambda: None
-    return a
-
-
-@pytest.fixture
 def backup(schedule, tmpdir):
+    with open(str(tmpdir / 'config'), 'wb') as f:
+        f.write(b"{'type': 'file', 'filename': 'test'}")
     return backy.backup.Backup(str(tmpdir))

@@ -1,4 +1,4 @@
-from backy.utils import copy_overwrite, files_are_equal, CHUNK_SIZE
+from backy.utils import copy_overwrite, files_are_equal
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,17 +23,17 @@ class File(object):
     def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
         pass
 
-    def backup(self):
+    def backup(self, target):
         logger.info('Performing full backup')
         s = open(self.filename, 'rb')
-        t = open(self.revision.filename, 'r+b', buffering=CHUNK_SIZE)
+        t = target.open('r+b')
         with s as source, t as target:
             bytes = copy_overwrite(source, target)
         self.revision.stats['bytes_written'] = bytes
 
-    def verify(self):
+    def verify(self, target):
         logger.info('Performing full verification')
         s = open(self.filename, 'rb')
-        t = open(self.revision.filename, 'rb')
+        t = target.open('rb')
         with s as source, t as target:
             return files_are_equal(source, target)

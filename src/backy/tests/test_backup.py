@@ -16,7 +16,6 @@ def simple_file_config(tmpdir, monkeypatch):
     shutil.copy(fixtures + '/simple_file/config', str(tmpdir))
     monkeypatch.chdir(tmpdir)
     b = Backup(str(tmpdir))
-    b.configure()
     return b
 
 
@@ -29,8 +28,7 @@ def test_config(simple_file_config, tmpdir):
 
 
 def test_init_ceph(tmpdir):
-    backup = Backup(str(tmpdir))
-    backup.init('ceph-rbd', 'test/test04')
+    Backup.init(str(tmpdir), 'ceph-rbd', 'test/test04')
     with open(str(tmpdir / 'config')) as f:
         config = yaml.safe_load(f)
     assert config == {
@@ -40,8 +38,7 @@ def test_init_ceph(tmpdir):
 
 
 def test_init_file(tmpdir):
-    backup = Backup(str(tmpdir))
-    backup.init('file', '/dev/foo')
+    Backup.init(str(tmpdir), 'file', '/dev/foo')
     with open(str(tmpdir / 'config')) as f:
         config = yaml.load(f)
     assert config == {
@@ -52,8 +49,7 @@ def test_init_file(tmpdir):
 def test_init_creates_directory(tmpdir):
     target = str(tmpdir / 'asdf')
     assert not os.path.exists(target)
-    backup = Backup(target)
-    backup.init('file', '/dev/foo')
+    Backup.init(target, 'file', '/dev/foo')
     assert os.path.isdir(target)
 
 
@@ -63,27 +59,28 @@ def test_init_refused_with_existing_config(tmpdir):
 """
     with open(str(tmpdir / 'config'), 'wb') as f:
         f.write(existing_config)
-    backup = Backup(str(tmpdir))
     with pytest.raises(RuntimeError):
-        backup.init('file', '/dev/foo')
+        Backup.init(str(tmpdir), 'file', 'asdf')
     with open(str(tmpdir / 'config'), 'rb') as f:
         assert f.read() == existing_config
 
 
 def test_find(simple_file_config, tmpdir):
     backup = simple_file_config
-    rev = Revision('123-456', backup.archive)
+    rev = Revision(backup, '123-456', backup)
     rev.timestamp = backy.utils.now()
     rev.materialize()
-    assert str(tmpdir / '123-456') == backup.find(0)
+    backup.scan()
+    assert str(tmpdir / '123-456') == backup.find(0).filename
 
 
 def test_find_should_raise_if_not_found(simple_file_config):
     backup = simple_file_config
-    rev = Revision('123-456', backup.archive)
+    rev = Revision(backup, '123-456')
     rev.timestamp = backy.utils.now()
     rev.materialize()
-    with pytest.raises(RuntimeError):
+    backup.scan()
+    with pytest.raises(KeyError):
         backup.find('no such revision')
 
 

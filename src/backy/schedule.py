@@ -98,19 +98,19 @@ class Schedule(object):
         # shutdown of the server or such.
         return (backy.utils.now(), catchup_tags)
 
-    def expire(self, archive):
+    def expire(self, backup):
         """Remove old revisions according to the backup schedule.
 
         Returns list of removed revisions.
         """
-        archive.scan()
+        backup.scan()
         removed = []
         # Clean out old backups: keep at least a certain number of copies
         # (keep) and ensure that we don't throw away copies that are newer
         # than keep * interval for this tag.
         # Phase 1: remove tags that are expired
         for tag, args in self.schedule.items():
-            revisions = archive.find_revisions('tag:' + tag)
+            revisions = backup.find_revisions('tag:' + tag)
             keep = args['keep']
             if len(revisions) < keep:
                 continue
@@ -124,7 +124,7 @@ class Schedule(object):
         # Phase 2: delete revisions that have no tags any more.
         # We are deleting items of the history while iterating over it.
         # Use a copy of the list!
-        for revision in list(archive.history):
+        for revision in list(backup.history):
             if revision.tags:
                 continue
             removed.append(revision)

@@ -2,6 +2,7 @@ from backy.ext_deps import RBD
 from backy.revision import Revision
 from backy.sources.ceph.source import CephRBD
 from backy.sources import select_source
+from backy.backends.cowfile import COWFileBackend
 from unittest.mock import Mock, call
 import backy.utils
 import os.path as p
@@ -42,7 +43,7 @@ def test_assign_revision():
 def test_context_manager(check_output, backup):
     source = CephRBD(dict(pool='test', image='foo'))
 
-    revision = Revision(1, backup.archive)
+    revision = Revision(backup, 1)
     with source(revision):
         pass
 
@@ -64,12 +65,12 @@ def test_context_manager_cleans_out_snapshots(check_output, backup, nosleep):
         # snap rm backy-2
         b'{}']
 
-    revision = Revision('1', backup.archive)
+    revision = Revision(backup, '1')
     with source(revision):
         revision.materialize()
         revision.timestamp = backy.utils.now()
         revision.write_info()
-        backup.archive.scan()
+        backup.scan()
 
     assert check_output.call_args_list == [
         call([RBD, '--no-progress', 'snap', 'create',
@@ -85,10 +86,11 @@ def test_choose_full_without_parent(check_output, backup):
     source.diff = Mock()
     source.full = Mock()
 
-    revision = Revision('1', backup.archive)
+    revision = Revision(backup, '1')
+    backend = COWFileBackend(revision)
 
     with source(revision):
-        source.backup()
+        source.backup(backend)
 
     assert not source.diff.called
     assert source.full.called
@@ -100,17 +102,18 @@ def test_choose_full_without_snapshot(check_output, backup):
     source.diff = Mock()
     source.full = Mock()
 
-    revision1 = Revision('a1', backup.archive)
+    revision1 = Revision(backup, 'a1')
     revision1.timestamp = backy.utils.now()
     revision1.materialize()
 
-    backup.archive.scan()
+    backup.scan()
 
-    revision2 = Revision('a2', backup.archive)
+    revision2 = Revision(backup, 'a2')
     revision2.parent = 'a1'
 
+    backend = COWFileBackend(revision2)
     with source(revision2):
-        source.backup()
+        source.backup(backend)
 
     assert not source.diff.called
     assert source.full.called
@@ -122,13 +125,13 @@ def test_choose_diff_with_snapshot(check_output, backup, nosleep):
     source.diff = Mock()
     source.full = Mock()
 
-    revision1 = Revision('a1', backup.archive)
+    revision1 = Revision(backup, 'a1')
     revision1.timestamp = backy.utils.now()
     revision1.materialize()
 
-    backup.archive.scan()
+    backup.scan()
 
-    revision2 = Revision('a2', backup.archive)
+    revision2 = Revision(backup, 'a2')
     revision2.parent = 'a1'
 
     check_output.side_effect = [
@@ -141,8 +144,9 @@ def test_choose_diff_with_snapshot(check_output, backup, nosleep):
         # snap rm backy-a1
         b'{}']
 
+    backend = COWFileBackend(revision2)
     with source(revision2):
-        source.backup()
+        source.backup(backend)
 
     assert source.diff.called
     assert not source.full.called
@@ -151,14 +155,14 @@ def test_choose_diff_with_snapshot(check_output, backup, nosleep):
 def test_diff_backup(check_output, backup, tmpdir, nosleep):
     source = CephRBD(dict(pool='test', image='foo'))
 
-    parent = Revision('ed968696-5ab0-4fe0-af1c-14cadab44661', backup.archive)
+    parent = Revision(backup, 'ed968696-5ab0-4fe0-af1c-14cadab44661')
     parent.timestamp = backy.utils.now()
     parent.materialize()
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
     revision = Revision(
-        'f0e7292e-4ad8-4f2e-86d6-f40dca2aa802', backup.archive)
+        backup, 'f0e7292e-4ad8-4f2e-86d6-f40dca2aa802')
     revision.timestamp = backy.utils.now()
     revision.parent = parent.uuid
 
@@ -168,7 +172,7 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep):
     with open(str(tmpdir / revision.uuid) + '.rbddiff', 'wb') as f:
         f.write(SAMPLE_RBDDIFF)
 
-    backup.archive.scan()
+    backup.scan()
     revision.materialize()
 
     check_output.side_effect = [
@@ -183,9 +187,10 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep):
         b'{}',
     ]
 
+    backend = COWFileBackend(revision)
     with source(revision):
-        source.diff()
-        backup.archive.history.append(revision)
+        source.diff(backend)
+        backup.history.append(revision)
 
     assert check_output.call_args_list == [
         call([RBD, '--no-progress', 'snap', 'create',
@@ -197,8 +202,7 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep):
         call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
               'test/foo']),
         call([RBD, '--no-progress', 'snap', 'rm',
-              'test/foo@backy-ed968696-5ab0-4fe0-af1c-14cadab44661']),
-        ]
+              'test/foo@backy-ed968696-5ab0-4fe0-af1c-14cadab44661'])]
 
 
 def test_full_backup(check_output, backup, tmpdir):
@@ -206,10 +210,10 @@ def test_full_backup(check_output, backup, tmpdir):
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
-    revision = Revision('a0', backup.archive)
+    revision = Revision(backup, 'a0')
     revision.timestamp = backy.utils.now()
     revision.materialize()
-    backup.archive.scan()
+    backup.scan()
 
     rbd_source = str(tmpdir / '-dev-rbd0')
     with open(rbd_source, 'w') as f:
@@ -228,8 +232,9 @@ def test_full_backup(check_output, backup, tmpdir):
         # snap ls
         b'[{"name": "backy-a0"}]']
 
+    backend = COWFileBackend(revision)
     with source(revision):
-        source.full()
+        source.full(backend)
 
     assert check_output.call_args_list == [
         call([RBD, '--no-progress', 'snap', 'create',
@@ -251,12 +256,12 @@ def test_full_backup_integrates_changes(check_output, backup, tmpdir, nosleep):
     content0 = BLOCK * b'A' + BLOCK * b'B' + BLOCK * b'C' + BLOCK * b'D'
     content1 = BLOCK * b'A' + BLOCK * b'X' + BLOCK * b'\0' + BLOCK * b'D'
 
-    rev0 = Revision('a0', backup.archive)
+    rev0 = Revision(backup, 'a0')
     rev0.timestamp = backy.utils.now()
     rev0.materialize()
-    backup.archive.scan()
+    backup.scan()
 
-    rev1 = Revision('a1', backup.archive)
+    rev1 = Revision(backup, 'a1')
     rev1.parent = 'a0'
     rev1.materialize()
 
@@ -271,7 +276,7 @@ def test_full_backup_integrates_changes(check_output, backup, tmpdir, nosleep):
             # showmapped
             '{{"rbd0": {{"pool": "test", "name": "foo", "snap": "backy-{}", \
                          "device": "{}"}}}}'.format(
-                            name, rbd_source).encode('ascii'),
+                name, rbd_source).encode('ascii'),
             # unmap
             b'{}',
             # snap ls
@@ -290,8 +295,9 @@ def test_full_backup_integrates_changes(check_output, backup, tmpdir, nosleep):
         with open(rbd_source, 'wb') as f:
             f.write(content)
 
+        backend = COWFileBackend(rev)
         with source(rev):
-            source.full()
+            source.full(backend)
 
         with open(rev.filename, 'rb') as f:
             assert content == f.read()
@@ -302,11 +308,11 @@ def test_verify_fail(check_output, backup, tmpdir):
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
-    revision = Revision('a0', backup.archive)
+    revision = Revision(backup, 'a0')
     revision.timestamp = backy.utils.now()
     revision.materialize()
 
-    backup.archive.scan()
+    backup.scan()
 
     rbd_source = str(tmpdir / '-dev-rbd0')
     with open(rbd_source, 'w') as f:
@@ -326,8 +332,9 @@ def test_verify_fail(check_output, backup, tmpdir):
         b'[{"name": "backy-a0"}]']
 
     # We never copied the data, so this has to fail.
+    backend = COWFileBackend(revision)
     with source(revision):
-        assert not source.verify()
+        assert not source.verify(backend)
 
     assert check_output.call_args_list == [
         call([RBD, '--no-progress', 'snap', 'create', 'test/foo@backy-a0']),
@@ -344,11 +351,11 @@ def test_verify(check_output, backup, tmpdir):
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
-    revision = Revision('a0', backup.archive)
+    revision = Revision(backup, 'a0')
     revision.timestamp = backy.utils.now()
     revision.materialize()
 
-    backup.archive.scan()
+    backup.scan()
 
     rbd_source = str(tmpdir / '-dev-rbd0')
     with open(rbd_source, 'w') as f:
@@ -371,8 +378,9 @@ def test_verify(check_output, backup, tmpdir):
         # snap ls
         b'[{"name": "backy-a0"}]']
 
+    backend = COWFileBackend(revision)
     with source(revision):
-        assert source.verify()
+        assert source.verify(backend)
 
     assert check_output.call_args_list == [
         call([RBD, '--no-progress', 'snap', 'create', 'test/foo@backy-a0']),

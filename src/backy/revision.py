@@ -1,4 +1,4 @@
-from .utils import SafeFile, now, safe_symlink, cp_reflink, Remover
+from .utils import SafeFile, now, safe_symlink, Remover
 import datetime
 import glob
 import logging
@@ -15,36 +15,37 @@ logger = logging.getLogger(__name__)
 class Revision(object):
 
     uuid = None
+    timestamp = None
     parent = None
     stats = None
     tags = ()
 
-    def __init__(self, uuid, archive, timestamp=None):
-        self.uuid = uuid
-        self.archive = archive
-        self.timestamp = timestamp
+    def __init__(self, backup, uuid=None, timestamp=None):
+        self.backup = backup
+        self.uuid = uuid if uuid else shortuuid.uuid()
+        self.timestamp = timestamp if timestamp else now()
         self.stats = {'bytes_written': 0}
 
     @classmethod
-    def create(cls, archive):
-        r = Revision(shortuuid.uuid(), archive, now())
-        if archive.history:
-            # XXX validate that this parent is a actually a good parent. need
-            # to contact the source for this ...
-            r.parent = archive.history[-1].uuid
+    def create(cls, backup, tags):
+        r = Revision(backup)
+        r.tags = tags
+        if backup.history:
+            r.parent = backup.history[-1].uuid
         return r
 
     @classmethod
-    def load(cls, filename, archive):
+    def load(cls, filename, backup):
         with open(filename, encoding='utf-8') as f:
             metadata = yaml.safe_load(f)
-        r = Revision(metadata['uuid'], archive)
         if isinstance(metadata['timestamp'], float):
             metadata['timestamp'] = datetime.datetime.fromtimestamp(
                 metadata['timestamp'])
         # PyYAML doesn't support round-trip for timezones. :(
         # http://pyyaml.org/ticket/202
-        r.timestamp = pytz.UTC.localize(metadata['timestamp'])
+        r = Revision(backup,
+                     uuid=metadata['uuid'],
+                     timestamp=pytz.UTC.localize(metadata['timestamp']))
         r.parent = metadata['parent']
         r.stats = metadata.get('stats', {})
         r.tags = set(metadata.get('tags', []))
@@ -53,7 +54,7 @@ class Revision(object):
     @property
     def filename(self):
         """Full pathname of the image file."""
-        return os.path.join(self.archive.path, str(self.uuid))
+        return os.path.join(self.backup.path, str(self.uuid))
 
     @property
     def info_filename(self):
@@ -62,12 +63,7 @@ class Revision(object):
 
     def materialize(self):
         self.write_info()
-        if not self.parent:
-            open(self.filename, 'wb').close()
-        else:
-            parent = self.archive[self.parent]
-            cp_reflink(parent.filename, self.filename)
-            self.writable()
+        self.writable()
 
     def write_info(self):
         metadata = {
@@ -81,7 +77,7 @@ class Revision(object):
             yaml.safe_dump(metadata, f)
 
     def set_link(self, name):
-        path = self.archive.path
+        path = self.backup.path
         safe_symlink(self.filename, p.join(path, name))
         safe_symlink(self.info_filename, p.join(path, name + '.rev'))
 
@@ -89,13 +85,20 @@ class Revision(object):
         remover = Remover(glob.glob(self.filename + '*'))
         remover.start()
         self._remover = remover  # test support
-        if self in self.archive.history:
-            self.archive.history.remove(self)
+        if self in self.backup.history:
+            self.backup.history.remove(self)
 
     def writable(self):
-        os.chmod(self.filename, 0o640)
+        if os.path.exists(self.filename):
+            os.chmod(self.filename, 0o640)
         os.chmod(self.info_filename, 0o640)
 
     def readonly(self):
-        os.chmod(self.filename, 0o440)
+        if os.path.exists(self.filename):
+            os.chmod(self.filename, 0o440)
         os.chmod(self.info_filename, 0o440)
+
+    def get_parent(self):
+        if self.parent:
+            return self.backup.find_by_uuid(self.parent)
+        return

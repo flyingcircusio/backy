@@ -1,4 +1,3 @@
-from ...utils import copy_overwrite, SafeFile, files_are_roughly_equal
 from .rbd import RBDClient
 import backy.utils
 import logging
@@ -37,8 +36,14 @@ class CephRBD(object):
 
     def __enter__(self):
         snapname = 'backy-{}'.format(self.revision.uuid)
-        self.rbd.snap_create(self._image_name + '@' + snapname)
+        self.create_snapshot(snapname)
         return self
+
+    def create_snapshot(self, snapname):
+        """An overridable method to allow different ways of creating the
+        snapshot.
+        """
+        self.rbd.snap_create(self._image_name + '@' + snapname)
 
     @property
     def _image_name(self):
@@ -47,22 +52,22 @@ class CephRBD(object):
     def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
         self._delete_old_snapshots()
 
-    def backup(self):
+    def backup(self, target):
         if self.always_full:
             logger.debug('Running always full backups')
-            self.full()
+            self.full(target)
             return
         try:
-            parent = self.revision.archive[self.revision.parent]
+            parent = self.revision.backup.find(self.revision.parent)
             if not self.rbd.exists(self._image_name + '@backy-' + parent.uuid):
                 raise KeyError()
         except KeyError:
             logger.info('Could not find snapshot for previous revision.')
-            self.full()
+            self.full(target)
             return
-        self.diff()
+        self.diff(target)
 
-    def diff(self):
+    def diff(self, target):
         logger.info('Performing differential backup')
         snap_from = 'backy-' + self.revision.parent
         snap_to = 'backy-' + self.revision.uuid
@@ -73,34 +78,32 @@ class CephRBD(object):
         logger.info(
             'RBD diff done (%s)',
             backy.utils.format_bytes_flexible(stat.st_size))
-        t = SafeFile(self.revision.filename)
+        t = target.open('r+b')
         with t as target:
-            t.use_write_protection()
-            t.open_inplace('r+b')
             bytes = d.integrate(target, snap_from, snap_to)
         logger.info('Integration finished.')
 
         self.revision.stats['bytes_written'] = bytes
 
-    def full(self):
+    def full(self, target):
         logger.info('Performing full backup')
         s = self.rbd.image_reader('{}/{}@backy-{}'.format(
             self.pool, self.image, self.revision.uuid))
-        t = open(self.revision.filename, 'r+b')
+        t = target.open('r+b')
         with s as source, t as target:
-            bytes = copy_overwrite(source, target)
+            bytes = backy.utils.copy_overwrite(source, target)
         self.revision.stats['bytes_written'] = bytes
 
-    def verify(self):
+    def verify(self, target):
         s = self.rbd.image_reader('{}/{}@backy-{}'.format(
             self.pool, self.image, self.revision.uuid))
-        t = open(self.revision.filename, 'rb')
+        t = target.open('rb')
 
         self.revision.stats['ceph-verification'] = 'partial'
 
         with s as source, t as target:
             logger.info('Performing partial verification')
-            return files_are_roughly_equal(source, target)
+            return backy.utils.files_are_roughly_equal(source, target)
 
     def _delete_old_snapshots(self):
         # Clean up all snapshots except the one for the most recent valid
@@ -109,8 +112,8 @@ class CephRBD(object):
         # revision - which is wrong: broken new revisions would always cause
         # full backups instead of new deltas based on the most recent valid
         # one.
-        if not self.always_full and self.revision.archive.history:
-            keep_snapshot_revision = self.revision.archive.history[-1]
+        if not self.always_full and self.revision.backup.history:
+            keep_snapshot_revision = self.revision.backup.history[-1]
             keep_snapshot_revision = keep_snapshot_revision.uuid
         else:
             keep_snapshot_revision = None

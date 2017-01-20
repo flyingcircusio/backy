@@ -1,4 +1,4 @@
-from .archive import Archive
+from .backup import Backup
 from .ext_deps import BACKY_CMD
 from .utils import SafeFile
 import asyncio
@@ -126,7 +126,7 @@ class Job(object):
     status = ''
     task = None
     path = None
-    archive = None
+    backup = None
 
     _generator_handle = None
 
@@ -139,7 +139,8 @@ class Job(object):
         self.source = config['source']
         self.schedule_name = config['schedule']
         self.path = p.join(self.daemon.base_dir, self.name)
-        self.archive = Archive(self.path)
+        self.update_config()
+        self.backup = Backup(self.path)
 
     @property
     def spread(self):
@@ -160,9 +161,9 @@ class Job(object):
         those are not indicators whether and admin needs to do something
         right now.
         """
-        if not self.archive.clean_history:
+        if not self.backup.clean_history:
             return True
-        age = backy.utils.now() - self.archive.clean_history[-1].timestamp
+        age = backy.utils.now() - self.backup.clean_history[-1].timestamp
         max_age = min(x['interval'] for x in self.schedule.schedule.values())
         if age > max_age * 1.5:
             return False
@@ -209,7 +210,7 @@ class Job(object):
         logger.info("%s: started task generator loop", self.name)
         while True:
             next_time, next_tags = self.schedule.next(
-                backy.utils.now(), self.spread, self.archive)
+                backy.utils.now(), self.spread, self.backup)
 
             self.task = task = Task(self)
             self.task.ideal_start = next_time
@@ -233,5 +234,5 @@ class Job(object):
             self._generator_handle = None
 
     def expire(self):
-        """Remove old revisions from my archive according to the schedule."""
-        return self.schedule.expire(self.archive)
+        """Remove old revisions from my backup according to the schedule."""
+        return self.schedule.expire(self.backup)

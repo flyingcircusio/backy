@@ -9,9 +9,10 @@ class ChunkedFileBackend(object):
         self.backup = revision.backup
         self.revision = revision
         self.store = Store(path=self.revision.backup.path + '/chunks')
+        self.clone_parent = True
 
     def open(self, mode='rb'):
-        if 'w' in mode or '+' in mode:
+        if 'w' in mode or '+' in mode and self.clone_parent:
             parent = self.revision.get_parent()
             if parent and not os.path.exists(self.revision.filename):
                 with open(self.revision.filename, 'wb') as new, \

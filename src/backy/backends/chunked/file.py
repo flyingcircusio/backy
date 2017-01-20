@@ -57,11 +57,14 @@ class File(object):
         raise OSError('ChunkedFile does not support use through a file '
                       'descriptor.')
 
-    def flush(self):
-        assert 'w' in self.mode and not self.closed
+    def _flush_chunks(self):
         for chunk_id in self._chunks.copy():
             chunk = self._chunks.pop(chunk_id)
             chunk.flush()
+
+    def flush(self):
+        assert 'w' in self.mode and not self.closed
+        self._flush_chunks()
         with open(self.name, 'w') as f:
             json.dump({'mapping': self._mapping,
                        'size': self.size}, f)
@@ -138,6 +141,10 @@ class File(object):
             data, size = chunk.read(offset, size)
             self._position += len(data)
             result.write(data)
+        # Avoid keeping too many chunks in memory, but also don't flush
+        # all the time as that causes intermediate chunks to be created.
+        if len(self._chunks) > 10:
+            self._flush_chunks()
         return result.getvalue()
 
     def writable(self):
@@ -151,6 +158,10 @@ class File(object):
             self._position += written
             if self._position > self.size:
                 self.size = self._position
+        # Avoid keeping too many chunks in memory, but also don't flush
+        # all the time as that causes intermediate chunks to be created.
+        if len(self._chunks) > 10:
+            self._flush_chunks()
 
     def _current_chunk(self):
         chunk_id = self._position // Chunk.CHUNK_SIZE

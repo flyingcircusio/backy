@@ -1,6 +1,7 @@
-from backy.backends.chunked.file import File
 from backy.backends.chunked.chunk import Chunk
+from backy.backends.chunked.file import File
 from backy.backends.chunked.store import Store
+import gzip
 import os
 
 
@@ -33,29 +34,26 @@ def test_chunk_write_partial_offset(tmpdir):
     # Write data that doesn't fit exactly into this chunk. This means
     # we have remaining data that needs to go into another chunk.
     result = chunk.write(10, SPACE_CHUNK)
-    assert result == (Chunk.CHUNK_SIZE-10, b' ' * 10)
+    assert result == (Chunk.CHUNK_SIZE - 10, b' ' * 10)
 
     chunk.flush()
     assert chunk.hash == SPACE_CHUNK_HASH
     store_state = os.stat(store.chunk_path(SPACE_CHUNK_HASH))
 
-    with open(store.chunk_path(chunk.hash), 'rb') as store_file:
-        assert store_file.read() == SPACE_CHUNK
+    with gzip.open(store.chunk_path(chunk.hash), 'rb') as store_file:
+        read = store_file.read()
+        assert read == SPACE_CHUNK
 
     # Check that we can edit and flush again. Check that the store file
     # wasn't touched.
     chunk.write(0, b'      ')
-    tmp_file = chunk.write_file_name
     chunk.flush()
     assert store_state == os.stat(store.chunk_path(SPACE_CHUNK_HASH))
-    # Even though we haven't touched the store file, our temporary file should
-    # be gone now.
-    assert not os.path.exists(tmp_file)
 
 
-def test_chunk_read_existing(tmpdir):
+def test_chunk_read_existing_uncompressed(tmpdir):
     store = Store(str(tmpdir))
-    with open(store.chunk_path('asdf'), 'wb') as existing:
+    with open(store.chunk_path('asdf', compressed=False), 'wb') as existing:
         existing.write(b'asdf')
 
     f = File(str(tmpdir / 'asdf'), store)
@@ -68,9 +66,36 @@ def test_chunk_read_existing(tmpdir):
     chunk.flush()
 
 
-def test_chunk_write_existing(tmpdir):
+def test_chunk_read_existing_compressed(tmpdir):
     store = Store(str(tmpdir))
-    with open(store.chunk_path('asdf'), 'wb') as existing:
+    with gzip.open(store.chunk_path('asdf'), 'wb') as existing:
+        existing.write(b'asdf')
+
+    f = File(str(tmpdir / 'asdf'), store)
+
+    chunk = Chunk(f, 1, store, 'asdf')
+    assert chunk.read(0) == (b'asdf', -1)
+    assert chunk.read(0, 10) == (b'asdf', 6)
+
+    # Check that flushing a file that hasn't been written to does not fail.
+    chunk.flush()
+
+
+def test_chunk_write_existing_uncompressed(tmpdir):
+    store = Store(str(tmpdir))
+    with open(store.chunk_path('asdf', compressed=False), 'wb') as existing:
+        existing.write(b'asdf')
+
+    f = File(str(tmpdir / 'asdf'), store)
+
+    chunk = Chunk(f, 1, store, 'asdf')
+    chunk.write(2, b'xxsdf')
+    assert chunk.read(0) == (b'asxxsdf', -1)
+
+
+def test_chunk_write_existing_compressed(tmpdir):
+    store = Store(str(tmpdir))
+    with gzip.open(store.chunk_path('asdf'), 'wb') as existing:
         existing.write(b'asdf')
 
     f = File(str(tmpdir / 'asdf'), store)

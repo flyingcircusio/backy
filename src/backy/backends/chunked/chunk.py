@@ -1,6 +1,8 @@
 import hashlib
 import os
 import tempfile
+import gzip
+import io
 
 
 class Chunk(object):
@@ -19,19 +21,34 @@ class Chunk(object):
         self.file = file
         self.store = store
         self.clean = True
-        self.read_file = None
-        self.write_file = None
-        self.write_file_name = None
+
+        # Prepare working with the chunk. We keep the data in RAM for
+        # easier random access combined with transparent compression.
+        data = b''
+
+        # We may have an existing file that is uncompressed.
+        if self.hash:
+            raw = self.store.chunk_path(self.hash, compressed=False)
+            compressed = self.store.chunk_path(self.hash)
+            if os.path.exists(raw):
+                with open(raw, 'rb') as f:
+                    data = f.read()
+                self.clean = False
+            elif os.path.exists(compressed):
+                with gzip.open(compressed, 'rb') as f:
+                    data = f.read()
+
+        self.data = io.BytesIO(data)
 
     def read(self, offset, size=-1):
         """Read data from the chunk.
 
         Return the data and the remaining size that should be read.
         """
-        if not self.read_file:
-            self.read_file = open(self.store.chunk_path(self.hash), 'rb')
-        self.read_file.seek(offset)
-        data = self.read_file.read(size)
+        # We can always only do once. To support some edge cases we support
+        # switching transparently between those modes.
+        self.data.seek(offset)
+        data = self.data.read(size)
         remaining = -1
         if size != -1:
             remaining = max([0, size - len(data)])
@@ -46,34 +63,27 @@ class Chunk(object):
         """
         remaining_data = data[self.CHUNK_SIZE - offset:]
         data = data[:self.CHUNK_SIZE - offset]
-        if self.write_file is None:
-            fd, self.write_file_name = tempfile.mkstemp(dir=self.store.path)
-            self.write_file = os.fdopen(fd, mode='a+b')
-            if self.hash:
-                self.write_file.write(self.read(0)[0])
-            self.read_file = self.write_file
 
-        self.write_file.seek(offset)
-        self.write_file.write(data)
+        self.data.seek(offset)
+        self.data.write(data)
         self.clean = False
 
         return len(data), remaining_data
 
     def flush(self):
-        if not self.write_file:
+        if self.clean:
             return
         self._update_hash()
-        os.fsync(self.write_file.fileno())
-        self.write_file.close()
         target = self.store.chunk_path(self.hash)
         if not os.path.exists(target):
-            os.rename(self.write_file_name, target)
+            fd, tmpfile_name = tempfile.mkstemp(dir=self.store.path)
+            with gzip.open(tmpfile_name, mode='wb', compresslevel=1) as f:
+                f.write(self.data.getvalue())
+            os.rename(tmpfile_name, target)
             os.chmod(target, 0o440)
-        else:
-            os.unlink(self.write_file_name)
-        self.write_file = None
-        self.write_file_name = None
-        self.read_file = None
+        uncompressed = self.store.chunk_path(self.hash, compressed=False)
+        if os.path.exists(uncompressed):
+            os.unlink(uncompressed)
         self.clean = True
 
     def _update_hash(self):

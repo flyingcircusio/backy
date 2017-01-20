@@ -95,6 +95,7 @@ class Backup(object):
             if r.uuid not in self._by_uuid:
                 self._by_uuid[r.uuid] = r
                 self.history.append(r)
+        # The history is stored: oldest first. newest last.
         self.history.sort(key=lambda r: r.timestamp)
 
     @property
@@ -147,7 +148,7 @@ class Backup(object):
 
     def restore(self, revision, target):
         self.scan()
-        r = self.history[revision]
+        r = self.find(revision)
         backend = self.backend_factory(r)
         s = backend.open('rb')
         with s as source:
@@ -215,14 +216,19 @@ class Backup(object):
         return result
 
     def find_by_number(self, spec):
-        """Returns revision by relative number from the end.
+        """Returns revision by relative number.
+
+        0 is the newest,
+        1 is the next older,
+        2 is the even next older,
+        and so on ...
 
         Raises IndexError or ValueError if no revision is found.
         """
         spec = int(spec)
         if spec < 0:
             raise KeyError('Integer revisions must be positive')
-        return self.history[-spec - 1]
+        return self.history[-spec-1]
 
     def find_by_tag(self, spec):
         """Returns the latest revision matching a given tag.

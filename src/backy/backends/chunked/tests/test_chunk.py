@@ -1,13 +1,13 @@
 from backy.backends.chunked.chunk import Chunk
 from backy.backends.chunked.file import File
 from backy.backends.chunked.store import Store
-import gzip
+import lzo
 import os
 
 
 SPACE_CHUNK = b' ' * Chunk.CHUNK_SIZE
 SPACE_CHUNK_HASH = (
-    'b7a6434d497ad38396f731f01623496e52cefa88063bcb80cb802c2827c31f8a')
+    'c01b5d75bfe6a1fa5bca6e492c5ab09a')
 
 
 def test_chunk_read_write_update(tmpdir):
@@ -40,9 +40,10 @@ def test_chunk_write_partial_offset(tmpdir):
     assert chunk.hash == SPACE_CHUNK_HASH
     store_state = os.stat(store.chunk_path(SPACE_CHUNK_HASH))
 
-    with gzip.open(store.chunk_path(chunk.hash), 'rb') as store_file:
-        read = store_file.read()
-        assert read == SPACE_CHUNK
+    with open(store.chunk_path(chunk.hash), 'rb') as store_file:
+        data = store_file.read()
+        data = lzo.decompress(data)
+        assert data == SPACE_CHUNK
 
     # Check that we can edit and flush again. Check that the store file
     # wasn't touched.
@@ -68,8 +69,8 @@ def test_chunk_read_existing_uncompressed(tmpdir):
 
 def test_chunk_read_existing_compressed(tmpdir):
     store = Store(str(tmpdir))
-    with gzip.open(store.chunk_path('asdf'), 'wb') as existing:
-        existing.write(b'asdf')
+    with open(store.chunk_path('asdf'), 'wb') as existing:
+        existing.write(lzo.compress(b'asdf'))
 
     f = File(str(tmpdir / 'asdf'), store)
 
@@ -95,8 +96,8 @@ def test_chunk_write_existing_uncompressed(tmpdir):
 
 def test_chunk_write_existing_compressed(tmpdir):
     store = Store(str(tmpdir))
-    with gzip.open(store.chunk_path('asdf'), 'wb') as existing:
-        existing.write(b'asdf')
+    with open(store.chunk_path('asdf'), 'wb') as existing:
+        existing.write(lzo.compress(b'asdf'))
 
     f = File(str(tmpdir / 'asdf'), store)
 

@@ -1,8 +1,10 @@
-import hashlib
+import binascii
+import io
+import lzo
+import mmh3
 import os
 import tempfile
-import gzip
-import io
+import time
 
 
 class Chunk(object):
@@ -21,32 +23,47 @@ class Chunk(object):
         self.file = file
         self.store = store
         self.clean = True
+        self.loaded = False
+
+        if self.id not in file._access_stats:
+            self.file._access_stats[id] = (0, 0)
 
         # Prepare working with the chunk. We keep the data in RAM for
         # easier random access combined with transparent compression.
         data = b''
 
         # We may have an existing file that is uncompressed.
+        # XXX print('Init chunk: {}'.format(self.id))
         if self.hash:
             raw = self.store.chunk_path(self.hash, compressed=False)
             compressed = self.store.chunk_path(self.hash)
             if os.path.exists(raw):
+                print('reading raw')
                 with open(raw, 'rb') as f:
                     data = f.read()
                 self.clean = False
             elif os.path.exists(compressed):
-                with gzip.open(compressed, 'rb') as f:
-                    data = f.read()
+                data = open(compressed, 'rb').read()
+                # XXX print('reading compressed')
+                data = lzo.decompress(data)
 
         self.data = io.BytesIO(data)
+
+    def _cache_prio(self):
+        return self.file._access_stats[self.id]
+
+    def _touch(self):
+        count = self.file._access_stats[self.id][0]
+        self.file._access_stats[self.id] = (count + 1, time.time())
 
     def read(self, offset, size=-1):
         """Read data from the chunk.
 
         Return the data and the remaining size that should be read.
         """
-        # We can always only do once. To support some edge cases we support
-        # switching transparently between those modes.
+        # XXX print("Read {}".format(self.id))
+        self._touch()
+
         self.data.seek(offset)
         data = self.data.read(size)
         remaining = -1
@@ -61,6 +78,9 @@ class Chunk(object):
         - the _data_ remaining
 
         """
+        # XXX print("Write {}".format(self.id))
+        self._touch()
+
         remaining_data = data[self.CHUNK_SIZE - offset:]
         data = data[:self.CHUNK_SIZE - offset]
 
@@ -71,14 +91,16 @@ class Chunk(object):
         return len(data), remaining_data
 
     def flush(self):
+        # XXX print('Flush chunk: {}'.format(self.id))
         if self.clean:
             return
         self._update_hash()
         target = self.store.chunk_path(self.hash)
         if not os.path.exists(target):
+            # XXX print('writing new')
             fd, tmpfile_name = tempfile.mkstemp(dir=self.store.path)
-            with gzip.open(tmpfile_name, mode='wb', compresslevel=1) as f:
-                f.write(self.data.getvalue())
+            with open(tmpfile_name, mode='wb') as f:
+                f.write(lzo.compress(self.data.getvalue()))
             os.rename(tmpfile_name, target)
             os.chmod(target, 0o440)
         uncompressed = self.store.chunk_path(self.hash, compressed=False)
@@ -87,6 +109,8 @@ class Chunk(object):
         self.clean = True
 
     def _update_hash(self):
-        data, _ = self.read(0)
-        self.hash = hashlib.new('sha256', data).hexdigest()
+        # I'm not using read() here to a) avoid cache accounting and b)
+        # use a faster path to get the data.
+        data = self.data.getvalue()
+        self.hash = binascii.hexlify(mmh3.hash_bytes(data)).decode('ascii')
         self.file._mapping[self.id] = self.hash

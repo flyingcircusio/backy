@@ -67,6 +67,7 @@ def test_store_revision_data(backup, clock):
     with open(r.info_filename, encoding='utf-8') as info:
         assert yaml.load(info) == {
             "parent": "asdf",
+            "backend_type": "chunked",
             "uuid": "asdf2",
             "stats": {"bytes_written": 0},
             "tags": [],

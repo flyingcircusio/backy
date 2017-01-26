@@ -1,5 +1,6 @@
-import argparse
+from .backends.chunked import ChunkedFileBackend
 from backy.backup import Backup
+from backy.nbd.server import Server
 from backy.sources.file import File
 import os
 
@@ -7,24 +8,22 @@ import os
 def file2chunk():
     """A very lightweight script to manually convert revisions to a chunk
     store."""
-    parser = argparse.ArgumentParser(
-        description='Convert a revision from CoW file to chunked.',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
-    parser.add_argument('revision')
-    args = parser.parse_args()
-
     # Rename the old data file so that we can use it as a new input
     # and re-create the old revision.
     backup = Backup('.')
-    old = backup.find(args.old)
-    os.rename(old.filename, old.filename + '.old')
-    old.writable()
-    new = backup.backend_factory(old)
-    new.clone_parent = False
-    source = File(dict(filename=old.filename + '.old'))(old)
-    source.backup(new)
-    old.readonly()
+
+    for old in backup.history:
+        if old.backend_type != 'cowfile':
+            continue
+        print("Converting {}".format(old.uuid))
+        os.rename(old.filename, old.filename + '.old')
+        old.writable()
+        new = ChunkedFileBackend(old)
+        new.clone_parent = False
+        source = File(dict(filename=old.filename + '.old', cow=False))(old)
+        source.backup(new)
+        old.readonly()
+        # XXX os.unlink(old.filename)
 
 
 def purge():
@@ -61,4 +60,12 @@ def validate_chunks():
     backend = backup.backend_factory(backup.history[0])
     print("Validating chunks")
     store = backend.store
-    store.validate()
+    for progress in store.validate():
+        print(progress)
+
+
+def nbd():
+    backup = Backup('.')
+    backup.scan()
+    server = Server(('127.0.0.1', 9000), backup)
+    server.serve_forever()

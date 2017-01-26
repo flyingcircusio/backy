@@ -59,8 +59,8 @@ def test_run_backup(event_loop, daemon):
     job = daemon.jobs['test01']
     t = Task(job)
     t.tags = set(['asdf'])
-    t.ideal_start = backy.utils.now()
     # Not having a a deadline set causes this to fail.
+    t.ideal_start = backy.utils.now()
     task_future = asyncio.Future()
     yield from t.backup(task_future)
     assert len(job.backup.history) == 1

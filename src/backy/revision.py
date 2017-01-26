@@ -22,6 +22,7 @@ class Revision(object):
 
     def __init__(self, backup, uuid=None, timestamp=None):
         self.backup = backup
+        self.backend_type = backup.backend_type
         self.uuid = uuid if uuid else shortuuid.uuid()
         self.timestamp = timestamp if timestamp else now()
         self.stats = {'bytes_written': 0}
@@ -33,6 +34,10 @@ class Revision(object):
         if backup.history:
             r.parent = backup.history[-1].uuid
         return r
+
+    def open(self):
+        backend = self.backup.backend_factory(self)
+        return backend.open('rb')
 
     @classmethod
     def load(cls, filename, backup):
@@ -49,6 +54,8 @@ class Revision(object):
         r.parent = metadata['parent']
         r.stats = metadata.get('stats', {})
         r.tags = set(metadata.get('tags', []))
+        # If the metadata does not show the backend type, then it's cowfile.
+        r.backend_type = metadata.get('backend_type', 'cowfile')
         return r
 
     @property
@@ -68,6 +75,7 @@ class Revision(object):
     def write_info(self):
         metadata = {
             'uuid': self.uuid,
+            'backend_type': self.backend_type,
             'timestamp': self.timestamp,
             'parent': self.parent,
             'stats': self.stats,
@@ -100,8 +108,5 @@ class Revision(object):
 
     def get_parent(self):
         if self.parent:
-            try:
-                return self.backup.find_by_uuid(self.parent)
-            except (KeyError, IndexError):
-                pass
+            return self.backup.find_by_uuid(self.parent)
         return

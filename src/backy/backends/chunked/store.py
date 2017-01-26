@@ -1,7 +1,8 @@
 import glob
+import lzo
 import hashlib
 import os.path
-import gzip
+import time
 
 # A chunkstore, is responsible for all revisions for a single backup, for now.
 # We can start having statistics later how much reuse between images is
@@ -22,18 +23,33 @@ class Store(object):
             os.makedirs(self.path)
 
     def validate(self):
-        for file, file_hash, open in self.ls():
+        chunks = list(self.ls())
+        progress = 0
+        start = time.time()
+        for file, file_hash, open in chunks:
             data = open(file, 'rb').read()
             hash = hashlib.new('sha256', data).hexdigest()
-            assert file_hash == hash, "Content mismatch for {}".format(hash)
+            if file_hash != hash:
+                yield "Content mismatch for {}".format(hash)
+            progress += 1
+            now = time.time()
+            time_elapsed = now - start
+            per_chunk = time_elapsed / progress
+            remaining = len(chunks) - progress
+            time_remaining = remaining * per_chunk
+            if progress == 5 or not progress % 100:
+                yield ("Progress: {} of {} ({:.2f}%) "
+                       "({:.0f}s elapsed, {:.0f}s remaining)".format(
+                           progress, len(chunks), progress / len(chunks) * 100,
+                           time_elapsed, time_remaining))
 
     def ls(self):
         for file in glob.glob(self.path + '/*.chunk'):
             hash = rreplace(os.path.split(file)[1], '.chunk', '')
-            yield file, hash, open
-        for file in glob.glob(self.path + '/*.chunk.gz'):
-            hash = rreplace(os.path.split(file)[1], '.chunk.gz', '')
-            yield file, hash, gzip.open
+            yield file, hash, lambda: open(file).read
+        for file in glob.glob(self.path + '/*.chunk.lzo'):
+            hash = rreplace(os.path.split(file)[1], '.chunk.lzo', '')
+            yield file, hash, lambda: lzo.decompress(open(file).read())
 
     def expunge(self):
         # Need to hold a global lock. May want to limit operations holding
@@ -52,5 +68,5 @@ class Store(object):
         print("Expunged: {} chunks".format(unlinked))
 
     def chunk_path(self, hash, compressed=True):
-        extension = '.chunk.gz' if compressed else '.chunk'
+        extension = '.chunk.lzo' if compressed else '.chunk'
         return os.path.join(self.path, hash + extension)

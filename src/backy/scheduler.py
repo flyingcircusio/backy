@@ -55,6 +55,9 @@ class Task(object):
             yield from process.communicate()
         self.returncode = process.returncode
 
+        logger.info('%s: finished backup with return code %s',
+                    self.name, self.returncode)
+
         # Expire backups
         # TODO: this isn't true async, but it works for now.
         self.job.expire()

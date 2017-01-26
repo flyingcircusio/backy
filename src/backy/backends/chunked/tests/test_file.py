@@ -115,7 +115,7 @@ def test_truncate(tmpdir):
     f.flush()
 
     space_hash = (
-        'b7a6434d497ad38396f731f01623496e52cefa88063bcb80cb802c2827c31f8a')
+        'c01b5d75bfe6a1fa5bca6e492c5ab09a')
     assert f._mapping == {i: space_hash for i in range(5)}
 
     f.truncate(50)

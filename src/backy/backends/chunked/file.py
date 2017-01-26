@@ -22,11 +22,15 @@ class File(object):
 
     """
 
+    flush_target = 10
+
     def __init__(self, name, store, mode='rw'):
         self.name = name
         self.store = store
         self.closed = False
         self._position = 0
+
+        self._access_stats = {}
 
         if '+' in mode:
             mode += 'w'
@@ -57,17 +61,49 @@ class File(object):
         raise OSError('ChunkedFile does not support use through a file '
                       'descriptor.')
 
-    def _flush_chunks(self):
-        for chunk_id in self._chunks.copy():
-            chunk = self._chunks.pop(chunk_id)
+    def _flush_chunks(self, target=None):
+        # XXX print("Flushing file to chunk limit {}".format(keep))
+        # Fast path variations
+        # Support an override to the general flush/cache mechanism to
+        # allow the final() flush to actually flush everything.
+        target = target if target is not None else self.flush_target
+        if target == 0:
+            for chunk in self._chunks.values():
+                chunk.flush()
+            self._chunks = {}
+            return
+        elif len(self._chunks) < (2 * target):
+            return
+
+        print("Performing deep flush")
+
+        chunks = list(self._chunks.values())
+        chunks.sort(key=lambda x: x._cache_prio())
+        keep_chunks = chunks[-target:]
+        remove_chunks = chunks[:-target]
+
+        for chunk in remove_chunks:
             chunk.flush()
+
+        self._chunks = {c.id: c for c in keep_chunks}
 
     def flush(self):
         assert 'w' in self.mode and not self.closed
-        self._flush_chunks()
+
+        self._flush_chunks(0)
+
         with open(self.name, 'w') as f:
             json.dump({'mapping': self._mapping,
                        'size': self.size}, f)
+
+        with open(self.name + '.restore', 'wb') as f:
+            base = os.path.dirname(self.name)
+            f.write(b'#!/bin/bash\n')
+
+            for cid in sorted(self._mapping):
+                path = self.store.chunk_path(self._mapping[cid])
+                path = os.path.relpath(path, base)
+                f.write('gunzip -c {}\n'.format(path).encode('ascii'))
 
     def close(self):
         assert not self.closed
@@ -124,8 +160,6 @@ class File(object):
             key for key in self._mapping if key * Chunk.CHUNK_SIZE > size)
         for key in to_remove:
             del self._mapping[key]
-        for key in self._chunks:
-            del self._chunks[key]
         self.flush()
 
     def read(self, size=-1):
@@ -141,10 +175,6 @@ class File(object):
             data, size = chunk.read(offset, size)
             self._position += len(data)
             result.write(data)
-        # Avoid keeping too many chunks in memory, but also don't flush
-        # all the time as that causes intermediate chunks to be created.
-        if len(self._chunks) > 10:
-            self._flush_chunks()
         return result.getvalue()
 
     def writable(self):
@@ -158,15 +188,12 @@ class File(object):
             self._position += written
             if self._position > self.size:
                 self.size = self._position
-        # Avoid keeping too many chunks in memory, but also don't flush
-        # all the time as that causes intermediate chunks to be created.
-        if len(self._chunks) > 10:
-            self._flush_chunks()
 
     def _current_chunk(self):
         chunk_id = self._position // Chunk.CHUNK_SIZE
         offset = self._position % Chunk.CHUNK_SIZE
         if chunk_id not in self._chunks:
+            self._flush_chunks()
             self._chunks[chunk_id] = Chunk(
                 self, chunk_id, self.store, self._mapping.get(chunk_id))
         return self._chunks[chunk_id], offset

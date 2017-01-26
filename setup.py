@@ -49,7 +49,9 @@ setup(
         'PyYaml',
         'setuptools',
         'shortuuid',
+        'python-lzo',
         'telnetlib3',
+        'murmurhash3'
     ],
     extras_require={
         'test': [
@@ -69,6 +71,7 @@ setup(
             backy-purge = backy.scripts:purge
             backy-validate-revisions= backy.scripts:validate_revisions
             backy-validate-chunks= backy.scripts:validate_chunks
+            backy-nbd = backy.scripts:nbd
 
         [backy.sources]
             ceph-rbd = backy.sources.ceph.source:CephRBD

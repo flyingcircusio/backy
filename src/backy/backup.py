@@ -39,6 +39,7 @@ class Backup(object):
     """
 
     config = None
+    backend_type = None
 
     def __init__(self, path):
         self.path = p.realpath(path)
@@ -59,10 +60,19 @@ class Backup(object):
         self.source = source_factory(self.config)
 
         # Initialize our backend
-        backend_type = self.config.get('backend', 'chunked')
-        if backend_type == 'cowfile':
+        self.backend_type = self.config.get('backend', None)
+        if self.backend_type is None:
+            if not self.history:
+                # Start fresh backups with our new default.
+                self.backend_type = 'chunked'
+            else:
+                # Choose to continue existing backups with whatever format
+                # they are in.
+                self.backend_type = self.history[-1].backend_type
+
+        if self.backend_type == 'cowfile':
             self.backend_factory = COWFileBackend
-        elif backend_type == 'chunked':
+        elif self.backend_type == 'chunked':
             self.backend_factory = ChunkedFileBackend
 
     @classmethod
@@ -125,6 +135,18 @@ class Backup(object):
         new_revision.materialize()
         logger.info('New revision {} [{}]'.format(
                     new_revision.uuid, ','.join(new_revision.tags)))
+
+        if False:
+            # XXX Helper for debugging, do not check in
+            old = self.find(new_revision.parent)
+            backend_old = self.backend_factory(old)
+            source_old = self.source(old)
+            with source_old as old_source:
+                r = old_source.verify(backend_old)
+                if not r:
+                    logger.error('New revision does not match source '
+                                 '- removing it.')
+                    return
 
         # XXX
         backend = self.backend_factory(new_revision)

@@ -1,6 +1,7 @@
 from .chunk import Chunk
 import io
 import json
+import os
 import os.path
 
 
@@ -24,10 +25,13 @@ class File(object):
 
     flush_target = 10
 
-    def __init__(self, name, store, mode='rw'):
+    def __init__(self, name, store, mode='rw', overlay=False):
         self.name = name
         self.store = store
         self.closed = False
+        # This indicates that writes should be temporary and no modify
+        # the metadata when closing.
+        self.overlay = overlay
         self._position = 0
 
         self._access_stats = {}
@@ -62,8 +66,6 @@ class File(object):
                       'descriptor.')
 
     def _flush_chunks(self, target=None):
-        # XXX print("Flushing file to chunk limit {}".format(keep))
-        # Fast path variations
         # Support an override to the general flush/cache mechanism to
         # allow the final() flush to actually flush everything.
         target = target if target is not None else self.flush_target
@@ -74,8 +76,6 @@ class File(object):
             return
         elif len(self._chunks) < (2 * target):
             return
-
-        print("Performing deep flush")
 
         chunks = list(self._chunks.values())
         chunks.sort(key=lambda x: x._cache_prio())
@@ -92,18 +92,24 @@ class File(object):
 
         self._flush_chunks(0)
 
-        with open(self.name, 'w') as f:
-            json.dump({'mapping': self._mapping,
-                       'size': self.size}, f)
+        if not self.overlay:
+            with open(self.name, 'w') as f:
+                json.dump({'mapping': self._mapping,
+                           'size': self.size}, f)
+                f.flush()
+                os.fsync(f)
 
-        with open(self.name + '.restore', 'wb') as f:
-            base = os.path.dirname(self.name)
-            f.write(b'#!/bin/bash\n')
+            with open(self.name + '.restore', 'wb') as f:
+                base = os.path.dirname(self.name)
+                f.write(b'#!/bin/bash\n')
 
-            for cid in sorted(self._mapping):
-                path = self.store.chunk_path(self._mapping[cid])
-                path = os.path.relpath(path, base)
-                f.write('gunzip -c {}\n'.format(path).encode('ascii'))
+                for cid in sorted(self._mapping):
+                    path = self.store.chunk_path(self._mapping[cid])
+                    path = os.path.relpath(path, base)
+                    f.write('gunzip -c {}\n'.format(path).encode('ascii'))
+
+                f.flush()
+                os.fsync(f)
 
     def close(self):
         assert not self.closed
@@ -173,6 +179,10 @@ class File(object):
         while size:
             chunk, offset = self._current_chunk()
             data, size = chunk.read(offset, size)
+            if not data:
+                raise ValueError(
+                    "Under-run: chunk {} seems to be missing data".format(
+                        chunk.id))
             self._position += len(data)
             result.write(data)
         return result.getvalue()

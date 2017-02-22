@@ -29,5 +29,6 @@ shortuuid==0.4.2
 six==1.9.0
 snowballstemmer==1.2.0
 sphinx-rtd-theme==0.1.9
+structlog==16.1.0
 telnetlib3==0.5.0
 wcwidth==0.1.5

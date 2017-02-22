@@ -51,7 +51,8 @@ setup(
         'shortuuid',
         'python-lzo',
         'telnetlib3',
-        'murmurhash3'
+        'murmurhash3',
+        'structlog',
     ],
     extras_require={
         'test': [
@@ -105,5 +106,5 @@ Topic :: System :: Archiving :: Backup
     include_package_data=True,
     data_files=[('', glob.glob('*.txt'))],
     zip_safe=False,
-    cmdclass = {'test': PyTest},
+    cmdclass={'test': PyTest},
 )

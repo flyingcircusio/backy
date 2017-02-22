@@ -6,6 +6,7 @@ import datetime
 import os
 import pytest
 import pytz
+import structlog
 
 
 def pytest_assertrepr_compare(op, left, right):
@@ -53,3 +54,36 @@ def backup(schedule, tmpdir):
     with open(str(tmpdir / 'config'), 'wb') as f:
         f.write(b"{'type': 'file', 'filename': 'test'}")
     return backy.backup.Backup(str(tmpdir))
+
+
+@pytest.fixture(scope='session')
+def setup_structlog():
+    from . import utils
+    utils.log_data = []
+    log_exceptions = False  # set to True to get detailed tracebacks
+
+    def test_logger(logger, method_name, event):
+        result = []
+
+        if log_exceptions:
+            stack = event.pop("stack", None)
+            exc = event.pop("exception", None)
+        for key in sorted(event):
+            result.append('{}={}'.format(key, event[key]))
+        utils.log_data.append(' '.join(result))
+        if log_exceptions:
+            if stack:
+                utils.log_data.extend(stack.splitlines())
+            if exc:
+                utils.log_data.extend(exc.splitlines())
+        raise structlog.DropEvent
+
+    structlog.configure(processors=(
+        [structlog.processors.format_exc_info] if log_exceptions else [] +
+        [test_logger]))
+
+
+@pytest.fixture(autouse=True)
+def reset_structlog(setup_structlog):
+    from . import utils
+    utils.log_data = []

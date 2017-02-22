@@ -6,6 +6,7 @@ import argparse
 import backy.backup
 import backy.daemon
 import errno
+import faulthandler
 import logging
 import logging.handlers
 import sys
@@ -72,6 +73,7 @@ class Command(object):
             if e.errno not in [errno.EDEADLK, errno.EAGAIN]:
                 raise
             logger.info('Backup already in progress.')
+        self._backup._clean()
 
     def restore(self, revision, target):
         self._backup = backy.backup.Backup(self.path)
@@ -179,7 +181,7 @@ Check whether all jobs adhere to their schedules' SLA.
     return parser
 
 
-def main():
+def main(enable_fault_handler=True):
     parser = setup_argparser()
     args = parser.parse_args()
 
@@ -193,6 +195,10 @@ def main():
 
     command = Command(args.backupdir)
     func = getattr(command, args.func)
+
+    # Process inspection
+    if enable_fault_handler:
+        faulthandler.enable()
 
     # Pass over to function
     func_args = dict(args._get_kwargs())

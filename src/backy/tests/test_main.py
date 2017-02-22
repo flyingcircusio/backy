@@ -20,7 +20,7 @@ def argv():
 
 def test_display_usage(capsys, argv):
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.main.main(enable_fault_handler=False)
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert """\
@@ -33,7 +33,7 @@ usage: py.test [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
 def test_display_help(capsys, argv):
     argv.append('--help')
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.main.main(enable_fault_handler=False)
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
@@ -53,7 +53,7 @@ def test_verbose_logging(capsys, argv):
     # for -v is covered.
     argv.extend(['-v'])
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.main.main(enable_fault_handler=False)
     assert exit.value.code == 0
 
 
@@ -66,7 +66,7 @@ def test_call_status(capsys, caplog, backup, argv, monkeypatch):
     monkeypatch.setattr(backy.main.Command, 'status', print_args)
     argv.extend(['-v', '-b', backup.path, 'status'])
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.main.main(enable_fault_handler=False)
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
@@ -84,7 +84,7 @@ def test_call_init(capsys, caplog, backup, argv, monkeypatch):
     monkeypatch.setattr(backy.main.Command, 'init', print_args)
     argv.extend(['-v', '-b', backup.path, 'init', 'ceph-rbd', 'test/test04'])
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.main.main(enable_fault_handler=False)
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
@@ -112,7 +112,7 @@ filename: {}
     monkeypatch.setattr(backy.backup.Backup, 'backup', print_args)
     argv.extend(['-v', 'backup', 'test'])
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.main.main(enable_fault_handler=False)
     out, err = capsys.readouterr()
     assert "" == err
     assert Ellipsis("""\
@@ -130,7 +130,7 @@ def test_call_find(capsys, caplog, backup, argv, monkeypatch):
     monkeypatch.setattr(backy.main.Command, 'find', print_args)
     argv.extend(['-v', '-b', backup.path, 'find', '-r', '1'])
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.main.main(enable_fault_handler=False)
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
@@ -149,7 +149,7 @@ def test_call_check(capsys, caplog, backup, argv, monkeypatch):
     monkeypatch.setattr(backy.main.Command, 'check', print_args)
     argv.extend(['-v', '-b', backup.path, 'check'])
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.main.main(enable_fault_handler=False)
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
@@ -169,7 +169,7 @@ def test_call_scheduler(capsys, caplog, backup, argv, monkeypatch):
     monkeypatch.setattr(backy.main.Command, 'scheduler', print_args)
     argv.extend(['-b', backup.path, 'scheduler'])
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.main.main(enable_fault_handler=False)
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
@@ -196,7 +196,7 @@ def test_call_unexpected_exception(capsys, backup, caplog, argv, monkeypatch):
     monkeypatch.setattr(logging, 'exception', print_args)
     argv.extend(['-l', 'logfile', '-b', backup.path, 'status'])
     with pytest.raises(SystemExit):
-        backy.main.main()
+        backy.main.main(enable_fault_handler=False)
     out, err = capsys.readouterr()
     assert "" == out
     assert "Error: test\n" == err

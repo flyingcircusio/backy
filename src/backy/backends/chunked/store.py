@@ -1,8 +1,8 @@
 import glob
 import lzo
-import hashlib
 import os.path
 import time
+from . import chunk
 
 # A chunkstore, is responsible for all revisions for a single backup, for now.
 # We can start having statistics later how much reuse between images is
@@ -26,11 +26,12 @@ class Store(object):
         chunks = list(self.ls())
         progress = 0
         start = time.time()
-        for file, file_hash, open in chunks:
-            data = open(file, 'rb').read()
-            hash = hashlib.new('sha256', data).hexdigest()
+        for file, file_hash, read in chunks:
+            data = read(file)
+            hash = chunk.hash(data)
             if file_hash != hash:
-                yield "Content mismatch for {}".format(hash)
+                yield "Content mismatch. Expected {} got {}".format(
+                    file_hash, hash)
             progress += 1
             now = time.time()
             time_elapsed = now - start
@@ -46,10 +47,10 @@ class Store(object):
     def ls(self):
         for file in glob.glob(self.path + '/*.chunk'):
             hash = rreplace(os.path.split(file)[1], '.chunk', '')
-            yield file, hash, lambda: open(file).read
+            yield file, hash, lambda f: open(f, 'rb').read()
         for file in glob.glob(self.path + '/*.chunk.lzo'):
             hash = rreplace(os.path.split(file)[1], '.chunk.lzo', '')
-            yield file, hash, lambda: lzo.decompress(open(file).read())
+            yield file, hash, lambda f: lzo.decompress(open(f, 'rb').read())
 
     def expunge(self):
         # Need to hold a global lock. May want to limit operations holding

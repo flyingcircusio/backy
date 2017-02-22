@@ -33,18 +33,15 @@ class Chunk(object):
         data = b''
 
         # We may have an existing file that is uncompressed.
-        # XXX print('Init chunk: {}'.format(self.id))
         if self.hash:
             raw = self.store.chunk_path(self.hash, compressed=False)
             compressed = self.store.chunk_path(self.hash)
             if os.path.exists(raw):
-                print('reading raw')
                 with open(raw, 'rb') as f:
                     data = f.read()
                 self.clean = False
             elif os.path.exists(compressed):
                 data = open(compressed, 'rb').read()
-                # XXX print('reading compressed')
                 data = lzo.decompress(data)
 
         self.data = io.BytesIO(data)
@@ -61,7 +58,6 @@ class Chunk(object):
 
         Return the data and the remaining size that should be read.
         """
-        # XXX print("Read {}".format(self.id))
         self._touch()
 
         self.data.seek(offset)
@@ -78,7 +74,6 @@ class Chunk(object):
         - the _data_ remaining
 
         """
-        # XXX print("Write {}".format(self.id))
         self._touch()
 
         remaining_data = data[self.CHUNK_SIZE - offset:]
@@ -91,16 +86,16 @@ class Chunk(object):
         return len(data), remaining_data
 
     def flush(self):
-        # XXX print('Flush chunk: {}'.format(self.id))
         if self.clean:
             return
         self._update_hash()
         target = self.store.chunk_path(self.hash)
         if not os.path.exists(target):
-            # XXX print('writing new')
             fd, tmpfile_name = tempfile.mkstemp(dir=self.store.path)
             with open(tmpfile_name, mode='wb') as f:
                 f.write(lzo.compress(self.data.getvalue()))
+                f.flush()
+                os.fsync(f)
             os.rename(tmpfile_name, target)
             os.chmod(target, 0o440)
         uncompressed = self.store.chunk_path(self.hash, compressed=False)
@@ -112,5 +107,9 @@ class Chunk(object):
         # I'm not using read() here to a) avoid cache accounting and b)
         # use a faster path to get the data.
         data = self.data.getvalue()
-        self.hash = binascii.hexlify(mmh3.hash_bytes(data)).decode('ascii')
+        self.hash = hash(data)
         self.file._mapping[self.id] = self.hash
+
+
+def hash(data):
+    return binascii.hexlify(mmh3.hash_bytes(data)).decode('ascii')

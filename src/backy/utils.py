@@ -244,8 +244,6 @@ def copy_overwrite(source, target):
                 else:
                     target.seek(startpos)
                     target.write(chunk)
-                    if not loops % 200:
-                        target.flush()
                     loops += 1
 
     size = source.tell()
@@ -372,3 +370,7 @@ class Remover(threading.Thread):
                 logging.info('Removing %s', filename)
                 os.remove(filename)
                 logging.info('Removed %s', filename)
+
+
+# Support for testing to gather logs
+log_data = []

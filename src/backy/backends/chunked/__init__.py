@@ -19,4 +19,8 @@ class ChunkedFileBackend(object):
                         open(parent.filename, 'rb') as old:
                     # This is ok, this is just metadata, not the actual data.
                     new.write(old.read())
-        return File(self.revision.filename, self.store, mode)
+        overlay = False
+        if mode == 'o':
+            mode = 'rw'
+            overlay = True
+        return File(self.revision.filename, self.store, mode, overlay)

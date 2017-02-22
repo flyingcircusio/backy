@@ -2,6 +2,7 @@ from .rbd import RBDClient
 import backy.utils
 import logging
 import os
+import shutil
 import time
 
 logger = logging.getLogger(__name__)
@@ -91,7 +92,7 @@ class CephRBD(object):
             self.pool, self.image, self.revision.uuid))
         t = target.open('r+b')
         with s as source, t as target:
-            bytes = backy.utils.copy_overwrite(source, target)
+            bytes = shutil.copyfileobj(source, target)
         self.revision.stats['bytes_written'] = bytes
 
     def verify(self, target):

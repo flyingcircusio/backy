@@ -142,12 +142,15 @@ class Server(object):
 
                     try:
                         uuid = data.decode("utf-8")
-                        revision = self.backup.find(uuid).open()
+                        # 'o' is the special "overlay" mode that allows
+                        # read/write but does not modify the underlying image
+                        revision = self.backup.find(uuid).open(mode='o')
+                        revision.overlay = True
                         revision.flush_target = 50
-                    except:
+                    except Exception as e:
                         if not fixed:
                             raise IOError("Negotiation failed: unknown export "
-                                          "name")
+                                          "name {}".format(e))
 
                         writer.write(struct.pack(
                             ">QLLL", self.NBD_REPLY, opt,
@@ -159,9 +162,9 @@ class Server(object):
                                   % (host, port, uuid))
 
                     export_flags = self.NBD_EXPORT_FLAGS
-                    export_flags ^= self.NBD_RO_FLAG
-                    self.log.info("[%s:%s] %s is read only"
-                                  % (host, port, uuid))
+                    # export_flags ^= self.NBD_RO_FLAG
+                    # self.log.info("[%s:%s] %s is read only"
+                    #              % (host, port, uuid))
                     revision.seek(0, 2)
                     size = revision.tell()
                     revision.seek(0)
@@ -224,9 +227,26 @@ class Server(object):
                     break
 
                 elif cmd == self.NBD_CMD_WRITE:
-                    # Removed as we do not support writing.
-                    raise IOError("Invalid request, writes not supported, "
-                                  "disconnecting")
+                    # This creates temporary chunks while writing which get
+                    # removed when disconnecting and are never associated
+                    # with the original revision.
+
+                    data = yield from reader.readexactly(length)
+                    if(len(data) != length):
+                        raise IOError("%s bytes expected, disconnecting" %
+                                      length)
+
+                    try:
+                        revision.seek(offset)
+                        revision.write(data)
+                        revision._flush_chunks()
+                    except IOError as ex:
+                        self.log.error("[%s:%s] %s" % (host, port, ex))
+                        yield from self.nbd_response(writer, handle,
+                                                     error=ex.errno)
+                        continue
+
+                    yield from self.nbd_response(writer, handle)
 
                 elif cmd == self.NBD_CMD_READ:
                     try:
@@ -242,9 +262,8 @@ class Server(object):
                     yield from self.nbd_response(writer, handle, data=data)
 
                 elif cmd == self.NBD_CMD_FLUSH:
-                    # Removed as we do not support writing.
-                    raise IOError("Invalid request, flush not supported, "
-                                  "disconnecting")
+                    # Not relevant in overlay mode as we do not persist anyway.
+                    yield from self.nbd_response(writer, handle)
 
                 else:
                     self.log.warning("[%s:%s] Unknown cmd %s, disconnecting"

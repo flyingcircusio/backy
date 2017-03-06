@@ -174,16 +174,19 @@ class Backup(object):
 
     @locked('.purge')
     def purge(self):
-        self.scan()
         backend = self.backend_factory(self.history[0])
         backend.purge(self)
+
+    @locked('.purge')
+    def scrub(self, type):
+        backend = self.backend_factory(self.history[0])
+        backend.scrub(self, type)
 
     #################
     # Restoring
 
     @locked('.purge')
     def restore(self, revision, target):
-        self.scan()
         r = self.find(revision)
         backend = self.backend_factory(r)
         s = backend.open('rb')
@@ -224,7 +227,6 @@ class Backup(object):
 
     @locked('.purge')
     def nbd_server(self, host, port):
-        self.scan()
         server = Server((host, port), self)
         server.serve_forever()
         self.purge()
@@ -239,9 +241,8 @@ class Backup(object):
         having to convert more in the future.
 
         """
-        self.scan()
         # Phase 1: update config file to chunked
-
+        # XXX
         # Phase 2: convert existing cowfiles
         from backy.backends.chunked import ChunkedFileBackend
         from backy.sources.file import File

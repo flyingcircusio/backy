@@ -39,10 +39,10 @@ class Command(object):
         self.path = path
 
     def init(self, type, source):
-        self._backup = backy.backup.Backup.init(self.path, type, source)
+        backy.backup.Backup.init(self.path, type, source)
 
     def status(self):
-        self._backup = backy.backup.Backup(self.path)
+        b = backy.backup.Backup(self.path)
         total_bytes = 0
 
         t = PrettyTable(['Date (UTC)', 'ID', 'Size', 'Durat', 'Tags'])
@@ -50,7 +50,7 @@ class Command(object):
         t.align['Size'] = 'r'
         t.align['Durat'] = 'r'
 
-        for r in self._backup.history:
+        for r in b.history:
             total_bytes += r.stats.get('bytes_written', 0)
             t.add_row([format_timestamp(r.timestamp).replace(' UTC', ''),
                        r.uuid,
@@ -61,27 +61,27 @@ class Command(object):
         print(t)
 
         print('{} revisions containing {} data (estimated)'.format(
-            len(self._backup.history),
+            len(b.history),
             format_bytes_flexible(total_bytes)))
 
     def backup(self, tags):
-        self._backup = backy.backup.Backup(self.path)
+        b = backy.backup.Backup(self.path)
         try:
             tags = set(t.strip() for t in tags.split(','))
-            self._backup.backup(tags)
+            b.backup(tags)
         except IOError as e:
             if e.errno not in [errno.EDEADLK, errno.EAGAIN]:
                 raise
             logger.info('Backup already in progress.')
-        self._backup._clean()
+        b._clean()
 
     def restore(self, revision, target):
-        self._backup = backy.backup.Backup(self.path)
-        self._backup.restore(revision, target)
+        b = backy.backup.Backup(self.path)
+        b.restore(revision, target)
 
     def find(self, revision):
-        self._backup = backy.backup.Backup(self.path)
-        print(self._backup.find(revision).filename)
+        b = backy.backup.Backup(self.path)
+        print(b.find(revision).filename)
 
     def scheduler(self, config):
         backy.daemon.main(config)
@@ -90,18 +90,16 @@ class Command(object):
         backy.daemon.check(config)
 
     def purge(self):
-        self._backup = backy.backup.Backup(self.path)
-        self._backup.purge()
+        b = backy.backup.Backup(self.path)
+        b.purge()
 
     def nbd(self, host, port):
-        backup = backy.backup.Backup('.')
-        backup.nbd_server(host, port)
+        b = backy.backup.Backup('.')
+        b.nbd_server(host, port)
 
     def scrub(self, type):
-        backup = backy.backup.Backup('.')
-        backup.scan()
-        backend = backup.backend_factory(backup.history[0])
-        backend.scrub(backup, type)
+        b = backy.backup.Backup('.')
+        b.scrub(type)
 
     def upgrade(self):
         backup = backy.backup.Backup('.')

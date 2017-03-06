@@ -225,10 +225,6 @@ def commands(tmpdir):
     return commands
 
 
-def test_commands_wrapper(commands):
-    assert isinstance(commands._backup, backy.backup.Backup)
-
-
 def test_commands_wrapper_init(commands, tmpdir):
     with pytest.raises(RuntimeError):
         # Already initialized by fixture. Doing again causes exception.
@@ -241,7 +237,8 @@ def test_commands_wrapper_init(commands, tmpdir):
 
 
 def test_commands_wrapper_status(commands, tmpdir, capsys, clock):
-    revision = Revision(commands._backup, 1)
+    b = backy.backup.Backup(str(tmpdir))
+    revision = Revision(b, 1)
     revision.timestamp = backy.utils.now()
     revision.materialize()
 

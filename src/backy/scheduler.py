@@ -9,8 +9,8 @@ import logging
 import os
 import os.path as p
 import random
+import subprocess
 import yaml
-
 
 logger = logging.getLogger(__name__)
 
@@ -25,100 +25,52 @@ class Task(object):
     def __init__(self, job):
         self.job = job
         self.tags = set()
-        self.finished = asyncio.Event()
-        self.returncode = None
+        self.run_immediately = asyncio.Event()
 
     @property
     def name(self):
         return self.job.name
 
-    # Maybe this should be run in an executor instead?
-    @asyncio.coroutine
-    def backup(self, future):
-        future.add_done_callback(lambda f: self.finished.set())
+    # Run this in an executor!
+    def backup(self):
+        try:
+            self.job.update_status('running')
+            logger.info('%s: running backup [%s] due %s',
+                        self.name, ', '.join(self.tags),
+                        self.ideal_start.isoformat())
 
-        logger.info('%s: running backup [%s] due %s',
-                    self.name, ', '.join(self.tags),
-                    self.ideal_start.isoformat())
+            self.job.update_config()
 
-        # XXX this isn't true async
-        self.job.update_config()
+            # Run backy command
+            logfile = p.join(self.job.path, 'backy.log')
+            cmd = [BACKY_CMD, '-b', self.job.path, '-l', logfile, 'backup',
+                   ','.join(self.tags)]
+            # capture stdout and stderr from shellouts into logfile as well
+            with open(logfile, 'a', encoding='utf-8', buffering=1) as log:
+                returncode = subprocess.call(cmd, stdout=log, stderr=log)
 
-        # Run backy command
-        logfile = p.join(self.job.path, 'backy.log')
-        cmd = [BACKY_CMD, '-b', self.job.path, '-l', logfile, 'backup',
-               ','.join(self.tags)]
-        # capture stdout and stderr from shellouts into logfile as well
-        with open(logfile, 'a', encoding='utf-8', buffering=1) as log:
-            process = yield from asyncio.create_subprocess_exec(
-                *cmd, stdout=log, stderr=log)
-            yield from process.communicate()
-        self.returncode = process.returncode
+            logger.info('%s: finished backup with return code %s',
+                        self.name, returncode)
 
-        logger.info('%s: finished backup with return code %s',
-                    self.name, self.returncode)
+            logger.info('%s: Expiring old revisions', self.name)
+            self.job.schedule.expire(self.job.backup)
 
-        # Expire backups
-        # TODO: this isn't true async, but it works for now.
-        self.job.expire()
-        future.set_result(self)
+            # Purge
+            logger.info('%s: Purging unused data', self.name)
+            cmd = [BACKY_CMD, '-b', self.job.path, '-l', logfile, 'purge']
+            returncode = subprocess.call(cmd)
+            logger.info('%s: finished purging with return code %s',
+                        self.name, returncode)
+        except Exception as e:
+            logger.exception(e)
 
     @asyncio.coroutine
     def wait_for_deadline(self):
-        while self.ideal_start > backy.utils.now():
-            remaining_time = self.ideal_start - backy.utils.now()
-            yield from asyncio.sleep(remaining_time.total_seconds())
-
-    @asyncio.coroutine
-    def wait_for_finished(self):
-        yield from self.finished.wait()
-
-
-class TaskPool(object):
-    """Processes tasks by assigning workers from a limited pool ASAP.
-
-    Chooses the next task based on its relative priority (it's ideal
-    start date).
-
-    Any task inserted into the pool will be worked on ASAP. Tasks are
-    not checked whether their deadline is due.
-    """
-
-    def __init__(self, loop, limit=2):
-        self.loop = loop
-        self.tasks = asyncio.PriorityQueue()
-        self.workers = asyncio.BoundedSemaphore(limit)
-
-    @asyncio.coroutine
-    def put(self, task):
-        """Insert task into queue for processing when due."""
-        yield from self.tasks.put((task.ideal_start, task))
-
-    @asyncio.coroutine
-    def get(self):
-        priority, task = yield from self.tasks.get()
-        return task
-
-    @asyncio.coroutine
-    def run(self):
-        logger.debug("starting to work on queue")
-        while True:
-            # Ok, lets get a worker slot and a task
-            yield from self.workers.acquire()
-            logger.debug('Got worker, %d idle', self.workers._value + 1)
-            task = yield from self.get()
-            logger.debug('Got task "%s"', task.name)
-            task_future = asyncio.Future()
-            self.loop.create_task(task.backup(task_future))
-            task_future.add_done_callback(self.finish_task)
-
-    def finish_task(self, future):
-        task = future.result()
-        if task.returncode > 0:  # pragma: no cover
-            logger.error('%s: exit status %s', task.name, task.returncode)
-        else:
-            logger.debug('%s: success', task.name)
-        self.workers.release()
+        remaining_time = self.ideal_start - backy.utils.now()
+        print(self.name, self.ideal_start, remaining_time)
+        yield from next(asyncio.as_completed([
+            asyncio.sleep(remaining_time.total_seconds()),
+            self.run_immediately.wait()]))
 
 
 class Job(object):
@@ -130,6 +82,7 @@ class Job(object):
     task = None
     path = None
     backup = None
+    running = False
 
     _generator_handle = None
 
@@ -219,12 +172,11 @@ class Job(object):
             self.task.ideal_start = next_time
             self.task.tags.update(next_tags)
 
-            self.update_status("waiting")
+            self.update_status("waiting for deadline")
             yield from task.wait_for_deadline()
-            self.update_status("submitting to worker queue")
-            yield from self.daemon.taskpool.put(task)
-            self.update_status("active")
-            yield from task.wait_for_finished()
+            logger.info("%s: got deadline trigger", self.name)
+            self.update_status("queued for execution")
+            yield from self.daemon.loop.run_in_executor(None, self.task.backup)
             self.update_status("finished")
 
     def start(self):
@@ -235,7 +187,3 @@ class Job(object):
         if self._generator_handle:
             self._generator_handle.cancel()
             self._generator_handle = None
-
-    def expire(self):
-        """Remove old revisions from my backup according to the schedule."""
-        return self.schedule.expire(self.backup)

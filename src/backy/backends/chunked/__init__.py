@@ -24,3 +24,8 @@ class ChunkedFileBackend(object):
             mode = 'rw'
             overlay = True
         return File(self.revision.filename, self.store, mode, overlay)
+
+    def purge(self, backup):
+        for revision in backup.history:
+            self.store.users.append(backup.backend_factory(revision).open())
+        self.store.purge()

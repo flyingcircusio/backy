@@ -84,12 +84,14 @@ class Command(object):
         print(self._backup.find(revision).filename)
 
     def scheduler(self, config):
-        self._backup = backy.backup.Backup(self.path)
         backy.daemon.main(config)
 
     def check(self, config):
-        self._backup = backy.backup.Backup(self.path)
         backy.daemon.check(config)
+
+    def purge(self):
+        self._backup = backy.backup.Backup(self.path)
+        self._backup.purge()
 
 
 def setup_argparser():
@@ -142,6 +144,14 @@ Restore (a given revision) to a given target.
 Copy backed up revision to TARGET. Use stdout if TARGET is "-".
 """)
     p.set_defaults(func='restore')
+
+    # BACKUP
+    p = subparsers.add_parser(
+        'purge',
+        help="""\
+Purge the backup store (i.e. chunked) from unused data.
+""")
+    p.set_defaults(func='purge')
 
     # FIND
     p = subparsers.add_parser('find', help="""\
@@ -214,7 +224,6 @@ def main(enable_fault_handler=True):
             logger.info('Backy operation complete.')
         sys.exit(0)
     except Exception as e:
-        # at least a *bit* of output to stderr in this case
         print('Error: {}'.format(e), file=sys.stderr)
         if args.logfile:
             logger.exception(e)

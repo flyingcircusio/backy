@@ -52,7 +52,7 @@ class Store(object):
             hash = rreplace(os.path.split(file)[1], '.chunk.lzo', '')
             yield file, hash, lambda f: lzo.decompress(open(f, 'rb').read())
 
-    def expunge(self):
+    def purge(self):
         # Need to hold a global lock. May want to limit operations holding
         # the lock to a certain number of operations and then release the lock
         # so that others can write again. After that we would have to get

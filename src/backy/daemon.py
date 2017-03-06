@@ -1,6 +1,7 @@
 from .schedule import Schedule
-from .scheduler import Job, TaskPool
+from .scheduler import Job
 from .utils import format_timestamp, SafeFile
+from concurrent.futures import ThreadPoolExecutor
 import asyncio
 import collections
 import fcntl
@@ -94,27 +95,31 @@ class BackyDaemon(object):
             logger.critical('failed to acquire lock %s: %s', lockfile, e)
             sys.exit(69)
 
-    def start(self, loop):  # pragma: no cover
+    def _prepare(self, loop):  # pragma: no cover
         """Starts the scheduler daemon."""
-        # Ensure single daemon instance.
         self._read_config()
+        # Ensure single daemon instance.
         self.lock()
+
+        self.loop = loop
+        self.taskpool = ThreadPoolExecutor(self.worker_limit)
+        self.loop.set_default_executor(self.taskpool)
+
+        self.running = True
+        self.async_tasks = set()
+
+    def start(self, loop):
+        self._prepare(loop)
 
         # semi-daemonize
         os.chdir(self.base_dir)
         with open('/dev/null', 'r+b') as null:
             os.dup2(null.fileno(), 0)
 
-        self.loop = loop
-        self.taskpool = TaskPool(loop, self.worker_limit)
-        self.running = True
-        self.async_tasks = set()
-        self.async_tasks.add(asyncio.async(self.taskpool.run()))
-        self.async_tasks.add(asyncio.async(self.save_status_file()))
-
-        # Start jobs
         for job in self.jobs.values():
             job.start()
+
+        self.async_tasks.add(asyncio.async(self.save_status_file()))
 
         def sighandler(signum, _traceback):
             logger.info('Received signal %s', signum)
@@ -136,6 +141,7 @@ class BackyDaemon(object):
 
     def terminate(self):
         logger.info('Terminating all tasks')
+        self.taskpool.shutdown()
         self.running = False
         for t in self.async_tasks:
             t.cancel()
@@ -253,16 +259,32 @@ class SchedulerShell(telnetlib3.Telsh):
         return 0
 
     def cmdset_status(self, *_args):
-        """Show worker status"""
-        t = prettytable.PrettyTable(['Property', 'Status'])
-        t.add_row(['Idle Workers', daemon.taskpool.workers._value + 1])
-        t.sortby = 'Property'
+        """Show job status overview"""
+        t = prettytable.PrettyTable(['Status', '#'])
+        state_summary = {}
+        for job in daemon.jobs.values():
+            state_summary.setdefault(job.status, 0)
+            state_summary[job.status] += 1
+
+        for state in sorted(state_summary):
+            t.add_row([state, state_summary[state]])
         self.stream.write(t.get_string().replace('\n', '\r\n'))
+        return 0
+
+    def cmdset_run(self, job, *extra_args):
+        """Show job status overview"""
+        job = daemon.jobs[job]
+        if not hasattr(job, 'task'):
+            self.stream.write('Task not ready. Try again later.')
+            return 1
+        job.task.run_immediately.set()
+        self.stream.write('Triggered immediate run for {}'.format(job.name))
         return 0
 
     autocomplete_cmdset = collections.OrderedDict([
         ('jobs', None),
         ('status', None),
+        ('run', None),
         ('quit', None),
     ])
 

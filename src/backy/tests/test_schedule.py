@@ -144,7 +144,6 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
     assert os.path.exists(r.filename + '.rev')
     removed = [x for x in schedule.expire(backup)]
     assert [r.uuid] == [x.uuid for x in removed]
-    removed[0]._remover.join()
     backup.scan()
     assert [{'daily'}] * 6 == [rev.tags for rev in backup.history]
     assert not os.path.exists(r.filename + '.rev')

@@ -1,6 +1,6 @@
 from backy.daemon import BackyDaemon
 from backy.revision import Revision
-from backy.scheduler import Task, TaskPool
+from backy.scheduler import Task
 from backy.backends.chunked import ChunkedFileBackend
 from unittest import mock
 import asyncio
@@ -13,8 +13,8 @@ import re
 import time
 
 
-@pytest.fixture
-def daemon(tmpdir):
+@pytest.yield_fixture
+def daemon(tmpdir, event_loop):
     daemon = BackyDaemon(str(tmpdir / 'config'))
     base_dir = str(tmpdir)
     source = str(tmpdir / 'test01.source')
@@ -44,8 +44,9 @@ jobs:
     with open(source, 'w') as f:
         f.write('I am your father, Luke!')
 
-    daemon._read_config()
-    return daemon
+    daemon._prepare(event_loop)
+    yield daemon
+    daemon.terminate()
 
 
 def test_fail_on_nonexistent_config():
@@ -54,15 +55,13 @@ def test_fail_on_nonexistent_config():
         daemon._read_config()
 
 
-@pytest.mark.asyncio
-def test_run_backup(event_loop, daemon):
+def test_run_backup(daemon):
     job = daemon.jobs['test01']
     t = Task(job)
     t.tags = set(['asdf'])
     # Not having a a deadline set causes this to fail.
     t.ideal_start = backy.utils.now()
-    task_future = asyncio.Future()
-    yield from t.backup(task_future)
+    t.backup()
     assert len(job.backup.history) == 1
     revision = job.backup.history[0]
     assert revision.tags == set(['asdf'])
@@ -72,8 +71,7 @@ def test_run_backup(event_loop, daemon):
 
     # Run again. This also covers the code path that works if
     # the target backup directory exists already.
-    task_future = asyncio.Future()
-    yield from t.backup(task_future)
+    t.backup()
     assert len(job.backup.history) == 2
     revision = job.backup.history[1]
     assert revision.tags == set(['asdf'])
@@ -167,7 +165,7 @@ def test_update_status(daemon, clock, tmpdir):
 
 
 @pytest.mark.asyncio
-def test_task_generator(daemon, clock, tmpdir, event_loop, monkeypatch):
+def test_task_generator(daemon, clock, tmpdir, monkeypatch):
     # This is really just a smoke tests, but it covers the task pool,
     # so hey, better than nothing.
 
@@ -177,14 +175,11 @@ def test_task_generator(daemon, clock, tmpdir, event_loop, monkeypatch):
     job = daemon.jobs['test01']
     job.start()
 
-    daemon.taskpool = TaskPool(event_loop)
-
     @asyncio.coroutine
     def null_coroutine(self):
         return
 
     monkeypatch.setattr(Task, 'wait_for_deadline', null_coroutine)
-    monkeypatch.setattr(Task, 'wait_for_finished', null_coroutine)
 
     # This patch causes a single run through the generator loop.
     def patched_update_status(status):

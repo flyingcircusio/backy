@@ -16,3 +16,7 @@ class COWFileBackend(object):
                 cp_reflink(parent.filename, self.revision.filename)
             self.revision.writable()
         return open(self.revision.filename, mode, buffering=CHUNK_SIZE)
+
+    def purge(self, backup):
+        # Nothing to do. This is a noop for cowfiles.
+        pass

@@ -16,17 +16,21 @@ import yaml
 logger = logging.getLogger(__name__)
 
 
-def locked(f):
-    def locked(self, *args, **kw):
-        if not getattr(self, '_configfile_fd', None):
-            config_path = p.join(self.path, 'config')
-            self._configfile_fd = os.open(config_path, os.O_RDONLY)
-        fcntl.flock(self._configfile_fd, fcntl.LOCK_EX)
-        try:
-            return f(self, *args, **kw)
-        finally:
-            fcntl.flock(self._configfile_fd, fcntl.LOCK_UN)
-    return locked
+def locked(target='config'):
+    def wrap(f):
+        def locked_function(self, *args, **kw):
+            if target not in self._lock_fds:
+                target_path = p.join(self.path, target)
+                if not os.path.exists(target_path):
+                    open(target_path, 'wb').close()
+                self._lock_fds[target] = os.open(target_path, os.O_RDONLY)
+            fcntl.flock(self._lock_fds[target], fcntl.LOCK_EX)
+            try:
+                return f(self, *args, **kw)
+            finally:
+                fcntl.flock(self._lock_fds[target], fcntl.LOCK_UN)
+        return locked_function
+    return wrap
 
 
 class Backup(object):
@@ -42,6 +46,8 @@ class Backup(object):
     backend_type = None
 
     def __init__(self, path):
+        self._lock_fds = {}
+
         self.path = p.realpath(path)
         self.scan()
 
@@ -116,7 +122,7 @@ class Backup(object):
     #################
     # Making backups
 
-    @locked
+    @locked()
     def _clean(self):
         """Clean-up incomplete revisions."""
         for revision in self.history:
@@ -125,7 +131,7 @@ class Backup(object):
                                format(revision.uuid))
                 revision.remove()
 
-    @locked
+    @locked()
     def backup(self, tags):
         start = time.time()
 
@@ -165,9 +171,16 @@ class Backup(object):
                 new_revision.readonly()
                 self.scan()
 
+    @locked('.purge')
+    def purge(self):
+        self.scan()
+        backend = self.backend_factory(self.history[0])
+        backend.purge(self)
+
     #################
     # Restoring
 
+    @locked('.purge')
     def restore(self, revision, target):
         self.scan()
         r = self.find(revision)
@@ -181,6 +194,7 @@ class Backup(object):
             else:
                 self.restore_stdout(source)
 
+    @locked('.purge')
     def restore_file(self, source, target):
         """Bulk-copy from open revision `source` to target file."""
         logger.debug('Copying from "%s" to "%s"...', source.name, target)
@@ -192,6 +206,7 @@ class Backup(object):
                 pass
             copy_overwrite(source, target)
 
+    @locked('.purge')
     def restore_stdout(self, source):
         """Emit restore data to stdout (for pipe processing)."""
         logger.debug('Dumping from "%s" to stdout...', source.name)
@@ -205,6 +220,12 @@ class Backup(object):
                 if not chunk:
                     break
                 target.write(chunk)
+
+    @locked('.purge')
+    def nbd_server(self):
+        pass
+
+        self.purge()
 
     ######################
     # Looking up revisions

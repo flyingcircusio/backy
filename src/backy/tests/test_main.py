@@ -25,7 +25,7 @@ def test_display_usage(capsys, argv):
     out, err = capsys.readouterr()
     assert """\
 usage: py.test [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
-               {init,backup,restore,find,status,scheduler,check} ...
+               {init,backup,restore,purge,find,status,scheduler,check} ...
 """ == out
     assert err == ""
 
@@ -38,7 +38,7 @@ def test_display_help(capsys, argv):
     out, err = capsys.readouterr()
     assert Ellipsis("""\
 usage: py.test [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
-               {init,backup,restore,find,status,scheduler,check} ...
+               {init,backup,restore,purge,find,status,scheduler,check} ...
 
 Backup and restore for block devices.
 

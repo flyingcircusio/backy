@@ -82,7 +82,6 @@ def test_delete_revision(backup):
     open(backup.path + '/123-456', 'w')
     assert p.exists(backup.path + '/123-456.rev')
     r.remove()
-    r._remover.join()
     # Ensure the revision data file exists - we do not implicitly create
     # it any longer.
     assert not p.exists(backup.path + '/123-456')

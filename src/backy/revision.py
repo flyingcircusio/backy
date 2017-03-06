@@ -1,4 +1,4 @@
-from .utils import SafeFile, now, safe_symlink, Remover
+from .utils import SafeFile, now, safe_symlink
 import datetime
 import glob
 import logging
@@ -90,9 +90,12 @@ class Revision(object):
         safe_symlink(self.info_filename, p.join(path, name + '.rev'))
 
     def remove(self):
-        remover = Remover(glob.glob(self.filename + '*'))
-        remover.start()
-        self._remover = remover  # test support
+        for filename in glob.glob(self.filename + '*'):
+            if os.path.exists(filename):
+                logging.info('Removing %s', filename)
+                os.remove(filename)
+                logging.info('Removed %s', filename)
+
         if self in self.backup.history:
             self.backup.history.remove(self)
 

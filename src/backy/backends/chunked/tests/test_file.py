@@ -51,7 +51,7 @@ def test_continuously_updated_file(tmpdir):
     store.validate()
 
     store.users.append(f)
-    store.expunge()
+    store.purge()
 
     sample.close()
     f.close()
@@ -91,7 +91,7 @@ def test_seeky_updated_file(tmpdir):
     store.validate()
 
     store.users.append(f)
-    store.expunge()
+    store.purge()
 
     sample.close()
     f.close()

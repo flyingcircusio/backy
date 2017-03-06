@@ -22,7 +22,8 @@ class Store(object):
         if not os.path.exists(self.path):
             os.makedirs(self.path)
 
-    def validate(self):
+    def validate_chunks(self):
+        errors = 0
         chunks = list(self.ls())
         progress = 0
         start = time.time()
@@ -30,8 +31,8 @@ class Store(object):
             data = read(file)
             hash = chunk.hash(data)
             if file_hash != hash:
-                yield "Content mismatch. Expected {} got {}".format(
-                    file_hash, hash)
+                yield ("Content mismatch. Expected {} got {}".format(
+                    file_hash, hash), errors)
             progress += 1
             now = time.time()
             time_elapsed = now - start
@@ -42,7 +43,8 @@ class Store(object):
                 yield ("Progress: {} of {} ({:.2f}%) "
                        "({:.0f}s elapsed, {:.0f}s remaining)".format(
                            progress, len(chunks), progress / len(chunks) * 100,
-                           time_elapsed, time_remaining))
+                           time_elapsed, time_remaining),
+                       errors)
 
     def ls(self):
         for file in glob.glob(self.path + '/*.chunk'):

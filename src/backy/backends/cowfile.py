@@ -20,3 +20,7 @@ class COWFileBackend(object):
     def purge(self, backup):
         # Nothing to do. This is a noop for cowfiles.
         pass
+
+    def scrub(self, backup, type):
+        # Nothing to do. This is a noop for cowfiles.
+        pass

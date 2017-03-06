@@ -93,6 +93,20 @@ class Command(object):
         self._backup = backy.backup.Backup(self.path)
         self._backup.purge()
 
+    def nbd(self, host, port):
+        backup = backy.backup.Backup('.')
+        backup.nbd_server(host, port)
+
+    def scrub(self, type):
+        backup = backy.backup.Backup('.')
+        backup.scan()
+        backend = backup.backend_factory(backup.history[0])
+        backend.scrub(backup, type)
+
+    def upgrade(self):
+        backup = backy.backup.Backup('.')
+        backup.upgrade()
+
 
 def setup_argparser():
     parser = argparse.ArgumentParser(
@@ -169,6 +183,32 @@ Show backup status. Show inventory and summary information.
 """)
     p.set_defaults(func='status')
 
+    # NBD
+    p = subparsers.add_parser('nbd-server', help="""\
+Serve the revisions of this backup through an NBD server.
+""")
+    p.add_argument('-H', '--host', default='127.0.0.1',
+                   help='which IP address to listen on (default: 127.0.0.1)')
+    p.add_argument('-p', '--port', default='9000', type=int,
+                   help='which port to listen on (default: 9000)')
+
+    p.set_defaults(func='nbd')
+
+    # scrub
+    p = subparsers.add_parser('scrub', help="""\
+Perform scrubbing to ensure data integrity. Lightweight scrubbing reduces IO
+load and runtime by only verifying metadata. Deep scrubbing ensures actual
+data consistency.
+""")
+    p.add_argument('type', choices=['light', 'deep'])
+    p.set_defaults(func='scrub')
+
+    # upgrade
+    p = subparsers.add_parser('upgrade', help="""\
+Upgrade this backup (incl. its data) to the newest supported version.
+""")
+    p.set_defaults(func='upgrade')
+
     # SCHEDULER DAEMON
     p = subparsers.add_parser(
         'scheduler',
@@ -225,7 +265,6 @@ def main(enable_fault_handler=True):
         sys.exit(0)
     except Exception as e:
         print('Error: {}'.format(e), file=sys.stderr)
-        if args.logfile:
-            logger.exception(e)
-            logger.info('Backy operation failed.')
+        logger.exception(e)
+        logger.info('Backy operation failed.')
         sys.exit(1)

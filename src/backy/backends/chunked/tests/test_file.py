@@ -48,7 +48,7 @@ def test_continuously_updated_file(tmpdir):
     chunked_data = f.read()
     assert data == chunked_data
 
-    store.validate()
+    store.validate_chunks()
 
     store.users.append(f)
     store.purge()
@@ -88,7 +88,7 @@ def test_seeky_updated_file(tmpdir):
     chunked_data = f.read()
     assert data == chunked_data
 
-    store.validate()
+    store.validate_chunks()
 
     store.users.append(f)
     store.purge()

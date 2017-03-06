@@ -1,5 +1,6 @@
 from .backends.chunked import ChunkedFileBackend
 from .backends.cowfile import COWFileBackend
+from .nbd.server import Server
 from .revision import Revision
 from .sources import select_source
 from .utils import SafeFile, copy_overwrite, CHUNK_SIZE, posix_fadvise
@@ -222,10 +223,42 @@ class Backup(object):
                 target.write(chunk)
 
     @locked('.purge')
-    def nbd_server(self):
-        pass
-
+    def nbd_server(self, host, port):
+        self.scan()
+        server = Server((host, port), self)
+        server.serve_forever()
         self.purge()
+
+    @locked()
+    def upgrade(self):
+        """Upgrade this backups store from cowfile to chunked.
+
+        This can take a long time and is intended to be interruptable.
+
+        We start creating new backups with chunked right away to avoid
+        having to convert more in the future.
+
+        """
+        self.scan()
+        # Phase 1: update config file to chunked
+
+        # Phase 2: convert existing cowfiles
+        from backy.backends.chunked import ChunkedFileBackend
+        from backy.sources.file import File
+
+        for revision in self.history:
+            if revision.backend_type != 'cowfile':
+                continue
+            print("Converting {}".format(revision.uuid))
+            original_file = revision.filename + '.old'
+            os.rename(revision.filename, original_file)
+            revision.writable()
+            chunked = ChunkedFileBackend(revision)
+            chunked.clone_parent = False
+            cowfile = File(dict(filename=original_file, cow=False))(revision)
+            cowfile.backup(chunked)
+            revision.readonly()
+            os.unlink(original_file)
 
     ######################
     # Looking up revisions

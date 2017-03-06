@@ -41,8 +41,9 @@ class Chunk(object):
                     data = f.read()
                 self.clean = False
             elif os.path.exists(compressed):
-                data = open(compressed, 'rb').read()
-                data = lzo.decompress(data)
+                with open(compressed, 'rb') as f:
+                    data = f.read()
+                    data = lzo.decompress(data)
 
         self.data = io.BytesIO(data)
 
@@ -92,6 +93,7 @@ class Chunk(object):
         target = self.store.chunk_path(self.hash)
         if not os.path.exists(target):
             fd, tmpfile_name = tempfile.mkstemp(dir=self.store.path)
+            os.close(fd)
             with open(tmpfile_name, mode='wb') as f:
                 f.write(lzo.compress(self.data.getvalue()))
                 f.flush()

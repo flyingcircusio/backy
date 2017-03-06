@@ -59,11 +59,20 @@ class Schedule(object):
             self.schedule[tag]['interval'] = parse_duration(spec['interval'])
 
     def next(self, relative, spread, archive):
-        catchup = self._next_catchup(relative, spread, archive)
-        if catchup[1]:
-            return catchup
-        else:
-            return self._next_ideal(relative, spread)
+        time, tags = ideal_time, ideal_tags = self._next_ideal(
+            relative, spread)
+        missed_tags = self._missed(archive)
+        # The next run will include all missed tags
+        tags.update(missed_tags)
+        if missed_tags and len(archive.history):
+            # Perform an immediate backup if we have any history at all.
+            # and when we aren't running a regular backup within the next
+            # 5 minutes anyway.
+            grace_period = datetime.timedelta(seconds=5 * 60)
+            if ideal_time > backy.utils.now() + grace_period:
+                time = backy.utils.now()
+                tags = missed_tags
+        return time, tags
 
     def _next_ideal(self, relative, spread):
         next_times = {}
@@ -76,27 +85,18 @@ class Schedule(object):
         next_tags = next_times[next_time]
         return next_time, next_tags
 
-    def _next_catchup(self, relative, spread, archive):
-        # Catch up based on the spread within the next
-        # 15 minutes.
+    def _missed(self, archive):
+        # Check whether we missed any
         now = backy.utils.now()
-        catchup_tags = set(self.schedule.keys())
-        archive.scan()
+        missing_tags = set(self.schedule.keys())
         for tag, last in archive.last_by_tag().items():
             if tag not in self.schedule:
                 # Ignore ad-hoc tags for catching up.
                 continue
             if last > now - self.schedule[tag]['interval']:
                 # We had a valid backup within the interval
-                catchup_tags.remove(tag)
-            if last < now - self.schedule[tag]['interval'] * 1.5:
-                # Our last valid backup is almost due, we have passed
-                # the 50% mark to the next backup and won't do a
-                catchup_tags.remove(tag)
-        # Catchups always happen immediately. There is no point in waiting as
-        # we already have missed originally necessary backups due to
-        # shutdown of the server or such.
-        return (backy.utils.now(), catchup_tags)
+                missing_tags.remove(tag)
+        return missing_tags
 
     def expire(self, backup):
         """Remove old revisions according to the backup schedule.

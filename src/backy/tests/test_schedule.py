@@ -19,12 +19,12 @@ def test_parse_duration():
     assert parse_duration('5') == timedelta(seconds=5)
 
 
-def test_first_backup_catches_up_all_tags_immediately(
+def test_first_backup_catches_up_all_tags_immediately_in_next_interval(
         schedule, backup, clock):
     schedule.configure({'daily': {'interval': '1d', 'keep': 5},
                         'test': {'interval': '7d', 'keep': 7}})
     assert (
-        (datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC), {'daily', 'test'}) ==
+        (datetime(2015, 9, 2, 0, 0, 1, tzinfo=pytz.UTC), {'daily', 'test'}) ==
         schedule.next(backy.utils.now(), 1, backup))
 
 
@@ -53,12 +53,11 @@ def test_tag_catchup_not_needed_for_recent(schedule, backup, clock):
     revision.timestamp = clock.now() - timedelta(seconds=15)
     revision.tags = {'daily'}
     backup.history.append(revision)
-    assert ((datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC), {'daily'}) ==
-            schedule._next_catchup(clock.now(), 1, backup))
+    assert set() == schedule._missed(backup)
     # This in turn causes the main next() function to return the regular next
     # interval.
     assert (
-        (datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC), {'daily'}) ==
+        (datetime(2015, 9, 2, 0, 0, 1, tzinfo=pytz.UTC), {'daily'}) ==
         schedule.next(clock.now(), 1, backup))
 
 
@@ -68,10 +67,10 @@ def test_tag_catchup_does_not_stumble_on_adhoc_tags_in_backup(
     revision.timestamp = clock.now() - timedelta(seconds=15)
     revision.tags = {'test'}
     backup.history.append(revision)
-    schedule._next_catchup(clock.now(), 1, backup)
+    assert set({'daily'}) == schedule._missed(backup)
 
 
-def test_tag_catchup_not_needed_for_very_old(schedule, backup, clock):
+def test_tag_catchup_until_5_minutes_before_next(schedule, backup, clock):
     # If a backup has been overdue for too long, we expect the
     # tag to be scheduled soon anyway and we do not catch up to avoid
     # overload issues.
@@ -80,28 +79,48 @@ def test_tag_catchup_not_needed_for_very_old(schedule, backup, clock):
     revision.tags = {'daily'}
     revision.write_info()
     backup.history.append(revision)
-    assert ((datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC), {'daily'}) ==
-            schedule._next_catchup(clock.now(), 1, backup))
+    assert set({'daily'}) == schedule._missed(backup)
     # This in turn causes the main next() function to return the regular next
     # interval.
     assert (
         (datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC), {'daily'}) ==
         schedule.next(clock.now(), 1, backup))
+    # As we approach the 5 minute mark before the next regular interval,
+    # we then flip towards the ideal time.
+    clock.now.return_value = datetime(2015, 9, 1, 23, 55, 0, tzinfo=pytz.UTC)
+    assert (
+        (clock.now(), {'daily'}) == schedule.next(
+            datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC), 1, backup))
+
+    clock.now.return_value = datetime(2015, 9, 1, 23, 55, 1, tzinfo=pytz.UTC)
+    assert (
+        (datetime(2015, 9, 2, 0, 0, 1, tzinfo=pytz.UTC), {'daily'}) ==
+        schedule.next(
+            datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC), 1, backup))
 
 
-def test_tag_catchup_needed_for_recently_missed(schedule, backup, clock):
+def test_tag_catchup_needed_for_recently_missed(backup, clock):
     revision = mock.Mock()
-    # A catchup is needed because the daily backup has been longer than 1 day
-    # but less than 1.5 days.
+
+    schedule = backy.schedule.Schedule()
+    schedule.configure({'daily': {'interval': '1d', 'keep': 5},
+                        'hourly': {'interval': '1h', 'keep': 24},
+                        'weekly': {'interval': '7d', 'keep': 7}})
+
+    # A bad situation that we want to remedy as fast as possible:
+    #   - no weekly backup at all
+    #   - no hourly backup at all
+    #   - the only daily is older than 1.2 times
     revision.timestamp = clock.now() - timedelta(seconds=(24 * 60 * 60) * 1.2)
     revision.tags = {'daily'}
     backup.history.append(revision)
-    assert ((datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC), {'daily'}) ==
-            schedule._next_catchup(clock.now(), 1, backup))
+
+    assert {'daily', 'weekly', 'hourly'} == schedule._missed(backup)
     # This in turn causes the main next() function to also
     # return this date.
     assert (
-        (datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC), {'daily'}) ==
+        (datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC),
+         {'daily', 'weekly', 'hourly'}) ==
         schedule.next(clock.now(), 1, backup))
 
 

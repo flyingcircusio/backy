@@ -7,6 +7,18 @@ import os
 import pytest
 import pytz
 import structlog
+import shutil
+
+
+fixtures = os.path.dirname(__file__) + '/tests/samples'
+
+
+@pytest.fixture
+def simple_file_config(tmpdir, monkeypatch):
+    shutil.copy(fixtures + '/simple_file/config', str(tmpdir))
+    monkeypatch.chdir(tmpdir)
+    b = backy.backup.Backup(str(tmpdir))
+    return b
 
 
 def pytest_assertrepr_compare(op, left, right):

@@ -35,9 +35,12 @@ class Revision(object):
             r.parent = backup.history[-1].uuid
         return r
 
+    @property
+    def backend(self):
+        return self.backup.backend_factory(self)
+
     def open(self, mode='rb'):
-        backend = self.backup.backend_factory(self)
-        return backend.open(mode)
+        return self.backend.open(mode)
 
     @classmethod
     def load(cls, filename, backup):

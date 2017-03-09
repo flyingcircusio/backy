@@ -32,18 +32,11 @@ class Chunk(object):
         # easier random access combined with transparent compression.
         data = b''
 
-        # We may have an existing file that is uncompressed.
         if self.hash:
-            raw = self.store.chunk_path(self.hash, compressed=False)
-            compressed = self.store.chunk_path(self.hash)
-            if os.path.exists(raw):
-                with open(raw, 'rb') as f:
-                    data = f.read()
-                self.clean = False
-            elif os.path.exists(compressed):
-                with open(compressed, 'rb') as f:
-                    data = f.read()
-                    data = lzo.decompress(data)
+            chunk_file = self.store.chunk_path(self.hash)
+            with open(chunk_file, 'rb') as f:
+                data = f.read()
+                data = lzo.decompress(data)
 
         self.data = io.BytesIO(data)
 
@@ -98,11 +91,20 @@ class Chunk(object):
                 f.write(lzo.compress(self.data.getvalue()))
                 f.flush()
                 os.fsync(f)
+            subdir = os.path.dirname(target)
+            if not os.path.exists(subdir):  # pragma: no cover
+                # I'm not covering the "not" case as this requires me to
+                # provide two pieces of data with the same first 2 murmur
+                # bytes. I see these in real life but it's really hard to
+                # produce them and I don't want to include 4MiB test data
+                # just for this single one case. I guess there'll be a day
+                # in a few years in the future when my future self would
+                # like to kill me for that. -_- To that I say: I promised
+                # to have looked at this hard enough to make that decision.
+                # So: mea culpa and tough luck.
+                os.makedirs(subdir)
             os.rename(tmpfile_name, target)
             os.chmod(target, 0o440)
-        uncompressed = self.store.chunk_path(self.hash, compressed=False)
-        if os.path.exists(uncompressed):
-            os.unlink(uncompressed)
         self.clean = True
 
     def _update_hash(self):

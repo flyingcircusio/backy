@@ -16,20 +16,50 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
+# Locking strategy:
+#
+# - You can only run one backup of a machine at a time, as the backup will
+#   interact with this machines' list of snapshots and will get confused
+#   if run in parallel.
+# - You can restore/nbd while a backup is running.
+# - You can only purge while nothing else is happening.
+# - Trying to get a shared lock (specifically purge) will block and wait
+#   whereas trying to get an exclusive lock (running backups, purging) will
+#   immediately give up.
+# - Locking is not re-entrant. It's forbidden and protected to call another
+#   locking main function.
 
-def locked(target='config'):
+
+def locked(target=None, mode=None):
+    if mode == 'shared':
+        mode = fcntl.LOCK_SH
+    elif mode == 'exclusive':
+        mode = fcntl.LOCK_EX | fcntl.LOCK_NB
+    else:
+        raise ValueError("Unknown lock mode '{}'".format(mode))
+
     def wrap(f):
         def locked_function(self, *args, **kw):
-            if target not in self._lock_fds:
-                target_path = p.join(self.path, target)
-                if not os.path.exists(target_path):
-                    open(target_path, 'wb').close()
-                self._lock_fds[target] = os.open(target_path, os.O_RDONLY)
-            fcntl.flock(self._lock_fds[target], fcntl.LOCK_EX)
+            if target in self._lock_fds:
+                raise RuntimeError('Bug: Locking is not re-entrant.')
+            target_path = p.join(self.path, target)
+            if not os.path.exists(target_path):
+                open(target_path, 'wb').close()
+            self._lock_fds[target] = os.open(target_path, os.O_RDONLY)
             try:
-                return f(self, *args, **kw)
+                fcntl.flock(self._lock_fds[target], mode)
+            except BlockingIOError:
+                print("Failed to get exclusive lock for '{}'. Continuing.".
+                      format(f.__name__))
+                return
+            else:
+                try:
+                    return f(self, *args, **kw)
+                finally:
+                    fcntl.flock(self._lock_fds[target], fcntl.LOCK_UN)
             finally:
-                fcntl.flock(self._lock_fds[target], fcntl.LOCK_UN)
+                del self._lock_fds[target]
+        locked_function.__name__ = 'locked({}, {})'.format(f.__name__, target)
         return locked_function
     return wrap
 
@@ -123,7 +153,7 @@ class Backup(object):
     #################
     # Making backups
 
-    @locked()
+    @locked(target='.backup', mode='exclusive')
     def _clean(self):
         """Clean-up incomplete revisions."""
         for revision in self.history:
@@ -132,30 +162,16 @@ class Backup(object):
                                format(revision.uuid))
                 revision.remove()
 
-    @locked()
+    @locked(target='.backup', mode='exclusive')
+    @locked(target='.purge', mode='shared')
     def backup(self, tags):
         start = time.time()
-
-        self._clean()
 
         new_revision = Revision.create(self, tags)
         new_revision.materialize()
         logger.info('New revision {} [{}]'.format(
                     new_revision.uuid, ','.join(new_revision.tags)))
 
-        if False:
-            # XXX Helper for debugging, do not check in
-            old = self.find(new_revision.parent)
-            backend_old = self.backend_factory(old)
-            source_old = self.source(old)
-            with source_old as old_source:
-                r = old_source.verify(backend_old)
-                if not r:
-                    logger.error('New revision does not match source '
-                                 '- removing it.')
-                    return
-
-        # XXX
         backend = self.backend_factory(new_revision)
         with self.source(new_revision) as source:
             source.backup(backend)
@@ -172,12 +188,12 @@ class Backup(object):
                 new_revision.readonly()
                 self.scan()
 
-    @locked('.purge')
+    @locked(target='.purge', mode='exclusive')
     def purge(self):
         backend = self.backend_factory(self.history[0])
         backend.purge(self)
 
-    @locked('.purge')
+    @locked(target='.purge', mode='shared')
     def scrub(self, type):
         backend = self.backend_factory(self.history[0])
         backend.scrub(self, type)
@@ -185,7 +201,8 @@ class Backup(object):
     #################
     # Restoring
 
-    @locked('.purge')
+    # This needs no locking as it's only a wrapper for restore_file and
+    # restore_stdout and locking isn't re-entrant.
     def restore(self, revision, target):
         r = self.find(revision)
         backend = self.backend_factory(r)
@@ -198,7 +215,7 @@ class Backup(object):
             else:
                 self.restore_stdout(source)
 
-    @locked('.purge')
+    @locked(target='.purge', mode='shared')
     def restore_file(self, source, target):
         """Bulk-copy from open revision `source` to target file."""
         logger.debug('Copying from "%s" to "%s"...', source.name, target)
@@ -210,7 +227,7 @@ class Backup(object):
                 pass
             copy_overwrite(source, target)
 
-    @locked('.purge')
+    @locked(target='.purge', mode='shared')
     def restore_stdout(self, source):
         """Emit restore data to stdout (for pipe processing)."""
         logger.debug('Dumping from "%s" to stdout...', source.name)
@@ -225,13 +242,12 @@ class Backup(object):
                     break
                 target.write(chunk)
 
-    @locked('.purge')
+    @locked(target='.purge', mode='shared')
     def nbd_server(self, host, port):
         server = Server((host, port), self)
         server.serve_forever()
-        self.purge()
 
-    @locked()
+    @locked(target='.purge', mode='shared')
     def upgrade(self):
         """Upgrade this backup's store from cowfile to chunked.
 

@@ -41,7 +41,7 @@ class File(object):
         self.mode = mode
 
         if not os.path.exists(name) and 'w' not in mode:
-            raise RuntimeError('File not found: {}'.format(self.name))
+            raise FileNotFoundError('File not found: {}'.format(self.name))
 
         if not os.path.exists(name):
             self._mapping = {}
@@ -99,18 +99,6 @@ class File(object):
                 f.flush()
                 os.fsync(f)
 
-            with open(self.name + '.restore', 'wb') as f:
-                base = os.path.dirname(self.name)
-                f.write(b'#!/bin/bash\n')
-
-                for cid in sorted(self._mapping):
-                    path = self.store.chunk_path(self._mapping[cid])
-                    path = os.path.relpath(path, base)
-                    f.write('gunzip -c {}\n'.format(path).encode('ascii'))
-
-                f.flush()
-                os.fsync(f)
-
     def close(self):
         assert not self.closed
         if 'w' in self.mode:
@@ -142,7 +130,7 @@ class File(object):
         elif whence == io.SEEK_END:
             position = self.size - offset
         elif whence == io.SEEK_CUR:
-            position = position + whence
+            position = position + offset
         else:
             raise ValueError(
                 '`whence` does not support mode {}'.format(whence))
@@ -150,8 +138,24 @@ class File(object):
         if position < 0:
             raise ValueError('Can not seek before the beginning of a file.')
         if position > self.size:
+            # Fill up the missing parts with zeroes.
+            target = position
+            self.seek(self.size)
+            # This is not performance optimized at all. We could do some
+            # lower-level magic to avoid copying data all over all the time.
+            # Ideally we would fill up the last existing chunk and then
+            # just inject the well-known "zero chunk" into the map.
+            filler = position - self.size
+            while filler > 0:
+                chunk = min(filler, 4 * 1024 * 1024) * b'\00'
+                filler = filler - len(chunk)
+                self.write(chunk)
 
-            self.size = position
+            # Filling up should have caused our position to have moved properly
+            # and the size also reflecting this already.
+            assert self._position == target
+            assert self.size == target
+
         self._position = position
         return position
 

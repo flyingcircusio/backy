@@ -66,6 +66,7 @@ class Command(object):
 
     def backup(self, tags):
         b = backy.backup.Backup(self.path)
+        b._clean()
         try:
             tags = set(t.strip() for t in tags.split(','))
             b.backup(tags)
@@ -73,7 +74,8 @@ class Command(object):
             if e.errno not in [errno.EDEADLK, errno.EAGAIN]:
                 raise
             logger.info('Backup already in progress.')
-        b._clean()
+        finally:
+            b._clean()
 
     def restore(self, revision, target):
         b = backy.backup.Backup(self.path)

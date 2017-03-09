@@ -11,7 +11,7 @@ SPACE_CHUNK_HASH = (
 
 
 def test_chunk_read_write_update(tmpdir):
-    store = Store(str(tmpdir))
+    store = Store(str(tmpdir / 'store'))
     f = File(str(tmpdir / 'asdf'), store)
 
     chunk = Chunk(f, 1, store, None)
@@ -23,7 +23,7 @@ def test_chunk_read_write_update(tmpdir):
 
 
 def test_chunk_write_partial_offset(tmpdir):
-    store = Store(str(tmpdir))
+    store = Store(str(tmpdir / 'store'))
     f = File(str(tmpdir / 'asdf'), store)
 
     chunk = Chunk(f, 1, store, None)
@@ -52,24 +52,12 @@ def test_chunk_write_partial_offset(tmpdir):
     assert store_state == os.stat(store.chunk_path(SPACE_CHUNK_HASH))
 
 
-def test_chunk_read_existing_uncompressed(tmpdir):
-    store = Store(str(tmpdir))
-    with open(store.chunk_path('asdf', compressed=False), 'wb') as existing:
-        existing.write(b'asdf')
+def test_chunk_read_existing(tmpdir):
+    store = Store(str(tmpdir / 'store'))
 
-    f = File(str(tmpdir / 'asdf'), store)
-
-    chunk = Chunk(f, 1, store, 'asdf')
-    assert chunk.read(0) == (b'asdf', -1)
-    assert chunk.read(0, 10) == (b'asdf', 6)
-
-    # Check that flushing a file that hasn't been written to does not fail.
-    chunk.flush()
-
-
-def test_chunk_read_existing_compressed(tmpdir):
-    store = Store(str(tmpdir))
-    with open(store.chunk_path('asdf'), 'wb') as existing:
+    p = store.chunk_path('asdf')
+    os.makedirs(os.path.dirname(p))
+    with open(p, 'wb') as existing:
         existing.write(lzo.compress(b'asdf'))
 
     f = File(str(tmpdir / 'asdf'), store)
@@ -82,21 +70,12 @@ def test_chunk_read_existing_compressed(tmpdir):
     chunk.flush()
 
 
-def test_chunk_write_existing_uncompressed(tmpdir):
-    store = Store(str(tmpdir))
-    with open(store.chunk_path('asdf', compressed=False), 'wb') as existing:
-        existing.write(b'asdf')
+def test_chunk_write_existing(tmpdir):
+    store = Store(str(tmpdir / 'store'))
 
-    f = File(str(tmpdir / 'asdf'), store)
-
-    chunk = Chunk(f, 1, store, 'asdf')
-    chunk.write(2, b'xxsdf')
-    assert chunk.read(0) == (b'asxxsdf', -1)
-
-
-def test_chunk_write_existing_compressed(tmpdir):
-    store = Store(str(tmpdir))
-    with open(store.chunk_path('asdf'), 'wb') as existing:
+    p = store.chunk_path('asdf')
+    os.makedirs(os.path.dirname(p))
+    with open(p, 'wb') as existing:
         existing.write(lzo.compress(b'asdf'))
 
     f = File(str(tmpdir / 'asdf'), store)

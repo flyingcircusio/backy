@@ -5,18 +5,6 @@ import backy.utils
 import yaml
 import os.path
 import pytest
-import shutil
-
-
-fixtures = os.path.dirname(__file__) + '/samples'
-
-
-@pytest.fixture
-def simple_file_config(tmpdir, monkeypatch):
-    shutil.copy(fixtures + '/simple_file/config', str(tmpdir))
-    monkeypatch.chdir(tmpdir)
-    b = Backup(str(tmpdir))
-    return b
 
 
 def test_config(simple_file_config, tmpdir):
@@ -101,9 +89,8 @@ def test_restore_stdout(simple_file_config, capfd):
     source = 'input-file'
     with open(source, 'wb') as f:
         f.write(b'volume contents\n')
-    backup.backup('daily')
+    backup.backup(['daily'])
     backup.restore(0, '-')
     assert not os.path.exists('-')
     out, err = capfd.readouterr()
     assert 'volume contents\n' == out
-    assert '' == err

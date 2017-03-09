@@ -36,9 +36,11 @@ class ChunkedFileBackend(object):
 
     def scrub(self, backup, type):
         if type == 'light':
-            self.scrub_light(backup)
+            return self.scrub_light(backup)
         elif type == 'deep':
-            self.scrub_deep(backup)
+            return self.scrub_deep(backup)
+        else:
+            raise RuntimeError('Invalid scrubbing type {}'.format(type))
 
     def scrub_light(self, backup):
         errors = 0
@@ -49,9 +51,6 @@ class ChunkedFileBackend(object):
             for hash in backend._mapping.values():
                 if os.path.exists(backend.store.chunk_path(hash)):
                     continue
-                if os.path.exists(
-                        backend.store.chunk_path(hash, compressed=False)):
-                    continue
                 print("Missing chunk {} in revision {}".format(
                       hash, revision.uuid))
                 errors += 1
@@ -60,6 +59,7 @@ class ChunkedFileBackend(object):
     def scrub_deep(self, backup):
         errors = self.scrub_light(backup)
         print("Validating chunks")
+        chunk_errors = 0
         for progress, chunk_errors in self.store.validate_chunks():
             print(progress)
         return errors + chunk_errors

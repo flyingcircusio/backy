@@ -28,9 +28,15 @@ class Store(object):
         progress = 0
         start = time.time()
         for file, file_hash, read in chunks:
-            data = read(file)
-            hash = chunk.hash(data)
+            try:
+                data = read(file)
+            except Exception:
+                # Typical Exceptions would be IOError, TypeError (lzo)
+                hash = None
+            else:
+                hash = chunk.hash(data)
             if file_hash != hash:
+                errors += 1
                 yield ("Content mismatch. Expected {} got {}".format(
                     file_hash, hash), errors)
             progress += 1
@@ -39,26 +45,23 @@ class Store(object):
             per_chunk = time_elapsed / progress
             remaining = len(chunks) - progress
             time_remaining = remaining * per_chunk
-            if progress == 5 or not progress % 100:
+            if progress == 5 or not progress % 100:  # pragma: nocover
                 yield ("Progress: {} of {} ({:.2f}%) "
                        "({:.0f}s elapsed, {:.0f}s remaining)".format(
                            progress, len(chunks), progress / len(chunks) * 100,
                            time_elapsed, time_remaining),
                        errors)
+        return errors
 
     def ls(self):
-        for file in glob.glob(self.path + '/*.chunk'):
-            hash = rreplace(os.path.split(file)[1], '.chunk', '')
-            yield file, hash, lambda f: open(f, 'rb').read()
-        for file in glob.glob(self.path + '/*.chunk.lzo'):
+        pattern = os.path.join(self.path, '*/*/*.chunk.lzo')
+        for file in glob.glob(pattern):
             hash = rreplace(os.path.split(file)[1], '.chunk.lzo', '')
             yield file, hash, lambda f: lzo.decompress(open(f, 'rb').read())
 
     def purge(self):
-        # Need to hold a global lock. May want to limit operations holding
-        # the lock to a certain number of operations and then release the lock
-        # so that others can write again. After that we would have to get
-        # the lock again and then reload the list of our users.
+        # This assumes exclusive lock on the store. Thisi s guaranteed by
+        # backy's main locking.
         used_hashes = set()
         for user in self.users:
             used_hashes.update(user._mapping.values())
@@ -68,8 +71,15 @@ class Store(object):
             if file_hash not in used_hashes:
                 os.unlink(file)
                 unlinked += 1
-        print("Expunged: {} chunks".format(unlinked))
+            try:
+                os.rmdir(os.path.dirname(file))
+            except OSError:
+                # Dir is not empty. Ignore.
+                pass
+        print("Purged: {} chunks".format(unlinked))
 
-    def chunk_path(self, hash, compressed=True):
-        extension = '.chunk.lzo' if compressed else '.chunk'
-        return os.path.join(self.path, hash + extension)
+    def chunk_path(self, hash):
+        dir1 = hash[:2]
+        dir2 = hash[2:4]
+        extension = '.chunk.lzo'
+        return os.path.join(self.path, dir1, dir2, hash + extension)

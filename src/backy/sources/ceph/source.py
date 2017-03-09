@@ -92,7 +92,8 @@ class CephRBD(object):
             self.pool, self.image, self.revision.uuid))
         t = target.open('r+b')
         with s as source, t as target:
-            bytes = shutil.copyfileobj(source, target)
+            shutil.copyfileobj(source, target)
+            bytes = source.tell()
         self.revision.stats['bytes_written'] = bytes
 
     def verify(self, target):

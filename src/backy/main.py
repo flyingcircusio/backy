@@ -9,6 +9,7 @@ import errno
 import faulthandler
 import logging
 import logging.handlers
+import signal
 import sys
 
 
@@ -104,8 +105,9 @@ class Command(object):
         b.scrub(type)
 
     def upgrade(self):
-        backup = backy.backup.Backup('.')
-        backup.upgrade()
+        b = backy.backup.Backup('.')
+        b._clean()
+        b.upgrade()
 
 
 def setup_argparser():
@@ -249,6 +251,7 @@ def main(enable_fault_handler=True):
     # Process inspection
     if enable_fault_handler:
         faulthandler.enable()
+        faulthandler.register(signal.SIGUSR2)
 
     # Pass over to function
     func_args = dict(args._get_kwargs())

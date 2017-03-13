@@ -59,7 +59,5 @@ class ChunkedFileBackend(object):
     def scrub_deep(self, backup):
         errors = self.scrub_light(backup)
         print("Validating chunks")
-        chunk_errors = 0
-        for progress, chunk_errors in self.store.validate_chunks():
-            print(progress)
-        return errors + chunk_errors
+        errors += self.store.validate_chunks()
+        return errors

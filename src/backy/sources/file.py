@@ -1,6 +1,5 @@
-from backy.utils import copy_overwrite, files_are_equal
+from backy.utils import copy, copy_overwrite, files_are_equal
 import logging
-import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +30,11 @@ class File(object):
         t = target.open('r+b')
         with s as source, t as target:
             if self.cow:
+                logger.info("Using sparse copy")
                 bytes = copy_overwrite(source, target)
             else:
-                print("using copyfileobj")
-                shutil.copyfileobj(source, target, length=4 * 1024 * 1024)
-                bytes = source.tell()
+                logger.info("Using full copy")
+                bytes = copy(source, target)
 
         self.revision.stats['bytes_written'] = bytes
 

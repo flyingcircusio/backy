@@ -1,8 +1,8 @@
+from . import chunk
+from backy.utils import report_status, END
 import glob
 import lzo
 import os.path
-import time
-from . import chunk
 
 # A chunkstore, is responsible for all revisions for a single backup, for now.
 # We can start having statistics later how much reuse between images is
@@ -22,11 +22,11 @@ class Store(object):
         if not os.path.exists(self.path):
             os.makedirs(self.path)
 
+    @report_status
     def validate_chunks(self):
         errors = 0
         chunks = list(self.ls())
-        progress = 0
-        start = time.time()
+        yield len(chunks)
         for file, file_hash, read in chunks:
             try:
                 data = read(file)
@@ -39,19 +39,9 @@ class Store(object):
                 errors += 1
                 yield ("Content mismatch. Expected {} got {}".format(
                     file_hash, hash), errors)
-            progress += 1
-            now = time.time()
-            time_elapsed = now - start
-            per_chunk = time_elapsed / progress
-            remaining = len(chunks) - progress
-            time_remaining = remaining * per_chunk
-            if progress == 5 or not progress % 100:  # pragma: nocover
-                yield ("Progress: {} of {} ({:.2f}%) "
-                       "({:.0f}s elapsed, {:.0f}s remaining)".format(
-                           progress, len(chunks), progress / len(chunks) * 100,
-                           time_elapsed, time_remaining),
-                       errors)
-        return errors
+            yield
+        yield END
+        yield errors
 
     def ls(self):
         pattern = os.path.join(self.path, '*/*/*.chunk.lzo')

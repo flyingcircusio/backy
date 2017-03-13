@@ -261,12 +261,18 @@ class Backup(object):
         from backy.backends.chunked import ChunkedFileBackend
         from backy.sources.file import File
 
+        last_worklist = []
+
         while True:
             self.scan()
             to_upgrade = [r for r in self.clean_history
                           if r.backend_type == 'cowfile']
             if not to_upgrade:
                 break
+            if to_upgrade == last_worklist:
+                print("Not making progress, exiting.")
+                break
+            last_worklist = to_upgrade
 
             print("Found {} revisions to upgrade.".format(len(to_upgrade)))
             # Upgrade the newest then start again. The revisions may change
@@ -275,28 +281,37 @@ class Backup(object):
             # quickly as possible as having the newest upgraded means that
             # then next backup will be able to use the new format and we don't
             # have to re-upgrade it again.
-            revision = to_upgrade[-1]
-            print("Converting {} from {}".format(revision.uuid, revision.timestamp))
-            original_file = revision.filename + '.old'
-            if not os.path.exists(original_file):
-                # We may be resuming a partial upgrade. Only move the file if
-                # our .old doesn't exist.
-                os.rename(revision.filename, original_file)
-            else:
-                print("Resuming with existing .old")
-            revision.writable()
-            chunked = ChunkedFileBackend(revision)
-            chunked.clone_parent = False
-            cowfile = File(dict(filename=original_file, cow=False))(revision)
-            # Keep a copy of the statistics as it will get replaced when
-            # running the full copy.
-            original_stats = revision.stats.copy()
-            cowfile.backup(chunked)
-            revision.stats = original_stats
-            revision.backend_type = 'chunked'
-            revision.write_info()
-            revision.readonly()
-            os.unlink(original_file)
+            try:
+                revision = to_upgrade[-1]
+                print("Converting {} from {}".format(
+                    revision.uuid, revision.timestamp))
+                original_file = revision.filename + '.old'
+                if not os.path.exists(original_file):
+                    # We may be resuming a partial upgrade. Only move the file
+                    # if our .old doesn't exist.
+                    os.rename(revision.filename, original_file)
+                else:
+                    print("Resuming with existing .old")
+                    if os.path.exists(revision.filename):
+                        os.unlink(revision.filename)
+                revision.writable()
+                chunked = ChunkedFileBackend(revision)
+                chunked.clone_parent = False
+                cowfile = File(dict(filename=original_file,
+                                    cow=False))(revision)
+                # Keep a copy of the statistics as it will get replaced when
+                # running the full copy.
+                original_stats = revision.stats.copy()
+                cowfile.backup(chunked)
+                revision.stats = original_stats
+                revision.backend_type = 'chunked'
+                revision.write_info()
+                revision.readonly()
+                os.unlink(original_file)
+            except Exception:
+                logger.exception('Error upgrading revision')
+                # We may be seeing revisions getting removed, try again.
+                return
 
             # Wait a bit, to be graceful to the host system just in case this
             # truns into a spinning loop.

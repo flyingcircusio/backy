@@ -13,6 +13,8 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
+
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,36 @@ BYTE_UNITS = [
 # 64 kiB blocks are a good compromise between sparsiness and fragmentation.
 PUNCH_SIZE = 4 * MiB
 CHUNK_SIZE = 4 * MiB
+
+
+END = object()
+
+
+def report_status(f):
+    def wrapped(*args, **kw):
+        generator = iter(f(*args, **kw))
+        steps = next(generator)
+        step = 0
+        start = time.time()
+        while True:
+            status = next(generator)
+            if status is END:
+                break
+            step += 1
+            now = time.time()
+            time_elapsed = now - start
+            per_chunk = time_elapsed / step
+            remaining = steps - step
+            time_remaining = remaining * per_chunk
+            if step == 5 or not step % 100:  # pragma: nocover
+                print("Progress: {} of {} ({:.2f}%) "
+                      "({:.0f}s elapsed, {:.0f}s remaining)".format(
+                          step, steps, step / steps * 100,
+                          time_elapsed, time_remaining))
+
+        result = next(generator)
+        return result
+    return wrapped
 
 
 class SafeFile(object):
@@ -209,6 +241,7 @@ else:
             z.close()
 
 
+@report_status
 def copy_overwrite(source, target):
     """Efficiently overwrites `target` with a copy of `source`.
 
@@ -223,7 +256,7 @@ def copy_overwrite(source, target):
     if size > 500 * GiB:
         punch_size *= 10
     source.seek(0)
-    loops = 0
+    yield size / punch_size
     try:
         posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
         posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
@@ -244,7 +277,7 @@ def copy_overwrite(source, target):
                 else:
                     target.seek(startpos)
                     target.write(chunk)
-                    loops += 1
+            yield
 
     size = source.tell()
     target.flush()
@@ -256,7 +289,49 @@ def copy_overwrite(source, target):
         os.fsync(target)
     except OSError:
         pass  # fsync may not be supported, i.e. on special files
-    return size
+    yield END
+    yield size
+
+
+@report_status
+def copy(source, target):
+    """Efficiently overwrites `target` with a copy of `source`.
+
+    Identical regions won't be touched so this is COW-friendly. Assumes
+    that `target` is a shallow copy of a previous version of `source`.
+
+    Assumes that `target` exists and is open in read-write mode.
+    """
+
+    chunk_size = 4 * 1024 * 1024
+    source.seek(0, 2)
+    yield source.tell() / chunk_size
+    source.seek(0)
+
+    try:
+        posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+        posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+    except Exception:
+        pass
+    while True:
+        chunk = source.read(chunk_size)
+        if not chunk:
+            break
+        target.write(chunk)
+        yield
+
+    size = source.tell()
+    target.flush()
+    try:
+        target.truncate(size)
+    except OSError:
+        pass  # truncate may not be supported, i.e. on special files
+    try:
+        os.fsync(target)
+    except OSError:
+        pass  # fsync may not be supported, i.e. on special files
+    yield END
+    yield size
 
 
 def cp_reflink(source, target):

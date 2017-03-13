@@ -58,7 +58,7 @@ def test_flyingcircus_consul_interaction(monkeypatch, fcrd):
         b'[]',
         b'[{"name": "asdf"}]']
     monkeypatch.setattr(subprocess, 'check_output', check_output)
-    fcrd._create_snapshot('asdf')
+    fcrd.create_snapshot('asdf')
 
 
 @pytest.mark.slow
@@ -76,4 +76,4 @@ def test_flyingcircus_consul_interaction_timeout(monkeypatch, fcrd):
     fcrd.snapshot_timeout = 2
 
     with pytest.raises(backy.timeout.TimeOutError):
-        fcrd._create_snapshot('asdf')
+        fcrd.create_snapshot('asdf')

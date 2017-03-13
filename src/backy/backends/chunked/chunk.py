@@ -92,17 +92,12 @@ class Chunk(object):
                 f.flush()
                 os.fsync(f)
             subdir = os.path.dirname(target)
-            if not os.path.exists(subdir):  # pragma: no cover
-                # I'm not covering the "not" case as this requires me to
-                # provide two pieces of data with the same first 2 murmur
-                # bytes. I see these in real life but it's really hard to
-                # produce them and I don't want to include 4MiB test data
-                # just for this single one case. I guess there'll be a day
-                # in a few years in the future when my future self would
-                # like to kill me for that. -_- To that I say: I promised
-                # to have looked at this hard enough to make that decision.
-                # So: mea culpa and tough luck.
+            try:
                 os.makedirs(subdir)
+            except FileExistsError:
+                # Someone else accessing the store may have created this
+                # already.
+                pass
             os.rename(tmpfile_name, target)
             os.chmod(target, 0o440)
         self.clean = True

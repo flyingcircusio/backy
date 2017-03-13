@@ -106,7 +106,6 @@ class Command(object):
 
     def upgrade(self):
         b = backy.backup.Backup('.')
-        b._clean()
         b.upgrade()
 
 

@@ -260,10 +260,23 @@ class Backup(object):
         """
         from backy.backends.chunked import ChunkedFileBackend
         from backy.sources.file import File
-        for revision in self.history:
-            if revision.backend_type != 'cowfile':
-                continue
-            print("Converting {}".format(revision.uuid))
+
+        while True:
+            self.scan()
+            to_upgrade = [r for r in self.clean_history
+                          if r.backend_type == 'cowfile']
+            if not to_upgrade:
+                break
+
+            print("Found {} revisions to upgrade.".format(len(to_upgrade)))
+            # Upgrade the newest then start again. The revisions may change
+            # beneath us and this may cause a) new revisions to appear and b)
+            # old revisions to disappear. We want to upgraded new revisions as
+            # quickly as possible as having the newest upgraded means that
+            # then next backup will be able to use the new format and we don't
+            # have to re-upgrade it again.
+            revision = to_upgrade[-1]
+            print("Converting {} from {}".format(revision.uuid, revision.timestamp))
             original_file = revision.filename + '.old'
             if not os.path.exists(original_file):
                 # We may be resuming a partial upgrade. Only move the file if
@@ -284,6 +297,10 @@ class Backup(object):
             revision.write_info()
             revision.readonly()
             os.unlink(original_file)
+
+            # Wait a bit, to be graceful to the host system just in case this
+            # truns into a spinning loop.
+            time.sleep(5)
 
     ######################
     # Looking up revisions

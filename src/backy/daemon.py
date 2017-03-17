@@ -176,7 +176,7 @@ class BackyDaemon(object):
         return result
 
     def _write_status_file(self):
-        with SafeFile(self.status_file) as tmp:
+        with SafeFile(self.status_file, sync=False) as tmp:
             tmp.protected_mode = 0o644
             tmp.open_new('w')
             yaml.safe_dump(self.status(), tmp.f)

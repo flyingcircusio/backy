@@ -83,9 +83,10 @@ class SafeFile(object):
 
     protected_mode = 0o440
 
-    def __init__(self, filename, encoding=None):
+    def __init__(self, filename, encoding=None, sync=True):
         self.filename = filename
         self.encoding = encoding
+        self.sync = sync
         self.f = None
 
     def __enter__(self):
@@ -103,8 +104,9 @@ class SafeFile(object):
         #   synced by now and will restore write-protection
         if self.f is None:
             return
-        self.f.flush()
-        os.fsync(self.f)
+        if self.sync:
+            self.f.flush()
+            os.fsync(self.f)
         self.f.close()
 
         if self.use_write_protection:

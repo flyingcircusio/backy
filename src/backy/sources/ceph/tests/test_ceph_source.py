@@ -3,6 +3,7 @@ from backy.revision import Revision
 from backy.sources.ceph.source import CephRBD
 from backy.sources import select_source
 from backy.backends.cowfile import COWFileBackend
+from backy.backends.chunked import ChunkedFileBackend
 from unittest.mock import Mock, call
 import backy.utils
 import os.path as p
@@ -80,14 +81,16 @@ def test_context_manager_cleans_out_snapshots(check_output, backup, nosleep):
         call([RBD, '--no-progress', 'snap', 'rm', 'test/foo@backy-2'])]
 
 
-def test_choose_full_without_parent(check_output, backup):
+@pytest.mark.parametrize("backend_factory",
+                         [COWFileBackend, ChunkedFileBackend])
+def test_choose_full_without_parent(check_output, backup, backend_factory):
     source = CephRBD(dict(pool='test', image='foo'))
 
     source.diff = Mock()
     source.full = Mock()
 
     revision = Revision(backup, '1')
-    backend = COWFileBackend(revision)
+    backend = backend_factory(revision)
 
     with source(revision):
         source.backup(backend)
@@ -96,7 +99,9 @@ def test_choose_full_without_parent(check_output, backup):
     assert source.full.called
 
 
-def test_choose_full_without_snapshot(check_output, backup):
+@pytest.mark.parametrize("backend_factory",
+                         [COWFileBackend, ChunkedFileBackend])
+def test_choose_full_without_snapshot(check_output, backup, backend_factory):
     source = CephRBD(dict(pool='test', image='foo'))
 
     source.diff = Mock()
@@ -111,7 +116,7 @@ def test_choose_full_without_snapshot(check_output, backup):
     revision2 = Revision(backup, 'a2')
     revision2.parent = 'a1'
 
-    backend = COWFileBackend(revision2)
+    backend = backend_factory(revision2)
     with source(revision2):
         source.backup(backend)
 
@@ -119,7 +124,10 @@ def test_choose_full_without_snapshot(check_output, backup):
     assert source.full.called
 
 
-def test_choose_diff_with_snapshot(check_output, backup, nosleep):
+@pytest.mark.parametrize("backend_factory",
+                         [COWFileBackend, ChunkedFileBackend])
+def test_choose_diff_with_snapshot(
+        check_output, backup, nosleep, backend_factory):
     source = CephRBD(dict(pool='test', image='foo'))
 
     source.diff = Mock()
@@ -144,7 +152,7 @@ def test_choose_diff_with_snapshot(check_output, backup, nosleep):
         # snap rm backy-a1
         b'{}']
 
-    backend = COWFileBackend(revision2)
+    backend = backend_factory(revision2)
     with source(revision2):
         source.backup(backend)
 
@@ -152,7 +160,9 @@ def test_choose_diff_with_snapshot(check_output, backup, nosleep):
     assert not source.full.called
 
 
-def test_diff_backup(check_output, backup, tmpdir, nosleep):
+@pytest.mark.parametrize("backend_factory",
+                         [COWFileBackend, ChunkedFileBackend])
+def test_diff_backup(check_output, backup, tmpdir, nosleep, backend_factory):
     source = CephRBD(dict(pool='test', image='foo'))
 
     parent = Revision(backup, 'ed968696-5ab0-4fe0-af1c-14cadab44661')
@@ -166,8 +176,8 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep):
     revision.timestamp = backy.utils.now()
     revision.parent = parent.uuid
 
-    with open(str(tmpdir / revision.parent), 'w') as f:
-        f.write('asdf')
+    with backend_factory(parent).open('wb') as f:
+        f.write(b'asdf')
 
     with open(str(tmpdir / revision.uuid) + '.rbddiff', 'wb') as f:
         f.write(SAMPLE_RBDDIFF)
@@ -187,7 +197,7 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep):
         b'{}',
     ]
 
-    backend = COWFileBackend(revision)
+    backend = backend_factory(revision)
     with source(revision):
         source.diff(backend)
         backup.history.append(revision)
@@ -205,7 +215,9 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep):
               'test/foo@backy-ed968696-5ab0-4fe0-af1c-14cadab44661'])]
 
 
-def test_full_backup(check_output, backup, tmpdir):
+@pytest.mark.parametrize("backend_factory",
+                         [COWFileBackend, ChunkedFileBackend])
+def test_full_backup(check_output, backup, tmpdir, backend_factory):
     source = CephRBD(dict(pool='test', image='foo'))
 
     # Those revision numbers are taken from the sample snapshot and need
@@ -232,7 +244,7 @@ def test_full_backup(check_output, backup, tmpdir):
         # snap ls
         b'[{"name": "backy-a0"}]']
 
-    backend = COWFileBackend(revision)
+    backend = backend_factory(revision)
     with source(revision):
         source.full(backend)
 
@@ -246,8 +258,42 @@ def test_full_backup(check_output, backup, tmpdir):
         call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
               'test/foo'])]
 
+    assert backend.open('rb').read() == b'Han likes Leia.'
 
-def test_full_backup_integrates_changes(check_output, backup, tmpdir, nosleep):
+    # Now make another full backup. This overwrites the first.
+    revision2 = Revision(backup, 'a1')
+    revision2.parent = revision.uuid
+    revision2.materialize()
+    backup.scan()
+
+    rbd_source = str(tmpdir / '-dev-rbd0')
+    with open(rbd_source, 'w') as f:
+        f.write('Han loves Leia.')
+
+    check_output.side_effect = [
+        # snap create
+        b'{}',
+        # map
+        b'{}',
+        # showmapped
+        '{{"rbd0": {{"pool": "test", "name": "foo", "snap": "backy-a1", \
+                     "device": "{}"}}}}'.format(rbd_source).encode('ascii'),
+        # unmap
+        b'{}',
+        # snap ls
+        b'[{"name": "backy-a1"}]']
+
+    backend = backend_factory(revision2)
+    with source(revision2):
+        source.full(backend)
+
+    assert backend.open('rb').read() == b'Han loves Leia.'
+
+
+@pytest.mark.parametrize("backend_factory",
+                         [COWFileBackend, ChunkedFileBackend])
+def test_full_backup_integrates_changes(
+        check_output, backup, tmpdir, nosleep, backend_factory):
     # The backup source changes between two consecutive full backups. Both
     # backup images should reflect the state of the source at the time the
     # backup was run. This test is here to detect regressions while optimizing
@@ -295,15 +341,17 @@ def test_full_backup_integrates_changes(check_output, backup, tmpdir, nosleep):
         with open(rbd_source, 'wb') as f:
             f.write(content)
 
-        backend = COWFileBackend(rev)
+        backend = backend_factory(rev)
         with source(rev):
             source.full(backend)
 
-        with open(rev.filename, 'rb') as f:
+        with backend_factory(rev).open('rb') as f:
             assert content == f.read()
 
 
-def test_verify_fail(check_output, backup, tmpdir):
+@pytest.mark.parametrize("backend_factory",
+                         [COWFileBackend, ChunkedFileBackend])
+def test_verify_fail(check_output, backup, tmpdir, backend_factory):
     source = CephRBD(dict(pool='test', image='foo'))
 
     # Those revision numbers are taken from the sample snapshot and need
@@ -331,8 +379,10 @@ def test_verify_fail(check_output, backup, tmpdir):
         # snap ls
         b'[{"name": "backy-a0"}]']
 
-    # We never copied the data, so this has to fail.
-    backend = COWFileBackend(revision)
+    backend = backend_factory(revision)
+    with backend.open('wb') as f:
+        f.write(b'foobar')
+    # The backend has false data, so this needs to be detected.
     with source(revision):
         assert not source.verify(backend)
 
@@ -346,7 +396,9 @@ def test_verify_fail(check_output, backup, tmpdir):
               'test/foo'])]
 
 
-def test_verify(check_output, backup, tmpdir):
+@pytest.mark.parametrize("backend_factory",
+                         [COWFileBackend, ChunkedFileBackend])
+def test_verify(check_output, backup, tmpdir, backend_factory):
     source = CephRBD(dict(pool='test', image='foo'))
 
     # Those revision numbers are taken from the sample snapshot and need
@@ -358,12 +410,11 @@ def test_verify(check_output, backup, tmpdir):
     backup.scan()
 
     rbd_source = str(tmpdir / '-dev-rbd0')
-    with open(rbd_source, 'w') as f:
-        f.write('Han likes Leia.')
+    with open(rbd_source, 'wb') as f:
+        f.write(b'Han likes Leia.')
 
-    target = str(tmpdir / 'a0')
-    with open(target, 'w') as f:
-        f.write('Han likes Leia.')
+    with backend_factory(revision).open('wb') as f:
+        f.write(b'Han likes Leia.')
 
     check_output.side_effect = [
         # snap create
@@ -378,7 +429,7 @@ def test_verify(check_output, backup, tmpdir):
         # snap ls
         b'[{"name": "backy-a0"}]']
 
-    backend = COWFileBackend(revision)
+    backend = backend_factory(revision)
     with source(revision):
         assert source.verify(backend)
 

@@ -221,3 +221,21 @@ def test_truncate(tmpdir):
     # Interesting optimization: truncating re-uses the existing
     # chunk and only limits how much we read from it.
     assert f._mapping == {0: space_hash}
+
+
+def test_rplus_and_append_positions(tmpdir):
+    store = Store(str(tmpdir))
+
+    with File(str(tmpdir / 'asdf'), store) as f:
+        f.write(b'asdf')
+
+    with File(str(tmpdir / 'asdf'), store, mode='r+') as f:
+        assert f.tell() == 0
+        f.write(b'bsdf')
+
+    with File(str(tmpdir / 'asdf'), store, mode='a') as f:
+        assert f.tell() == 4
+        f.write(b'csdf')
+
+    with File(str(tmpdir / 'asdf'), store) as f:
+        assert f.read() == b'bsdfcsdf'

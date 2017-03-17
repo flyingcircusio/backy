@@ -36,11 +36,15 @@ class File(object):
 
         self._access_stats = {}
 
-        if '+' in mode:
-            mode += 'w'
         self.mode = mode
 
-        if not os.path.exists(name) and 'w' not in mode:
+        if '+' in self.mode:
+            self.mode += 'w'
+        if 'a' in self.mode:
+            self.mode += 'w'
+        self.mode = ''.join(set(self.mode))
+
+        if not os.path.exists(name) and 'w' not in self.mode:
             raise FileNotFoundError('File not found: {}'.format(self.name))
 
         if not os.path.exists(name):
@@ -55,7 +59,7 @@ class File(object):
                 self._mapping = {int(k): v for k, v in meta['mapping'].items()}
                 self.size = meta['size']
 
-        if '+' in mode:
+        if 'a' in self.mode:
             self._position = self.size
 
         # Chunks that we are working on.

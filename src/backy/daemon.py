@@ -73,16 +73,18 @@ class BackyDaemon(object):
             new[name].configure(config)
         self.schedules = new
 
-        self.jobs = {}
-        for name, config in self.config['jobs'].items():
-            self.jobs[name] = Job(self, name)
-            self.jobs[name].configure(config)
-
         logger.debug('status interval: %s', self.status_interval)
         logger.debug('status location: %s', self.status_file)
         logger.debug('worker limit: %s', self.worker_limit)
         logger.debug('backup location: %s', self.base_dir)
         logger.debug('available schedules: %s', ', '.join(self.schedules))
+
+    def _setup_jobs(self):
+        # To be called after _read_config().
+        self.jobs = {}
+        for name, config in self.config['jobs'].items():
+            self.jobs[name] = Job(self, name)
+            self.jobs[name].configure(config)
         logger.debug('configured jobs: %s', ', '.join(self.jobs.keys()))
 
     def lock(self):
@@ -98,6 +100,7 @@ class BackyDaemon(object):
     def _prepare(self, loop):  # pragma: no cover
         """Starts the scheduler daemon."""
         self._read_config()
+        self._setup_jobs()
         # Ensure single daemon instance.
         self.lock()
 

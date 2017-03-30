@@ -79,9 +79,8 @@ def test_call_status(capsys, caplog, backup, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-backup.py                  ... DEBUG    Backup("...")
-main.py                    ... DEBUG    backup.status(**{})
-""") == caplog.text()
+main.py   ... DEBUG    backup.status(**{})
+""") == caplog.text
 
 
 def test_call_init(capsys, caplog, backup, argv, monkeypatch):
@@ -97,9 +96,8 @@ def test_call_init(capsys, caplog, backup, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-backup.py                  ... DEBUG    Backup("...")
-main.py                    ... DEBUG    backup.init(**{...ceph-rbd...})
-""") == caplog.text()
+main.py   ... DEBUG    backup.init(**{...ceph-rbd...})
+""") == caplog.text
 
 
 def test_call_backup(tmpdir, capsys, caplog, argv, monkeypatch):
@@ -124,9 +122,9 @@ filename: {}
 {}
 """) == out
     assert Ellipsis("""\
-main.py                    ... DEBUG    backup.backup(**{'tags': 'test'})
-backup.py                  ... DEBUG    Backup("...")
-""") == caplog.text()
+main.py   ... DEBUG    backup.backup(**{'tags': 'test'})
+backup.py ... DEBUG    Backup("...")
+""") == caplog.text
     assert exit.value.code == 0
 
 
@@ -143,9 +141,8 @@ def test_call_find(capsys, caplog, backup, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-backup.py                  ... DEBUG    Backup("...")
-main.py                    ... DEBUG    backup.find(...
-""") == caplog.text()
+main.py   ... DEBUG    backup.find(...
+""") == caplog.text
     assert exit.value.code == 0
 
 
@@ -162,10 +159,9 @@ def test_call_check(capsys, caplog, backup, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-backup.py                  ... DEBUG    Backup("...")
-main.py                    ... DEBUG    backup.check(**{'config': \
+main.py   ... DEBUG    backup.check(**{'config': \
 '/etc/backy.conf'})
-""") == caplog.text()
+""") == caplog.text
     assert exit.value.code == 0
 
 
@@ -182,10 +178,9 @@ def test_call_scheduler(capsys, caplog, backup, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-backup.py                  ... DEBUG    Backup("...")
-main.py                    ... DEBUG    backup.scheduler(**{'config': \
+main.py   ... DEBUG    backup.scheduler(**{'config': \
 '/etc/backy.conf'})
-""") == caplog.text()
+""") == caplog.text
     assert exit.value.code == 0
 
 
@@ -205,17 +200,16 @@ def test_call_unexpected_exception(capsys, backup, caplog, argv, monkeypatch):
     assert "" == out
     assert "Error: test\n" == err
     assert Ellipsis("""\
-backup.py                  ... DEBUG    Backup("...")
-main.py                    ... DEBUG    backup.status(**{})
-main.py                    ... ERROR    test
+main.py   ... DEBUG    backup.status(**{})
+main.py   ... ERROR    test
 Traceback (most recent call last):
   File ".../main.py", line ..., in main
     func(**func_args)
   File ".../src/backy/tests/test_main.py", line ..., in do_raise
     raise RuntimeError("test")
 RuntimeError: test
-main.py                    ... INFO     Backy operation failed.
-""") == caplog.text()
+main.py   ... INFO     Backy operation failed.
+""") == caplog.text
 
 
 @pytest.fixture

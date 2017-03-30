@@ -1,7 +1,8 @@
+from backy.backends.chunked import ChunkedFileBackend
 from backy.daemon import BackyDaemon
 from backy.revision import Revision
 from backy.scheduler import Task
-from backy.backends.chunked import ChunkedFileBackend
+from backy.tests import Ellipsis
 from unittest import mock
 import asyncio
 import backy.utils
@@ -193,6 +194,58 @@ def test_task_generator(daemon, clock, tmpdir, monkeypatch):
             yield from asyncio.sleep(.1)
 
     yield from wait_for_job_finished()
+
+
+@pytest.mark.asyncio
+def test_task_generator_backoff(caplog, daemon, clock, tmpdir, monkeypatch):
+    # This is really just a smoke tests, but it covers the task pool,
+    # so hey, better than nothing.
+
+    task = mock.Mock()
+    task.ideal_start = backy.utils.now()
+
+    job = daemon.jobs['test01']
+    job.start()
+
+    @asyncio.coroutine
+    def null_coroutine(self):
+        return
+
+    failures = [1, 2, 3]
+
+    def failing_coroutine(self):
+        if failures:
+            failures.pop()
+            return 1
+        return 0
+
+    monkeypatch.setattr(Task, 'wait_for_deadline', null_coroutine)
+    monkeypatch.setattr(Task, 'backup', failing_coroutine)
+
+    # This patch causes a single run through the generator loop.
+    def patched_update_status(status):
+        if status == "finished":
+            job.stop()
+    job.update_status = patched_update_status
+
+    @asyncio.coroutine
+    def wait_for_job_finished():
+        while job._generator_handle is not None:
+            yield from asyncio.sleep(.1)
+
+    yield from wait_for_job_finished()
+
+    assert Ellipsis("""\
+... INFO     test01: started task generator loop
+... INFO     test01: got deadline trigger
+... WARNING  test01: retrying in 120 seconds
+... INFO     test01: got deadline trigger
+... WARNING  test01: retrying in 240 seconds
+... INFO     test01: got deadline trigger
+... WARNING  test01: retrying in 480 seconds
+... INFO     test01: got deadline trigger
+... INFO     test01: got deadline trigger
+""") == caplog.text
 
 
 @pytest.mark.asyncio

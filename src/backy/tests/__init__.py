@@ -10,25 +10,25 @@ class Report(object):
         self.lines = []
 
     def matched(self, line):
-        self.lines.append((True, line))
+        self.lines.append((True, line, None))
 
-    def nonmatched(self, line, match):
-        self.lines.append((False, line, match))
+    def nonmatched(self, line, pattern):
+        self.lines.append((False, line, pattern))
 
     @property
     def diff(self):
         result = ['']
         d = difflib.Differ()
-        for line in self.lines:
-            if line[0]:
-                result.append('  ' + line[1])
+        for matched, line, pattern in self.lines:
+            if matched:
+                result.append('  ' + line)
             else:
-                if line[2] is None:
-                    result.append('+ ' + line[1])
-                elif line[1] is None:
-                    result.append('- ' + line[2])
+                if pattern is None:
+                    result.append('+ ' + line)
+                elif line is None:
+                    result.append('- ' + pattern)
                 else:
-                    diffed = d.compare([line[2]], [line[1]])
+                    diffed = d.compare([pattern], [line])
                     diffed = [x.rstrip('\n') for x in diffed]
                     result.extend(diffed)
         result = list(filter(str.strip, result))

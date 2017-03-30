@@ -1,6 +1,7 @@
 from .backup import Backup
 from .ext_deps import BACKY_CMD
 from .utils import SafeFile
+from datetime import timedelta
 import asyncio
 import backy.utils
 import filecmp
@@ -33,6 +34,7 @@ class Task(object):
 
     # Run this in an executor!
     def backup(self):
+        returncode = 1
         try:
             self.job.update_status('running')
             logger.info('%s: running backup [%s] due %s',
@@ -58,11 +60,15 @@ class Task(object):
             # Purge
             logger.info('%s: Purging unused data', self.name)
             cmd = [BACKY_CMD, '-b', self.job.path, '-l', logfile, 'purge']
-            returncode = subprocess.call(cmd)
+            purge_returncode = subprocess.call(cmd)
             logger.info('%s: finished purging with return code %s',
-                        self.name, returncode)
+                        self.name, purge_returncode)
         except Exception as e:
+            # I'm not resetting the return code here. If we managed to make
+            # a backup then we are not picky about whether expiry or purging
+            # went fine.
             logger.exception(e)
+        return returncode
 
     @asyncio.coroutine
     def wait_for_deadline(self):
@@ -163,10 +169,23 @@ class Job(object):
         It doesn't care whether the tasks have been successfully worked
         on or not. The task pool needs to deal with that.
         """
+        errors = 0
+        backoff = 0
         logger.info("%s: started task generator loop", self.name)
         while True:
             next_time, next_tags = self.schedule.next(
                 backy.utils.now(), self.spread, self.backup)
+
+            if errors:
+                # We're retrying - do not pay attention to the schedule but
+                # we know that we have to make a backup if possible and only
+                # pause for the backoff period.
+                # We do, however, use the current tags just in case that we're
+                # not able to make backups for a longer period.
+                # This way we also use the queuing mechanism correctly so that
+                # one can still manually trigger a run if one wishes to.
+                next_time = (
+                    backy.utils.now() + timedelta(seconds=backoff))
 
             self.task = task = Task(self)
             self.task.ideal_start = next_time
@@ -176,8 +195,25 @@ class Job(object):
             yield from task.wait_for_deadline()
             logger.info("%s: got deadline trigger", self.name)
             self.update_status("queued for execution")
-            yield from self.daemon.loop.run_in_executor(None, self.task.backup)
-            self.update_status("finished")
+            returncode = yield from self.daemon.loop.run_in_executor(
+                None, self.task.backup)
+            if returncode:
+                self.update_status("failed")
+                # Something went wrong. Use truncated expontial backoff to
+                # avoid hogging the workers. We sometimes can't make backups
+                # because of external reasons (i.e. the VM is shut down and
+                # properly making a snapshot fails
+                errors += 1
+                # Our retry series (in minutes). We converge on waiting
+                # 6 hours maximum for retries.
+                # 2, 4, 8, 16, 32, 65, ..., 6*60, 6*60
+                backoff = min([2**errors, 6 * 60]) * 60
+                logger.warn('{}: retrying in {} seconds'.format(
+                    self.name, backoff))
+            else:
+                errors = 0
+                backoff = None
+                self.update_status("finished")
 
     def start(self):
         self.stop()

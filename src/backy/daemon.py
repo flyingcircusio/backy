@@ -284,6 +284,18 @@ class SchedulerShell(telnetlib3.Telsh):
         self.stream.write('Triggered immediate run for {}'.format(job.name))
         return 0
 
+    def cmdset_runall(self, *extra_args):
+        """Show job status overview"""
+        for job in daemon.jobs.values():
+            if not hasattr(job, 'task'):
+                self.stream.write(
+                    '{} not ready. Try again later.'.format(job.name))
+                continue
+            job.task.run_immediately.set()
+            self.stream.write(
+                'Triggered immediate run for {}'.format(job.name))
+        return 0
+
     autocomplete_cmdset = collections.OrderedDict([
         ('jobs', None),
         ('status', None),

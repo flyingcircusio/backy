@@ -59,7 +59,7 @@ setup(
             'pytest',
             'pytest-asyncio',
             'pytest-cache',
-            'pytest-capturelog',
+            'pytest-catchlog',
             'pytest-codecheckers',
             'pytest-cov',
             'pytest-timeout',

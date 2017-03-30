@@ -12,11 +12,15 @@ Changelog
 - Made the use of fadvise features more opportunistic: don't fail if they are
   not supported by the backend as they are only optimizations anyway.
 
-TODO
+- Introduce an exponential backoff after a failed backup: instead of retrying
+  quickly and thus hogging the queue (in the case that timeouts are involved)
+  we now backoff exponentially starting with 2 minutes, then 4, then 8, ...
+  until we reach 6 hours as the biggest backoff time.
 
-  - trigger cleanup after removing revisions
-  - provide ability for general chunk verification
-  - conversion script
+  You can still trigger an explicit run using the telnet "run" command for
+  the affected backup. This will put the backup in the run queue immediately
+  but will not reset the error counter or backoff interval in case it
+  fails again.
 
 2.1.5 (2016-07-01)
 ==================

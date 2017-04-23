@@ -50,7 +50,7 @@ class Store(object):
             yield file, hash, lambda f: lzo.decompress(open(f, 'rb').read())
 
     def purge(self):
-        # This assumes exclusive lock on the store. Thisi s guaranteed by
+        # This assumes exclusive lock on the store. This is guaranteed by
         # backy's main locking.
         used_hashes = set()
         for user in self.users:

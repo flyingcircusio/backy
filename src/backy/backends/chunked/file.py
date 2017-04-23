@@ -55,6 +55,10 @@ class File(object):
             # have ints as keys. We convert them explicitly back to integers
             # because we keep computing with them.
             with open(self.name, 'r') as f:
+                # Saveguard: Make sure the file looks like json.
+                if f.read(2) != '{"':
+                    raise ValueError("Revision does not look like it's chunked.")
+                f.seek(0)
                 meta = json.load(f)
                 self._mapping = {int(k): v for k, v in meta['mapping'].items()}
                 self.size = meta['size']

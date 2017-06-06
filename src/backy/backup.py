@@ -173,6 +173,8 @@ class Backup(object):
                     new_revision.uuid, ','.join(new_revision.tags)))
 
         backend = self.backend_factory(new_revision)
+        if self.config.get('full-always'):
+            backend.clone_parent = False
         with self.source(new_revision) as source:
             source.backup(backend)
             if not source.verify(backend):

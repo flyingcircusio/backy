@@ -35,8 +35,7 @@ class ChunkedFileBackend(object):
                 self.store.users.append(
                     backup.backend_factory(revision).open())
             except ValueError:
-                # Invalid format, like purging non-chunked with chuncked
-                # backend
+                # Invalid format, like purging non-chunked with chunked backend
                 pass
         self.store.purge()
 

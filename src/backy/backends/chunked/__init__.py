@@ -32,9 +32,11 @@ class ChunkedFileBackend(object):
     def purge(self, backup):
         for revision in backup.history:
             try:
-                self.store.users.append(backup.backend_factory(revision).open())
+                self.store.users.append(
+                    backup.backend_factory(revision).open())
             except ValueError:
-                # Invalid format, like purging non-chunked with chunged backend
+                # Invalid format, like purging non-chunked with chuncked
+                # backend
                 pass
         self.store.purge()
 

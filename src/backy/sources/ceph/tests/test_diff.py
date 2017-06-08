@@ -35,7 +35,7 @@ def test_read_header_valid(tmpdir):
         f.write(b'rbd diff v1\n')
 
     # Simply ensure that the header doesn't blow up.
-    RBDDiffV1(filename)
+    RBDDiffV1(open(filename, 'rb'))
 
 
 def test_read_header_invalid(tmpdir):
@@ -45,7 +45,7 @@ def test_read_header_invalid(tmpdir):
 
     # Simply ensure that the header doesn't blow up.
     with pytest.raises(ValueError) as e:
-        RBDDiffV1(filename)
+        RBDDiffV1(open(filename, 'rb'))
     assert e.value.args[0] == "Unexpected header: b'rbd duff v1\\n'"
 
 
@@ -89,17 +89,30 @@ def sample_diff(tmpdir):
 
 def test_read_sample(sample_diff):
     # Simply ensure that the header doesn't blow up.
-    diff = RBDDiffV1(sample_diff, nodata=True)
+    diff = RBDDiffV1(open(sample_diff, 'rb'))
     assert list(diff.read_metadata()) == [
         FromSnap('fromsnapshot'), ToSnap('tosnapshot'), SnapSize(500)]
-    assert list(diff.read_data()) == [
-        Data(start=10, length=12, stream=None),
-        Zero(start=50, length=100),
-        Data(start=200, length=9, stream=None)]
+    data = diff.read_data()
+    d = next(data)
+    assert isinstance(d, Data)
+    assert d.start == 10
+    assert d.length == 12
+    list(d.stream())
+
+    d = next(data)
+    assert isinstance(d, Zero)
+    assert d.start == 50
+    assert d.length == 100
+
+    d = next(data)
+    assert isinstance(d, Data)
+    assert d.start == 200
+    assert d.length == 9
+    list(d.stream())
 
 
 def test_read_sample_data(sample_diff):
-    diff = RBDDiffV1(sample_diff)
+    diff = RBDDiffV1(open(sample_diff, 'rb'))
 
     # Consume metadata records
     list(diff.read_metadata())
@@ -113,17 +126,15 @@ def test_read_sample_data(sample_diff):
     # Zero record
     next(data)
 
-    # Data record: pull next record first, then stream data record, proof
-    # for intermingling works.
     d = next(data)
     assert isinstance(d, Data)
+    assert list(d.stream()) == [b'blablabla']
     with pytest.raises(StopIteration):
         next(data)
-    assert list(d.stream()) == [b'blablabla']
 
 
 def test_integrate_sample_data(sample_diff, tmpdir):
-    diff = RBDDiffV1(sample_diff)
+    diff = RBDDiffV1(open(sample_diff, 'rb'))
 
     target = open(str(tmpdir/'target'), 'wb')
     target.write(b'\1'*600)
@@ -157,7 +168,7 @@ def test_integrate_stops_on_broken_metadata_record(tmpdir):
         # broken record
         f.write(b'0')
 
-    diff = RBDDiffV1(filename)
+    diff = RBDDiffV1(open(filename, 'rb'))
 
     target = open(str(tmpdir/'target'), 'wb')
     target.write(b'\1'*600)
@@ -186,7 +197,7 @@ def test_integrate_stops_on_broken_data_record(tmpdir):
         # broken record
         f.write(b'0')
 
-    diff = RBDDiffV1(filename)
+    diff = RBDDiffV1(open(filename, 'rb'))
 
     target = open(str(tmpdir/'target'), 'wb')
     target.write(b'\1'*600)
@@ -212,7 +223,7 @@ def test_read_zero_first_data_record(tmpdir):
         f.write(b'e')
 
     # Simply ensure that the header doesn't blow up.
-    diff = RBDDiffV1(filename, nodata=True)
+    diff = RBDDiffV1(open(filename, 'rb'))
     x = list(diff.read_metadata())
     x = list(diff.read_data())
     assert x == [Zero(start=20, length=5*1024**3)]
@@ -225,7 +236,7 @@ def test_read_detects_wrong_record_type(tmpdir):
         f.write(b'a')
 
     # Simply ensure that the header doesn't blow up.
-    diff = RBDDiffV1(filename, nodata=True)
+    diff = RBDDiffV1(open(filename, 'rb'))
     with pytest.raises(ValueError) as e:
         diff.read_record()
     assert e.value.args[0] == (
@@ -233,23 +244,10 @@ def test_read_detects_wrong_record_type(tmpdir):
 
 
 def test_read_empty_diff(tmpdir):
-    diff = RBDDiffV1(os.path.dirname(__file__) + '/nodata.rbddiff')
+    diff = RBDDiffV1(open(os.path.dirname(__file__) + '/nodata.rbddiff', 'rb'))
     target = open(str(tmpdir / 'foo'), 'wb')
     diff.integrate(
         target,
         'backy-ed968696-5ab0-4fe0-af1c-14cadab44661',
         'backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802',
         clean=False)
-
-
-def test_integrate_should_delete_diff(sample_diff, tmpdir):
-    diff = RBDDiffV1(sample_diff)
-
-    target = open(str(tmpdir/'target'), 'wb')
-    target.write(b'\1'*600)
-    target.seek(0)
-
-    with target:
-        diff.integrate(target, 'fromsnapshot', 'tosnapshot')
-    diff._remover.join()
-    assert not os.path.exists(diff.filename)

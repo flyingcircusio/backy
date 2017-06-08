@@ -1,7 +1,10 @@
 from backy.fallocate import punch_hole
 from collections import namedtuple
-import backy.utils
 import struct
+import logging
+
+
+log = logging.getLogger(__name__)
 
 
 def unpack_from(fmt, f):
@@ -23,17 +26,14 @@ class RBDDiffV1(object):
 
     header = b'rbd diff v1\n'
 
-    def __init__(self, filename, nodata=False):
-        self.filename = filename
-        self.f = open(self.filename, 'rb')
+    def __init__(self, fh):
+        # self.filename = filename
+        self.f = fh
 
         self.phase = 'header'
         self.read_header()
         self.record_type = None
-
-        # Set the `stream` attribute of data records to None to support
-        # testing.
-        self.nodata = nodata
+        self._streaming = False
 
     def read_header(self):
         assert self.phase == 'header'
@@ -43,6 +43,7 @@ class RBDDiffV1(object):
         self.phase = 'metadata'
 
     def read_record(self):
+        assert not self._streaming, "Unread data from read_w. Consume first."
         self.last_record_type = self.record_type
         self.record_type = self.f.read(1).decode('ascii')
         if self.record_type not in ['f', 't', 's', 'w', 'z', 'e']:
@@ -85,28 +86,17 @@ class RBDDiffV1(object):
             self.phase = 'data'
         offset, length = unpack_from('<QQ', self.f)
 
-        # The seeking dance here helps to support
-        # consuming the whole record stream without consuming
-        # all data records. We also go the extra mile to allow interleaving
-        # partial data streaming and iterating over the
-        # record stream. This is OK for non-threaded code, but not thread-safe.
-        data_start = self.f.tell()
-
         def stream():
             remaining = length
-            source_offset = data_start
             while remaining:
-                current = self.f.tell()
-                self.f.seek(source_offset)
                 read = min(4 * 1024 ** 2, remaining)
                 chunk = self.f.read(read)
                 remaining = remaining - read
-                source_offset += read
-                self.f.seek(current)
                 yield chunk
+            self._streaming = False
 
-        self.f.seek(length, 1)
-        return Data(offset, length, stream if not self.nodata else None)
+        self._streaming = True
+        return Data(offset, length, stream)
 
     def read_z(self):
         "zero data"
@@ -135,6 +125,7 @@ class RBDDiffV1(object):
 
         If clean is set (default: True) then remove the delta after a
         successful integration.
+
         """
         bytes = 0
 
@@ -156,12 +147,5 @@ class RBDDiffV1(object):
                     target.write(chunk)
             bytes += record.length
 
-        if clean:
-            self.f.close()
-            # Delete in thread: on btrfs it takes a *long* to delete files.
-            # This  way the we can at least parallelize verification.
-            remover = backy.utils.Remover([self.filename])
-            remover.start()
-            self._remover = remover  # test support
-
+        self.f.close()
         return bytes

@@ -3,10 +3,8 @@ from ...utils import CHUNK_SIZE
 from .diff import RBDDiffV1
 import contextlib
 import json
-import subprocess
-
-
 import logging
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +57,23 @@ class RBDClient(object):
     def snap_rm(self, image):
         return self._rbd(['snap', 'rm', image])
 
-    def export_diff(self, new, old, target):
-        self._rbd(['export-diff',
-                   new,
-                   target,
-                   '--from-snap', old])
-        return RBDDiffV1(target)
+    @contextlib.contextmanager
+    def export_diff(self, new, old):
+        proc = subprocess.Popen(
+            [RBD, '--no-progress',
+             'export-diff', new,
+             '--from-snap', old,
+             '-'],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            # Have a rather largish buffer size, so rbd has some room to
+            # push its data to, when we are busy writing.
+            bufsize=4*CHUNK_SIZE)
+        try:
+            yield RBDDiffV1(proc.stdout)
+        finally:
+            proc.stdout.close()
+            proc.wait()
 
     @contextlib.contextmanager
     def image_reader(self, image):
@@ -73,6 +82,22 @@ class RBDClient(object):
         try:
             yield source
         finally:
-            if not source.closed:
-                source.close()
+            source.close()
             self.unmap(mapped['device'])
+
+    @contextlib.contextmanager
+    def export(self, image):
+        proc = subprocess.Popen(
+            [RBD, '--no-progress',
+             'export', image,
+             '-'],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            # Have a rather largish buffer size, so rbd has some room to
+            # push its data to, when we are busy writing.
+            bufsize=4*CHUNK_SIZE)
+        try:
+            yield proc.stdout
+        finally:
+            proc.stdout.close()
+            proc.wait()

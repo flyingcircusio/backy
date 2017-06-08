@@ -116,15 +116,23 @@ def test_rbd_snap_rm(rbdclient):
         mock.call(['snap', 'rm', 'test/test04.root@backup'])])
 
 
-def test_rbd_export_diff(rbdclient, tmpdir):
-    target = str(tmpdir / 'foo.rbddiff')
-    open(target, 'wb').write(RBDDiffV1.header)
-    diff = rbdclient.export_diff(
-        'test/test04.root@new', 'old', target)
-    assert isinstance(diff, RBDDiffV1)
-    rbdclient._rbd.assert_has_calls([
-        mock.call(['export-diff', 'test/test04.root@new',
-                   target, '--from-snap', 'old'])])
+@mock.patch('subprocess.Popen')
+def test_rbd_export_diff(popen, rbdclient, tmpdir):
+    stdout = open(str(tmpdir / 'foobar'), 'wb+')
+    stdout.write(RBDDiffV1.header)
+    stdout.seek(0)
+    popen.return_value = mock.Mock(stdout=stdout)
+    with rbdclient.export_diff('test/test04.root@new', 'old') as diff:
+        assert isinstance(diff, RBDDiffV1)
+    popen.assert_has_calls([
+        mock.call([RBD, '--no-progress',
+                  'export-diff', 'test/test04.root@new',
+                   '--from-snap', 'old', '-'],
+                  stdin=subprocess.DEVNULL,
+                  stdout=subprocess.PIPE,
+                  bufsize=mock.ANY,
+                  ),
+       ])
 
 
 def test_rbd_image_reader(rbdclient, tmpdir):
@@ -157,3 +165,19 @@ def test_rbd_image_reader_explicit_closed(rbdclient, tmpdir):
         mock.call(['--read-only', 'map', 'test/test04.root@foo']),
         mock.call(['showmapped'], format='json'),
         mock.call(['unmap', device])])
+
+
+@mock.patch('subprocess.Popen')
+def test_rbd_export(popen, rbdclient, tmpdir):
+    stdout = open(str(tmpdir / 'foobar'), 'wb+')
+    popen.return_value = mock.Mock(stdout=stdout)
+    with rbdclient.export(mock.sentinel.image) as f:
+        assert f == stdout
+    popen.assert_has_calls([
+        mock.call([RBD, '--no-progress',
+                  'export', mock.sentinel.image, '-'],
+                  stdin=subprocess.DEVNULL,
+                  stdout=subprocess.PIPE,
+                  bufsize=mock.ANY,
+                  ),
+        ])

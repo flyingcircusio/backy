@@ -1,11 +1,12 @@
+from backy.backends.chunked import ChunkedFileBackend
+from backy.backends.cowfile import COWFileBackend
 from backy.ext_deps import RBD
 from backy.revision import Revision
-from backy.sources.ceph.source import CephRBD
 from backy.sources import select_source
-from backy.backends.cowfile import COWFileBackend
-from backy.backends.chunked import ChunkedFileBackend
-from unittest.mock import Mock, call
+from backy.sources.ceph.source import CephRBD
+from unittest import mock
 import backy.utils
+import io
 import os.path as p
 import pytest
 import subprocess
@@ -19,7 +20,7 @@ with open(p.join(p.dirname(__file__), 'nodata.rbddiff'), 'rb') as f:
 
 @pytest.fixture
 def check_output(monkeypatch):
-    check_output = Mock()
+    check_output = mock.Mock()
     check_output.return_value = b'{}'
     monkeypatch.setattr(subprocess, 'check_output', check_output)
     return check_output
@@ -36,7 +37,7 @@ def test_select_ceph_source():
 
 def test_assign_revision():
     source = CephRBD(dict(pool='test', image='foo'))
-    revision = Mock()
+    revision = mock.Mock()
     context_manager = source(revision)
     assert context_manager.revision is revision
 
@@ -49,10 +50,10 @@ def test_context_manager(check_output, backup):
         pass
 
     assert check_output.call_args_list == [
-        call([RBD, '--no-progress', 'snap', 'create',
-              'test/foo@backy-1']),
-        call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
-              'test/foo'])]
+        mock.call([RBD, '--no-progress', 'snap', 'create',
+                   'test/foo@backy-1']),
+        mock.call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
+                   'test/foo'])]
 
 
 def test_context_manager_cleans_out_snapshots(check_output, backup, nosleep):
@@ -74,11 +75,11 @@ def test_context_manager_cleans_out_snapshots(check_output, backup, nosleep):
         backup.scan()
 
     assert check_output.call_args_list == [
-        call([RBD, '--no-progress', 'snap', 'create',
-              'test/foo@backy-1']),
-        call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
-              'test/foo']),
-        call([RBD, '--no-progress', 'snap', 'rm', 'test/foo@backy-2'])]
+        mock.call([RBD, '--no-progress', 'snap', 'create',
+                   'test/foo@backy-1']),
+        mock.call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
+                   'test/foo']),
+        mock.call([RBD, '--no-progress', 'snap', 'rm', 'test/foo@backy-2'])]
 
 
 @pytest.mark.parametrize("backend_factory",
@@ -86,8 +87,8 @@ def test_context_manager_cleans_out_snapshots(check_output, backup, nosleep):
 def test_choose_full_without_parent(check_output, backup, backend_factory):
     source = CephRBD(dict(pool='test', image='foo'))
 
-    source.diff = Mock()
-    source.full = Mock()
+    source.diff = mock.Mock()
+    source.full = mock.Mock()
 
     revision = Revision(backup, '1')
     backend = backend_factory(revision)
@@ -104,8 +105,8 @@ def test_choose_full_without_parent(check_output, backup, backend_factory):
 def test_choose_full_without_snapshot(check_output, backup, backend_factory):
     source = CephRBD(dict(pool='test', image='foo'))
 
-    source.diff = Mock()
-    source.full = Mock()
+    source.diff = mock.Mock()
+    source.full = mock.Mock()
 
     revision1 = Revision(backup, 'a1')
     revision1.timestamp = backy.utils.now()
@@ -130,8 +131,8 @@ def test_choose_diff_with_snapshot(
         check_output, backup, nosleep, backend_factory):
     source = CephRBD(dict(pool='test', image='foo'))
 
-    source.diff = Mock()
-    source.full = Mock()
+    source.diff = mock.Mock()
+    source.full = mock.Mock()
 
     revision1 = Revision(backup, 'a1')
     revision1.timestamp = backy.utils.now()
@@ -163,6 +164,8 @@ def test_choose_diff_with_snapshot(
 @pytest.mark.parametrize("backend_factory",
                          [COWFileBackend, ChunkedFileBackend])
 def test_diff_backup(check_output, backup, tmpdir, nosleep, backend_factory):
+    from backy.sources.ceph.diff import RBDDiffV1
+
     source = CephRBD(dict(pool='test', image='foo'))
 
     parent = Revision(backup, 'ed968696-5ab0-4fe0-af1c-14cadab44661')
@@ -179,16 +182,11 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep, backend_factory):
     with backend_factory(parent).open('wb') as f:
         f.write(b'asdf')
 
-    with open(str(tmpdir / revision.uuid) + '.rbddiff', 'wb') as f:
-        f.write(SAMPLE_RBDDIFF)
-
     backup.scan()
     revision.materialize()
 
     check_output.side_effect = [
         # snap create
-        b'{}',
-        # export-diff
         b'{}',
         # snap ls
         b'[{"name": "backy-ed968696-5ab0-4fe0-af1c-14cadab44661"}, \
@@ -197,22 +195,25 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep, backend_factory):
         b'{}',
     ]
 
-    backend = backend_factory(revision)
-    with source(revision):
-        source.diff(backend)
-        backup.history.append(revision)
+    with mock.patch('backy.sources.ceph.rbd.RBDClient.export_diff') as export:
+        export.return_value = mock.MagicMock()
+        export.return_value.__enter__.return_value = RBDDiffV1(
+            io.BytesIO(SAMPLE_RBDDIFF))
+        backend = backend_factory(revision)
+        with source(revision):
+            source.diff(backend)
+            backup.history.append(revision)
+        export.assert_called_with(
+            'test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802',
+            'backy-ed968696-5ab0-4fe0-af1c-14cadab44661')
 
     assert check_output.call_args_list == [
-        call([RBD, '--no-progress', 'snap', 'create',
-             'test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802']),
-        call([RBD, '--no-progress', 'export-diff',
-              'test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802',
-              '{}/f0e7292e-4ad8-4f2e-86d6-f40dca2aa802.rbddiff'.format(tmpdir),
-              '--from-snap', 'backy-ed968696-5ab0-4fe0-af1c-14cadab44661']),
-        call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
-              'test/foo']),
-        call([RBD, '--no-progress', 'snap', 'rm',
-              'test/foo@backy-ed968696-5ab0-4fe0-af1c-14cadab44661'])]
+        mock.call([RBD, '--no-progress', 'snap', 'create',
+                   'test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802']),
+        mock.call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
+                   'test/foo']),
+        mock.call([RBD, '--no-progress', 'snap', 'rm',
+                   'test/foo@backy-ed968696-5ab0-4fe0-af1c-14cadab44661'])]
 
 
 @pytest.mark.parametrize("backend_factory",
@@ -227,36 +228,24 @@ def test_full_backup(check_output, backup, tmpdir, backend_factory):
     revision.materialize()
     backup.scan()
 
-    rbd_source = str(tmpdir / '-dev-rbd0')
-    with open(rbd_source, 'w') as f:
-        f.write('Han likes Leia.')
-
     check_output.side_effect = [
         # snap create
-        b'{}',
-        # map
-        b'{}',
-        # showmapped
-        '{{"rbd0": {{"pool": "test", "name": "foo", "snap": "backy-a0", \
-                     "device": "{}"}}}}'.format(rbd_source).encode('ascii'),
-        # unmap
         b'{}',
         # snap ls
         b'[{"name": "backy-a0"}]']
 
-    backend = backend_factory(revision)
-    with source(revision):
-        source.full(backend)
+    with mock.patch('backy.sources.ceph.rbd.RBDClient.export') as export:
+        export.return_value = io.BytesIO(b'Han likes Leia.')
+        backend = backend_factory(revision)
+        with source(revision):
+            source.full(backend)
+        export.assert_called_with('test/foo@backy-a0')
 
     assert check_output.call_args_list == [
-        call([RBD, '--no-progress', 'snap', 'create',
-              'test/foo@backy-a0']),
-        call([RBD, '--no-progress', '--read-only', 'map',
-              'test/foo@backy-a0']),
-        call([RBD, '--no-progress', '--format=json', 'showmapped']),
-        call([RBD, '--no-progress', 'unmap', rbd_source]),
-        call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
-              'test/foo'])]
+        mock.call([RBD, '--no-progress', 'snap', 'create',
+                   'test/foo@backy-a0']),
+        mock.call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
+                   'test/foo'])]
 
     assert backend.open('rb').read() == b'Han likes Leia.'
 
@@ -266,26 +255,17 @@ def test_full_backup(check_output, backup, tmpdir, backend_factory):
     revision2.materialize()
     backup.scan()
 
-    rbd_source = str(tmpdir / '-dev-rbd0')
-    with open(rbd_source, 'w') as f:
-        f.write('Han loves Leia.')
-
     check_output.side_effect = [
         # snap create
-        b'{}',
-        # map
-        b'{}',
-        # showmapped
-        '{{"rbd0": {{"pool": "test", "name": "foo", "snap": "backy-a1", \
-                     "device": "{}"}}}}'.format(rbd_source).encode('ascii'),
-        # unmap
         b'{}',
         # snap ls
         b'[{"name": "backy-a1"}]']
 
-    backend = backend_factory(revision2)
-    with source(revision2):
-        source.full(backend)
+    with mock.patch('backy.sources.ceph.rbd.RBDClient.export') as export:
+        export.return_value = io.BytesIO(b'Han loves Leia.')
+        backend = backend_factory(revision2)
+        with source(revision2):
+            source.full(backend)
 
     assert backend.open('rb').read() == b'Han loves Leia.'
 
@@ -311,19 +291,9 @@ def test_full_backup_integrates_changes(
     rev1.parent = 'a0'
     rev1.materialize()
 
-    rbd_source = str(tmpdir / '_dev_rbd0')
-
     def returnvals(name):
         return [
             # snap create
-            b'{}',
-            # map
-            b'{}',
-            # showmapped
-            '{{"rbd0": {{"pool": "test", "name": "foo", "snap": "backy-{}", \
-                         "device": "{}"}}}}'.format(
-                name, rbd_source).encode('ascii'),
-            # unmap
             b'{}',
             # snap ls
             '[{{"name": "backy-{}"}}]'.format(name).encode('ascii'),
@@ -338,12 +308,12 @@ def test_full_backup_integrates_changes(
 
     # check fidelity
     for content, rev in [(content0, rev0), (content1, rev1)]:
-        with open(rbd_source, 'wb') as f:
-            f.write(content)
-
-        backend = backend_factory(rev)
-        with source(rev):
-            source.full(backend)
+        with mock.patch('backy.sources.ceph.rbd.RBDClient.export') as export:
+            export.return_value = io.BytesIO(content)
+            backend = backend_factory(rev)
+            with source(rev):
+                source.full(backend)
+            export.assert_called_with('test/foo@backy-{}'.format(rev.uuid))
 
         with backend_factory(rev).open('rb') as f:
             assert content == f.read()
@@ -387,13 +357,14 @@ def test_verify_fail(check_output, backup, tmpdir, backend_factory):
         assert not source.verify(backend)
 
     assert check_output.call_args_list == [
-        call([RBD, '--no-progress', 'snap', 'create', 'test/foo@backy-a0']),
-        call([RBD, '--no-progress', '--read-only', 'map',
-              'test/foo@backy-a0']),
-        call([RBD, '--no-progress', '--format=json', 'showmapped']),
-        call([RBD, '--no-progress', 'unmap', rbd_source]),
-        call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
-              'test/foo'])]
+        mock.call(
+            [RBD, '--no-progress', 'snap', 'create', 'test/foo@backy-a0']),
+        mock.call([RBD, '--no-progress', '--read-only', 'map',
+                   'test/foo@backy-a0']),
+        mock.call([RBD, '--no-progress', '--format=json', 'showmapped']),
+        mock.call([RBD, '--no-progress', 'unmap', rbd_source]),
+        mock.call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
+                   'test/foo'])]
 
 
 @pytest.mark.parametrize("backend_factory",
@@ -434,13 +405,14 @@ def test_verify(check_output, backup, tmpdir, backend_factory):
         assert source.verify(backend)
 
     assert check_output.call_args_list == [
-        call([RBD, '--no-progress', 'snap', 'create', 'test/foo@backy-a0']),
-        call([RBD, '--no-progress', '--read-only', 'map',
-              'test/foo@backy-a0']),
-        call([RBD, '--no-progress', '--format=json', 'showmapped']),
-        call([RBD, '--no-progress', 'unmap', rbd_source]),
-        call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
-              'test/foo'])]
+        mock.call(
+            [RBD, '--no-progress', 'snap', 'create', 'test/foo@backy-a0']),
+        mock.call([RBD, '--no-progress', '--read-only', 'map',
+                  'test/foo@backy-a0']),
+        mock.call([RBD, '--no-progress', '--format=json', 'showmapped']),
+        mock.call([RBD, '--no-progress', 'unmap', rbd_source]),
+        mock.call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
+                   'test/foo'])]
 
 
 def test_ceph_config_from_cli():

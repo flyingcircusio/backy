@@ -1,8 +1,6 @@
 from .rbd import RBDClient
 import backy.utils
 import logging
-import os
-import shutil
 import time
 
 logger = logging.getLogger(__name__)
@@ -72,30 +70,29 @@ class CephRBD(object):
         logger.info('Performing differential backup')
         snap_from = 'backy-' + self.revision.parent
         snap_to = 'backy-' + self.revision.uuid
-        d = self.rbd.export_diff(self._image_name + '@' + snap_to,
-                                 snap_from,
-                                 self.revision.filename + '.rbddiff')
-        stat = os.stat(d.filename)
-        logger.info(
-            'RBD diff done (%s)',
-            backy.utils.format_bytes_flexible(stat.st_size))
+        s = self.rbd.export_diff(
+            self._image_name + '@' + snap_to, snap_from)
         t = target.open('r+b')
-        with t as target:
-            bytes = d.integrate(target, snap_from, snap_to)
+        with s as source, t as target:
+            bytes = source.integrate(target, snap_from, snap_to)
         logger.info('Integration finished.')
 
         self.revision.stats['bytes_written'] = bytes
 
     def full(self, target):
         logger.info('Performing full backup')
-        s = self.rbd.image_reader('{}/{}@backy-{}'.format(
+        s = self.rbd.export('{}/{}@backy-{}'.format(
             self.pool, self.image, self.revision.uuid))
         t = target.open('r+b')
+        copied = 0
         with s as source, t as target:
-            shutil.copyfileobj(source, target,
-                               length=(4*backy.utils.MiB))
-            bytes = source.tell()
-        self.revision.stats['bytes_written'] = bytes
+            while True:
+                buf = source.read(4*backy.utils.MiB)
+                if not buf:
+                    break
+                target.write(buf)
+                copied += len(buf)
+        self.revision.stats['bytes_written'] = copied
 
     def verify(self, target):
         s = self.rbd.image_reader('{}/{}@backy-{}'.format(

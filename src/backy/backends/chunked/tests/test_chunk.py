@@ -70,7 +70,7 @@ def test_chunk_read_existing(tmpdir):
     chunk.flush()
 
 
-def test_chunk_write_existing(tmpdir):
+def test_chunk_write_existing_partial_joins_with_existing_data(tmpdir):
     store = Store(str(tmpdir / 'store'))
 
     p = store.chunk_path('asdf')
@@ -83,3 +83,21 @@ def test_chunk_write_existing(tmpdir):
     chunk = Chunk(f, 1, store, 'asdf')
     chunk.write(2, b'xxsdf')
     assert chunk.read(0) == (b'asxxsdf', -1)
+    assert chunk._read_existing_called
+
+
+def test_chunk_write_existing_partial_complete_does_not_read_existing_data(
+        tmpdir):
+    store = Store(str(tmpdir / 'store'))
+
+    p = store.chunk_path('asdf')
+    os.makedirs(os.path.dirname(p))
+    with open(p, 'wb') as existing:
+        existing.write(lzo.compress(b'asdf'))
+
+    f = File(str(tmpdir / 'asdf'), store)
+
+    chunk = Chunk(f, 1, store, 'asdf')
+    chunk.write(0, b'X' * Chunk.CHUNK_SIZE)
+    assert not chunk._read_existing_called
+    assert chunk.read(0, 3) == (b'XXX', 0)

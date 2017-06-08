@@ -17,6 +17,8 @@ class Chunk(object):
 
     CHUNK_SIZE = 4 * 1024**2  # 4 MiB chunks
 
+    _read_existing_called = False  # Test support
+
     def __init__(self, file, id, store, hash):
         self.id = id
         self.hash = hash
@@ -28,17 +30,7 @@ class Chunk(object):
         if self.id not in file._access_stats:
             self.file._access_stats[id] = (0, 0)
 
-        # Prepare working with the chunk. We keep the data in RAM for
-        # easier random access combined with transparent compression.
-        data = b''
-
-        if self.hash:
-            chunk_file = self.store.chunk_path(self.hash)
-            with open(chunk_file, 'rb') as f:
-                data = f.read()
-                data = lzo.decompress(data)
-
-        self.data = io.BytesIO(data)
+        self.data = None
 
     def _cache_prio(self):
         return self.file._access_stats[self.id]
@@ -47,11 +39,29 @@ class Chunk(object):
         count = self.file._access_stats[self.id][0]
         self.file._access_stats[self.id] = (count + 1, time.time())
 
+    def _read_existing(self):
+        self._read_existing_called = True  # Test support
+        if self.data is not None:
+            return
+        # Prepare working with the chunk. We keep the data in RAM for
+        # easier random access combined with transparent compression.
+        data = b''
+        if self.hash:
+            chunk_file = self.store.chunk_path(self.hash)
+            with open(chunk_file, 'rb') as f:
+                data = f.read()
+                data = lzo.decompress(data)
+        self._init_data(data)
+
+    def _init_data(self, data):
+        self.data = io.BytesIO(data)
+
     def read(self, offset, size=-1):
         """Read data from the chunk.
 
         Return the data and the remaining size that should be read.
         """
+        self._read_existing()
         self._touch()
 
         self.data.seek(offset)
@@ -73,8 +83,13 @@ class Chunk(object):
         remaining_data = data[self.CHUNK_SIZE - offset:]
         data = data[:self.CHUNK_SIZE - offset]
 
-        self.data.seek(offset)
-        self.data.write(data)
+        if offset == 0 and len(data) == self.CHUNK_SIZE:
+            # Special case: overwrite the entire chunk.
+            self._init_data(data)
+        else:
+            self._read_existing()
+            self.data.seek(offset)
+            self.data.write(data)
         self.clean = False
 
         return len(data), remaining_data
@@ -82,6 +97,7 @@ class Chunk(object):
     def flush(self):
         if self.clean:
             return
+        assert self.data is not None
         self._update_hash()
         target = self.store.chunk_path(self.hash)
         if not os.path.exists(target):

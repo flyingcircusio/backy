@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class FlyingCircusRootDisk(CephRBD):
 
-    snapshot_timeout = 60
+    snapshot_timeout = 90
 
     def __init__(self, config):
         self.config = config

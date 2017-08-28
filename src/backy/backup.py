@@ -3,7 +3,7 @@ from .backends.cowfile import COWFileBackend
 from .nbd.server import Server
 from .revision import Revision
 from .sources import select_source
-from .utils import SafeFile, copy_overwrite, CHUNK_SIZE, posix_fadvise, copy
+from .utils import SafeFile, CHUNK_SIZE, posix_fadvise, copy
 from backy.utils import min_date
 import fcntl
 import glob

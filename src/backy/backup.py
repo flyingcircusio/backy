@@ -3,7 +3,7 @@ from .backends.cowfile import COWFileBackend
 from .nbd.server import Server
 from .revision import Revision
 from .sources import select_source
-from .utils import SafeFile, copy_overwrite, CHUNK_SIZE, posix_fadvise
+from .utils import SafeFile, copy_overwrite, CHUNK_SIZE, posix_fadvise, copy
 from backy.utils import min_date
 import fcntl
 import glob
@@ -225,7 +225,7 @@ class Backup(object):
                 posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
             except Exception:
                 pass
-            copy_overwrite(source, target)
+            copy(source, target)
 
     @locked(target='.purge', mode='shared')
     def restore_stdout(self, source):

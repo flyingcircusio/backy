@@ -299,8 +299,7 @@ def copy_overwrite(source, target):
 def copy(source, target):
     """Efficiently overwrites `target` with a copy of `source`.
 
-    Identical regions won't be touched so this is COW-friendly. Assumes
-    that `target` is a shallow copy of a previous version of `source`.
+    Identical regions will be touched - so this is not CoW-friendly.
 
     Assumes that `target` exists and is open in read-write mode.
     """

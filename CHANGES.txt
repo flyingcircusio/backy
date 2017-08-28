@@ -22,6 +22,9 @@ Changelog
   but will not reset the error counter or backoff interval in case it
   fails again.
 
+- Performance improvement on restore: don't read the restore target. We don't
+  have to optimize CoW in this case. (#28268)
+
 2.1.5 (2016-07-01)
 ==================
 

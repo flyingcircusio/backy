@@ -2,7 +2,7 @@
 Changelog
 =========
 
-2.2 (unreleased)
+2.2 (2017-08-28)
 ================
 
 - Introduce a new backend storage mechanism, independent of BTRFS: instead of

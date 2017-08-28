@@ -27,6 +27,9 @@ class Task(object):
         self.job = job
         self.tags = set()
         self.run_immediately = asyncio.Event()
+        # The reset timer is used to signal that we reloaded the
+        # schedule and may need to start over.
+        self.reset_timer = asyncio.Event()
 
     @property
     def name(self):
@@ -74,9 +77,15 @@ class Task(object):
     def wait_for_deadline(self):
         remaining_time = self.ideal_start - backy.utils.now()
         print(self.name, self.ideal_start, remaining_time)
-        yield from next(asyncio.as_completed([
-            asyncio.sleep(remaining_time.total_seconds()),
-            self.run_immediately.wait()]))
+        for i, f in enumerate(asyncio.as_completed([
+                asyncio.sleep(remaining_time.total_seconds()),
+                self.run_immediately.wait(),
+                self.reset_timer.wait()], loop=self.job.daemon.loop)):
+            import pdb; pdb.set_trace()
+            if not i:
+                yield from f
+            else:
+                f.cancel()
 
 
 class Job(object):
@@ -102,7 +111,8 @@ class Job(object):
         self.schedule_name = config['schedule']
         self.path = p.join(self.daemon.base_dir, self.name)
         self.update_config()
-        self.backup = Backup(self.path)
+        if self.backup is None:
+            self.backup = Backup(self.path)
 
     @property
     def spread(self):
@@ -192,7 +202,9 @@ class Job(object):
             self.task.tags.update(next_tags)
 
             self.update_status("waiting for deadline")
-            yield from task.wait_for_deadline()
+            trigger = yield from task.wait_for_deadline()
+            import pdb; pdb.set_trace()
+
             logger.info("%s: got deadline trigger", self.name)
             self.update_status("queued for execution")
             returncode = yield from self.daemon.loop.run_in_executor(
@@ -217,7 +229,8 @@ class Job(object):
 
     def start(self):
         self.stop()
-        self._generator_handle = asyncio.async(self.generate_tasks())
+        self._generator_handle = asyncio.async(
+            self.generate_tasks(), loop=self.daemon.loop)
 
     def stop(self):
         if self._generator_handle:

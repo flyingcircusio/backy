@@ -25,15 +25,16 @@ class BackyDaemon(object):
 
     # config defaults, will be overriden from config file
     worker_limit = 1
-    base_dir = '/srv/backy'
+    base_dir = None
     status_file = None
     status_interval = 30
     telnet_addrs = '::1, 127.0.0.1'
-    telnet_port = 6023
+    # Open an ephemeral port initially and then switch over to a specific port
+    # once we get a config.
+    telnet_port = 0
 
     loop = None
     taskpool = None
-    running = False
     async_tasks = None
 
     def __init__(self, config_file):
@@ -44,85 +45,131 @@ class BackyDaemon(object):
         self._lock = None
 
     def _read_config(self):
+        # This should be a light-weight method to inspect intended
+        # configuration state. If you need/want any side-effects, those should
+        # happen in _apply_config. For example, this is used by check() and
+        # that doesn't have access to an event loop and should not cause Job
+        # configs to be written.
+
         if not p.exists(self.config_file):
             logger.error(
                 'Could not load configuration. `%s` does not exist.',
                 self.config_file)
-            raise SystemExit(1)
+            # Keep running with the existing configuration. This may be an
+            # "empty" config but as we have successfully locked the file
+            # at least it existed. We can do further reloads in the future.
+            return
+
         with open(self.config_file, encoding='utf-8') as f:
-            fcntl.flock(f, fcntl.LOCK_SH)
             self.config = yaml.safe_load(f)
 
         g = self.config.get('global', {})
+
+        # Worker config
         self.worker_limit = int(g.get('worker-limit', self.worker_limit))
-        self.base_dir = g.get('base-dir', self.base_dir)
+        logger.debug('worker limit: %s', self.worker_limit)
+
+        # Base directory
+        base_dir = g.get('base-dir', '/srv/backy')
+        if self.base_dir is not None:
+            logger.error(
+                'Changing the base dir is not allowed as an online operation '
+                'as this can have inconsistent results. Keeping {} as the '
+                'base directory. Restart to make this change effective.'
+                .format(self.base_dir))
+        self.base_dir = base_dir
+        logger.debug('backup location: %s', self.base_dir)
+
+        # Status file configuration
         if not self.status_file:
             self.status_file = p.join(self.base_dir, 'status')
         self.status_file = g.get('status-file', self.status_file)
-        self.status_interval = int(g.get('status-interval',
-                                         self.status_interval))
+
+        self.status_interval = float(
+            g.get('status-interval', self.status_interval))
+        logger.debug('status interval: %s', self.status_interval)
+        logger.debug('status location: %s', self.status_file)
+
+        # Telnet server configuration
         self.telnet_addrs = g.get('telnet-addrs', self.telnet_addrs)
         self.telnet_port = int(g.get('telnet-port', self.telnet_port))
 
-        new = {}
+        # Schedule configuration
+        schedules = {}
         for name, config in self.config['schedules'].items():
             if name in self.schedules:
-                new[name] = self.schedules[name]
+                schedules[name] = self.schedules[name]
             else:
-                new[name] = Schedule()
-            new[name].configure(config)
-        self.schedules = new
-
-        logger.debug('status interval: %s', self.status_interval)
-        logger.debug('status location: %s', self.status_file)
-        logger.debug('worker limit: %s', self.worker_limit)
-        logger.debug('backup location: %s', self.base_dir)
+                schedules[name] = Schedule()
+            schedules[name].configure(config)
+        self.schedules = schedules
         logger.debug('available schedules: %s', ', '.join(self.schedules))
 
-    def _setup_jobs(self):
-        # To be called after _read_config().
-        self.jobs = {}
+    def _apply_config(self):
+        # Perform actual changes to the daemon and/or system after a config
+        # update.
+
+        # Worker limit
+        if self.worker_limit < self.taskpool._max_workers:
+            logger.warning(
+                'Decreasing the thread count is not an online operation and '
+                'requires a restart. I will adjust the pools size anyway but '
+                'can not guarantee that it has any effect. The current '
+                'number of active threads is {}'.format(
+                    len(self.taskpool._threads)))
+        self.taskpool._max_workers = self.worker_limit
+
         for name, config in self.config['jobs'].items():
-            self.jobs[name] = Job(self, name)
-            self.jobs[name].configure(config)
+            if name not in self.jobs:
+                # Add new jobs
+                self.jobs[name] = job = Job(self, name)
+                job.configure(config)
+                job.start()
+            else:
+                # Reconfigure existing jobs
+                self.jobs[name].configure(config)
+
+        for job in list(self.jobs.values()):
+            if job.name not in self.config['jobs']:
+                # Remove old jobs
+                job.stop()
+                del self.jobs[job.name]
+
         logger.debug('configured jobs: %s', ', '.join(self.jobs.keys()))
+
+        # (Re-)start the async tasks that may have been reconfigured.
+        for task in self.async_tasks:
+            task.cancel()
+        self.async_tasks.add(asyncio.async(self.save_status_file(),
+                                           loop=self.loop))
+        self.telnet_server()
 
     def lock(self):
         """Ensures that only a single daemon instance is active."""
-        lockfile = p.join(self.base_dir, '.lock')
-        self._lock = open(lockfile, 'a+b')
         try:
+            self._lock = open(self.config_file, 'a+b')
             fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except EnvironmentError as e:
-            logger.critical('failed to acquire lock %s: %s', lockfile, e)
+        except (EnvironmentError, FileNotFoundError) as e:
+            logger.critical('failed to acquire lock %s: %s',
+                            self.config_file, e)
             sys.exit(69)
 
-    def _prepare(self, loop):  # pragma: no cover
-        """Starts the scheduler daemon."""
+    def reload(self):
         self._read_config()
-        self._setup_jobs()
-        # Ensure single daemon instance.
+        self._apply_config()
+
+    def start(self, loop):
+        # Starting the daemon is done in a two-phase process: we first
+        # start with an empty configuration and then we reload from the
+        # config file.
+        # This is done so that reloading becomes a regular process and
+        # has a higher chance of being reliable.
         self.lock()
 
         self.loop = loop
+        self.async_tasks = set()
         self.taskpool = ThreadPoolExecutor(self.worker_limit)
         self.loop.set_default_executor(self.taskpool)
-
-        self.running = True
-        self.async_tasks = set()
-
-    def start(self, loop):
-        self._prepare(loop)
-
-        # semi-daemonize
-        os.chdir(self.base_dir)
-        with open('/dev/null', 'r+b') as null:
-            os.dup2(null.fileno(), 0)
-
-        for job in self.jobs.values():
-            job.start()
-
-        self.async_tasks.add(asyncio.async(self.save_status_file()))
 
         def sighandler(signum, _traceback):
             logger.info('Received signal %s', signum)
@@ -132,6 +179,13 @@ class BackyDaemon(object):
                     signal.SIGTERM):
             signal.signal(sig, sighandler)
 
+        self.reload()
+
+        # semi-daemonize
+        os.chdir(self.base_dir)
+        with open('/dev/null', 'r+b') as null:
+            os.dup2(null.fileno(), 0)
+
     def telnet_server(self):
         """Starts to listen on all configured telnet addresses."""
         assert self.loop, 'cannot start telnet server without event loop'
@@ -140,13 +194,12 @@ class BackyDaemon(object):
                         addr, self.telnet_port)
             self.async_tasks.add(asyncio.async(self.loop.create_server(
                 lambda: telnetlib3.TelnetServer(shell=SchedulerShell),
-                addr, self.telnet_port)))
+                addr, self.telnet_port), loop=self.loop))
 
     def terminate(self):
         logger.info('Terminating all tasks')
         self.taskpool.shutdown()
-        self.running = False
-        for t in self.async_tasks:
+        for t in asyncio.Task.all_tasks(self.loop):
             t.cancel()
         self.loop.stop()
 
@@ -186,7 +239,7 @@ class BackyDaemon(object):
 
     @asyncio.coroutine
     def save_status_file(self):
-        while self.running:
+        while True:
             try:
                 self._write_status_file()
             except Exception as e:  # pragma: no cover
@@ -318,7 +371,6 @@ def main(config_file):  # pragma: no cover
     loop = asyncio.get_event_loop()
     daemon = BackyDaemon(config_file)
     daemon.start(loop)
-    daemon.telnet_server()
 
     try:
         # Blocking call

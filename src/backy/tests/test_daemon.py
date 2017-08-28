@@ -24,6 +24,7 @@ def daemon(tmpdir, event_loop):
 ---
 global:
     base-dir: {base_dir}
+    status-interval: 0.1
 schedules:
     default:
         daily:
@@ -45,7 +46,7 @@ jobs:
     with open(source, 'w') as f:
         f.write('I am your father, Luke!')
 
-    daemon._prepare(event_loop)
+    daemon.start(event_loop)
     yield daemon
     daemon.terminate()
 
@@ -53,7 +54,7 @@ jobs:
 def test_fail_on_nonexistent_config():
     daemon = BackyDaemon('/no/such/config')
     with pytest.raises(SystemExit):
-        daemon._read_config()
+        daemon.start(None)
 
 
 def test_run_backup(daemon):
@@ -204,6 +205,9 @@ def test_task_generator_backoff(caplog, daemon, clock, tmpdir, monkeypatch):
     task = mock.Mock()
     task.ideal_start = backy.utils.now()
 
+    job = daemon.jobs['foo00'].stop()
+    job = daemon.jobs['test01'].stop()
+
     job = daemon.jobs['test01']
     job.start()
 
@@ -237,6 +241,10 @@ def test_task_generator_backoff(caplog, daemon, clock, tmpdir, monkeypatch):
 
     assert Ellipsis("""\
 ... INFO     test01: started task generator loop
+... INFO     test01: status waiting for deadline
+... INFO     foo00: started task generator loop
+... INFO     foo00: status waiting for deadline
+... INFO     test01: started task generator loop
 ... INFO     test01: got deadline trigger
 ... WARNING  test01: retrying in 120 seconds
 ... INFO     test01: got deadline trigger
@@ -249,15 +257,23 @@ def test_task_generator_backoff(caplog, daemon, clock, tmpdir, monkeypatch):
 
 
 @pytest.mark.asyncio
-def test_write_status_file(daemon, event_loop):
-    daemon.running = True
+def test_write_status_file(daemon):
     daemon.status_interval = .01
-    assert not p.exists(daemon.status_file)
-    asyncio.async(daemon.save_status_file())
-    yield from asyncio.sleep(.02)
-    daemon.running = False
     yield from asyncio.sleep(.02)
     assert p.exists(daemon.status_file)
+    with open(daemon.status_file) as f:
+        assert f.read() == Ellipsis("""\
+- {job: test01, last_duration: '-', last_tags: '-', last_time: '-', \
+next_tags: daily,
+  next_time: '... UTC', sla: OK, status: waiting for deadline}
+- {job: foo00, last_duration: '-', last_tags: '-', last_time: '-', \
+next_tags: daily,
+  next_time: '... UTC', sla: OK, status: waiting for deadline}
+""")
+    stamp1 = os.stat(daemon.status_file).st_mtime
+    yield from asyncio.sleep(1.1)
+    stamp2 = os.stat(daemon.status_file).st_mtime
+    assert stamp2 > stamp1
 
 
 def test_daemon_status(daemon):

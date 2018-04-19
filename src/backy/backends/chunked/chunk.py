@@ -108,6 +108,7 @@ class Chunk(object):
         self._update_hash()
         target = self.store.chunk_path(self.hash)
         if not os.path.exists(target):
+            # XXX open close, open close, why?
             fd, tmpfile_name = tempfile.mkstemp(dir=self.store.path)
             os.close(fd)
             with open(tmpfile_name, mode='wb') as f:

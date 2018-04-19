@@ -94,6 +94,10 @@ class CephRBD(object):
                 copied += len(buf)
         self.revision.stats['bytes_written'] = copied
 
+        # TMP Gather statistics to see if we actually are aligned.
+        from backy.backends.chunked.chunk import chunk_stats
+        self.revision.stats['chunk_stats'] = chunk_stats
+
     def verify(self, target):
         s = self.rbd.image_reader('{}/{}@backy-{}'.format(
             self.pool, self.image, self.revision.uuid))

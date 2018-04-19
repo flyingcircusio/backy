@@ -6,6 +6,11 @@ import os
 import tempfile
 import time
 
+chunk_stats = {
+    'write_full': 0,
+    'write_partial': 0,
+}
+
 
 class Chunk(object):
     """A chunk in a file that represents a part of it.
@@ -86,10 +91,12 @@ class Chunk(object):
         if offset == 0 and len(data) == self.CHUNK_SIZE:
             # Special case: overwrite the entire chunk.
             self._init_data(data)
+            chunk_stats['write_full'] += 1
         else:
             self._read_existing()
             self.data.seek(offset)
             self.data.write(data)
+            chunk_stats['write_partial'] += 1
         self.clean = False
 
         return len(data), remaining_data

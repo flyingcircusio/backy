@@ -79,6 +79,10 @@ class CephRBD(object):
 
         self.revision.stats['bytes_written'] = bytes
 
+        # TMP Gather statistics to see where to optimize
+        from backy.backends.chunked.chunk import chunk_stats
+        self.revision.stats['chunk_stats'] = chunk_stats
+
     def full(self, target):
         logger.info('Performing full backup')
         s = self.rbd.export('{}/{}@backy-{}'.format(

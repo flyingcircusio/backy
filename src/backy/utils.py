@@ -12,7 +12,6 @@ import random
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 
 
@@ -432,21 +431,3 @@ def min_date():
 
 def format_timestamp(dt):
     return dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-
-
-class Remover(threading.Thread):
-
-    def __init__(self, remove):
-        super().__init__()
-        self.remove = remove
-
-    def run(self):
-        for filename in self.remove:
-            if os.path.exists(filename):
-                logging.info('Removing %s', filename)
-                os.remove(filename)
-                logging.info('Removed %s', filename)
-
-
-# Support for testing to gather logs
-log_data = []

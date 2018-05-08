@@ -54,18 +54,18 @@ def test_underrun_gets_noticed(tmpdir):
     # This is a somewhat weird case. this means we're referring to a block
     # that is correctly compressed but has too little data in it.
     store = Store(str(tmpdir))
-    f = File(str(tmpdir / 'asdf'), store)
-    f.write(b'asdfasdfasdf')
-    f._flush_chunks(0)
-    hash = list(f._mapping.values())[0]
-    hash_file = store.chunk_path(hash)
-    os.chmod(hash_file, 0o660)
-    with open(hash_file, 'wb') as cf:
-        cf.write(lzo.compress(b'asdf'))
+    with File(str(tmpdir / 'asdf'), store) as f:
+        f.write(b'asdfasdfasdf')
+        f._flush_chunks(0)
+        hash = list(f._mapping.values())[0]
+        hash_file = store.chunk_path(hash)
+        os.chmod(hash_file, 0o660)
+        with open(hash_file, 'wb') as cf:
+            cf.write(lzo.compress(b'asdf'))
 
-    f.seek(0)
-    with pytest.raises(ValueError):
-        f.read()
+        f.seek(0)
+        with pytest.raises(ValueError):
+            f.read()
 
 
 def test_file_seek(tmpdir):
@@ -117,6 +117,8 @@ def test_file_seek(tmpdir):
     f = File(str(tmpdir / 'asdf'), store, mode='r')
     f.read() == b'asdf\x00\x00\x00\x00\x00\x00'
 
+    f.close()
+
 
 def test_simple_open_nonexisting(tmpdir):
     store = Store(str(tmpdir))
@@ -154,10 +156,10 @@ def test_continuously_updated_file(tmpdir):
     f.close()
 
     sample = open(str(tmpdir / 'bsdf'), 'rb')
-    f = File(str(tmpdir / 'asdf'), store)
-    data = sample.read()
-    chunked_data = f.read()
-    assert data == chunked_data
+    with File(str(tmpdir / 'asdf'), store) as f:
+        data = sample.read()
+        chunked_data = f.read()
+        assert data == chunked_data
 
 
 def test_seeky_updated_file(tmpdir):
@@ -194,10 +196,10 @@ def test_seeky_updated_file(tmpdir):
     f.close()
 
     sample = open(str(tmpdir / 'bsdf'), 'rb')
-    f = File(str(tmpdir / 'asdf'), store)
-    data = sample.read()
-    chunked_data = f.read()
-    assert data == chunked_data
+    with File(str(tmpdir / 'asdf'), store) as f:
+        data = sample.read()
+        chunked_data = f.read()
+        assert data == chunked_data
 
 
 def test_truncate(tmpdir):
@@ -221,6 +223,7 @@ def test_truncate(tmpdir):
     # Interesting optimization: truncating re-uses the existing
     # chunk and only limits how much we read from it.
     assert f._mapping == {0: space_hash}
+    f.close()
 
 
 def test_rplus_and_append_positions(tmpdir):

@@ -247,6 +247,7 @@ class File(object):
         self._flush_chunks_counter = threading.BoundedSemaphore(
             self.flush_target*10)
         self._flush_chunks_thread = threading.Thread(
+            name='chunked-file-%s' % self.name,
             target=self._flush_chunks_async)
         self._flush_chunks_thread.running = True
         self._flush_chunks_thread.start()

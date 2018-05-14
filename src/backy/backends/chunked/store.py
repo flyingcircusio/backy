@@ -61,11 +61,6 @@ class Store(object):
             if file_hash not in used_hashes:
                 os.unlink(file)
                 unlinked += 1
-            try:
-                os.rmdir(os.path.dirname(file))
-            except OSError:
-                # Dir is not empty. Ignore.
-                pass
         print("Purged: {} chunks".format(unlinked))
 
     def chunk_path(self, hash):

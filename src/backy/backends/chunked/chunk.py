@@ -114,7 +114,6 @@ class Chunk(object):
             with open(tmpfile_name, mode='wb') as f:
                 f.write(lzo.compress(self.data.getvalue()))
                 f.flush()
-                os.fsync(f)
             subdir = os.path.dirname(target)
             try:
                 os.makedirs(subdir)

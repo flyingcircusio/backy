@@ -187,6 +187,9 @@ class Backup(object):
                 new_revision.write_info()
                 new_revision.readonly()
                 self.scan()
+            # Switched from a fine-grained syncing mechanism to "everything
+            # once" when we're done. This is as safe but much faster.
+            os.sync()
 
     @locked(target='.purge', mode='exclusive')
     def purge(self):

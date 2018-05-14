@@ -29,3 +29,4 @@ src/backy.egg-info/
 tags
 .todo
 vagrant/.vagrant
+.pytest_cache

@@ -247,7 +247,8 @@ def test_full_backup(check_output, backup, tmpdir, backend_factory):
         mock.call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
                    'test/foo'])]
 
-    assert backend.open('rb').read() == b'Han likes Leia.'
+    with backend.open('rb') as f:
+        f.read() == b'Han likes Leia.'
 
     # Now make another full backup. This overwrites the first.
     revision2 = Revision(backup, 'a1')
@@ -267,7 +268,8 @@ def test_full_backup(check_output, backup, tmpdir, backend_factory):
         with source(revision2):
             source.full(backend)
 
-    assert backend.open('rb').read() == b'Han loves Leia.'
+    with backend.open('rb') as f:
+        f.read() == b'Han loves Leia.'
 
 
 @pytest.mark.parametrize("backend_factory",

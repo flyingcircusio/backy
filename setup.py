@@ -59,10 +59,10 @@ setup(
             'pytest',
             'pytest-asyncio',
             'pytest-cache',
-            'pytest-catchlog',
             'pytest-codecheckers',
             'pytest-cov',
             'pytest-timeout',
+            'pytest-threadleak',
         ],
     },
     entry_points="""

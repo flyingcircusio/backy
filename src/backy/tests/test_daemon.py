@@ -234,7 +234,6 @@ def test_task_generator_backoff(caplog, daemon, clock, tmpdir, monkeypatch):
             yield from asyncio.sleep(.1)
 
     yield from wait_for_job_finished()
-
     assert Ellipsis("""\
 ... INFO     test01: started task generator loop
 ... INFO     test01: got deadline trigger

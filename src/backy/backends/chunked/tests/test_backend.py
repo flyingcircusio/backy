@@ -11,7 +11,8 @@ def test_overlay(simple_file_config):
     f = r.open('w')
     f.write(b'asdf')
     f.close()
-    assert r.open('r').read() == b'asdf'
+    with r.open('r') as f:
+        assert f.read() == b'asdf'
     # Open the file in overlay, write to it
     f = r.open('o')
     assert f.read() == b'asdf'
@@ -23,6 +24,7 @@ def test_overlay(simple_file_config):
     # Close the file and open it again results in the original content
     f = r.open('r')
     assert f.read() == b'asdf'
+    f.close()
 
 
 def test_purge(simple_file_config):

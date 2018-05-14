@@ -44,6 +44,7 @@ class Store(object):
         yield errors
 
     def ls(self):
+        # XXX this is fucking expensive
         pattern = os.path.join(self.path, '*/*/*.chunk.lzo')
         for file in glob.glob(pattern):
             hash = rreplace(os.path.split(file)[1], '.chunk.lzo', '')

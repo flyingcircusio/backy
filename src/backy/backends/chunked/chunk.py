@@ -114,7 +114,10 @@ class Chunk(object):
         assert self.data is not None
         self._update_hash()
         target = self.store.chunk_path(self.hash)
-        if not os.path.exists(target) or self.store.force_writes:
+        needs_forced_write = (
+            self.store.force_writes and
+            self.hash not in self.store.seen_forced)
+        if not os.path.exists(target) or needs_forced_write:
             fd, tmpfile_name = tempfile.mkstemp(dir=self.store.path)
             with os.fdopen(fd, mode='wb') as f:
                 data = lzo.compress(self.data.getvalue())
@@ -128,6 +131,7 @@ class Chunk(object):
                 pass
             os.rename(tmpfile_name, target)
             os.chmod(target, 0o440)
+            self.store.seen_forced.add(self.hash)
         self.clean = True
 
     def _update_hash(self):

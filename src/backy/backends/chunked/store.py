@@ -24,6 +24,7 @@ class Store(object):
     def __init__(self, path='/tmp/chunks'):
         self.path = path
         self.users = []
+        self.seen_forced = set()
         if not os.path.exists(self.path):
             os.makedirs(self.path)
 

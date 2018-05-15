@@ -55,11 +55,13 @@ def report_status(f):
             per_chunk = time_elapsed / step
             remaining = steps - step
             time_remaining = remaining * per_chunk
+            eta = (datetime.datetime.now() +
+                   datetime.timedelta(seconds=int(remaining)))
             if step == 5 or not step % 100:  # pragma: nocover
                 print("Progress: {} of {} ({:.2f}%) "
-                      "({:.0f}s elapsed, {:.0f}s remaining)".format(
+                      "({:.0f}s elapsed, {:.0f}s remaining, ETA {})".format(
                           step, steps, step / steps * 100,
-                          time_elapsed, time_remaining))
+                          time_elapsed, time_remaining, eta))
 
         result = next(generator)
         return result

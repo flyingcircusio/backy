@@ -191,27 +191,45 @@ class Backup(object):
             # once" when we're done. This is as safe but much faster.
             os.sync()
 
-    def distrust(self, revision):
+        # If there are distrusted revisions, then perform at least one
+        # verification after a backup - for good measure and to keep things
+        # moving along automatically. This could also be moved into the
+        # scheduler.
+        self.scan()
+        for revision in reversed(self.clean_history):
+            if revision.trust == TRUST_DISTRUSTED:
+                logger.warning('Found inconsistent revision(s). '
+                               'Performing single verification.')
+                backend = self.backend_factory(revision)
+                backend.verify()
+                break
+
+    def distrust(self, revision=None, from_=None, until=None):
         if revision:
             r = self.find(revision)
             r.distrust()
             r.write_info()
         else:
             for r in self.clean_history:
+                if from_ and r.timestamp.date() < from_:
+                    continue
+                if until and r.timestamp.date() > until:
+                    continue
                 r.distrust()
                 r.write_info()
 
     @locked(target='.purge', mode='exclusive')
-    def verify(self, revision):
+    def verify(self, revision=None):
         if revision:
             r = self.find(revision)
             backend = self.backend_factory(r)
             backend.verify()
         else:
             for r in list(self.clean_history):
-                if r.trust == TRUST_DISTRUSTED:
-                    backend = self.backend_factory(r)
-                    backend.verify()
+                if r.trust != TRUST_DISTRUSTED:
+                    continue
+                backend = self.backend_factory(r)
+                backend.verify()
 
     @locked(target='.purge', mode='exclusive')
     def purge(self):

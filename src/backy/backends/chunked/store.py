@@ -16,6 +16,11 @@ def rreplace(str, old, new):
 
 class Store(object):
 
+    # Signal that we should always override chunks that we want to write.
+    # This can be used in the face of suspected inconsistencies while still
+    # wanting to perform new backups.
+    force_writes = False
+
     def __init__(self, path='/tmp/chunks'):
         self.path = path
         self.users = []
@@ -46,7 +51,7 @@ class Store(object):
     def ls(self):
         # XXX this is fucking expensive
         pattern = os.path.join(self.path, '*/*/*.chunk.lzo')
-        for file in glob.glob(pattern):
+        for file in glob.iglob(pattern):
             hash = rreplace(os.path.split(file)[1], '.chunk.lzo', '')
             yield file, hash, lambda f: lzo.decompress(open(f, 'rb').read())
 

@@ -1,7 +1,9 @@
 from .rbd import RBDClient
+from backy.revision import TRUST_DISTRUSTED
 import backy.utils
 import logging
 import time
+
 
 logger = logging.getLogger(__name__)
 
@@ -53,15 +55,19 @@ class CephRBD(object):
 
     def backup(self, target):
         if self.always_full:
-            logger.debug('Running always full backups')
+            logger.info('Full backup: per configuration')
             self.full(target)
             return
         try:
             parent = self.revision.backup.find(self.revision.parent)
+            if parent.trust == TRUST_DISTRUSTED:
+                raise KeyError('Full backup: distrusted parent')
             if not self.rbd.exists(self._image_name + '@backy-' + parent.uuid):
-                raise KeyError()
-        except KeyError:
-            logger.info('Could not find snapshot for previous revision.')
+                raise KeyError(
+                    'Full backup: could not find snapshot for '
+                    'previous revision')
+        except KeyError as e:
+            logger.info(e.args[0])
             self.full(target)
             return
         self.diff(target)

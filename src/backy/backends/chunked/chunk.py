@@ -114,10 +114,11 @@ class Chunk(object):
         assert self.data is not None
         self._update_hash()
         target = self.store.chunk_path(self.hash)
-        if not os.path.exists(target):
+        if not os.path.exists(target) or self.store.force_writes:
             fd, tmpfile_name = tempfile.mkstemp(dir=self.store.path)
             with os.fdopen(fd, mode='wb') as f:
-                f.write(lzo.compress(self.data.getvalue()))
+                data = lzo.compress(self.data.getvalue())
+                f.write(data)
             subdir = os.path.dirname(target)
             try:
                 os.makedirs(subdir)

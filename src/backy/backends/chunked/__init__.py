@@ -2,7 +2,7 @@ from .file import File
 from .store import Store
 from .chunk import Chunk
 from backy.utils import report_status, END
-from backy.revision import TRUST_VERIFIED
+from backy.revision import TRUST_VERIFIED, TRUST_DISTRUSTED
 import logging
 import os.path
 
@@ -23,6 +23,7 @@ class ChunkedFileBackend(object):
         self.store = Store(path=self.revision.backup.path + '/chunks')
 
     def open(self, mode='rb'):
+
         if 'w' in mode or '+' in mode and self.clone_parent:
             parent = self.revision.get_parent()
             if parent and not os.path.exists(self.revision.filename):
@@ -34,7 +35,17 @@ class ChunkedFileBackend(object):
         if mode == 'o':
             mode = 'rw'
             overlay = True
-        return File(self.revision.filename, self.store, mode, overlay)
+        file = File(self.revision.filename, self.store, mode, overlay)
+
+        if file.writable() and not self.store.force_writes:
+            # "Force write"-mode if any revision is distrusted.
+            for revision in self.backup.clean_history:
+                if revision.trust == TRUST_DISTRUSTED:
+                    logger.warn(
+                        'Noticed untrusted revisions - forcing full writes.')
+                    self.store.force_writes = True
+
+        return file
 
     def purge(self):
         self.store.users = []

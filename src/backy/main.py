@@ -5,6 +5,7 @@ from prettytable import PrettyTable
 import argparse
 import backy.backup
 import backy.daemon
+import datetime
 import errno
 import faulthandler
 import logging
@@ -31,6 +32,16 @@ def init_logging(logfile, verbose):  # pragma: no cover
     toplevel.addHandler(handler)
     if logfile:
         logger.info('$ %s', ' '.join(sys.argv))
+
+
+def valid_date(s):
+    if s is None:
+        return None
+    try:
+        return datetime.datetime.strptime(s, "%Y-%m-%d").date()
+    except ValueError:
+        msg = "Not a valid date: '{0}'.".format(s)
+        raise argparse.ArgumentTypeError(msg)
 
 
 class Command(object):
@@ -105,9 +116,9 @@ class Command(object):
         b = backy.backup.Backup('.')
         b.upgrade()
 
-    def distrust(self, revision):
+    def distrust(self, revision, from_, until):
         b = backy.backup.Backup('.')
-        b.distrust(revision)
+        b.distrust(revision, from_, until)
 
     def verify(self, revision):
         b = backy.backup.Backup('.')
@@ -235,6 +246,13 @@ Distrust one or all revisions.
     p.add_argument('-r', '--revision', metavar='SPEC', default='',
                    help='use revision SPEC to distrust, '
                         'distrusting all if not given')
+    p.add_argument('-f', '--from', metavar='DATE',
+                   type=valid_date,
+                   help='Mark revisions on or after this date as distrusted',
+                   dest='from_')
+    p.add_argument('-u', '--until', metavar='DATE',
+                   type=valid_date,
+                   help='Mark revisions on or before this date as distrusted')
     p.set_defaults(func='distrust')
 
     # VERIFY

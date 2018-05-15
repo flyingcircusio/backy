@@ -55,7 +55,7 @@ class File(object):
             # have ints as keys. We convert them explicitly back to integers
             # because we keep computing with them.
             with open(self.name, 'r') as f:
-                # Saveguard: Make sure the file looks like json.
+                # Safeguard: Make sure the file looks like json.
                 if f.read(2) != '{"':
                     raise ValueError(
                         "Revision does not look like it's chunked.")

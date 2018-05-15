@@ -1,6 +1,13 @@
-import os.path
-from .store import Store
 from .file import File
+from .store import Store
+from .chunk import Chunk
+from backy.utils import report_status, END
+from backy.revision import TRUST_VERIFIED
+import logging
+import os.path
+
+
+logger = logging.getLogger(__name__)
 
 
 class ChunkedFileBackend(object):
@@ -29,15 +36,81 @@ class ChunkedFileBackend(object):
             overlay = True
         return File(self.revision.filename, self.store, mode, overlay)
 
-    def purge(self, backup):
-        for revision in backup.history:
+    def purge(self):
+        self.store.users = []
+        for revision in self.backup.history:
             try:
                 self.store.users.append(
-                    backup.backend_factory(revision).open())
+                    self.backup.backend_factory(revision).open())
             except ValueError:
                 # Invalid format, like purging non-chunked with chunked backend
                 pass
         self.store.purge()
+
+    @report_status
+    def verify(self):
+        logger.info('Verifying revision {} ...'.format(self.revision.uuid))
+        verified_chunks = set()
+
+        # Load verified chunks to avoid duplicate work
+        for revision in self.backup.clean_history:
+            if revision.trust != TRUST_VERIFIED:
+                continue
+            f = self.backup.backend_factory(revision).open()
+            verified_chunks.update(f._mapping.values())
+
+        logger.info('Using {} verified hashes'.format(len(verified_chunks)))
+
+        errors = False
+        # Go through all chunks and check them. Delete problematic ones.
+        f = self.open()
+        hashes = set(f._mapping.values()) - verified_chunks
+        yield len(hashes) + 2
+        for candidate in hashes:
+            yield
+            if candidate in verified_chunks:
+                continue
+            try:
+                c = Chunk(f, 0, self.store, candidate)
+                c._read_existing()
+            except Exception:
+                logger.exception('Error in chunk {} '.format(candidate),
+                                 exc_info=True)
+                errors = True
+                if os.path.exists(self.store.chunk_path(candidate)):
+                    try:
+                        os.unlink(self.store.chunk_path(candidate))
+                    except Exception:
+                        logger.exception(
+                            'Error removing chunk {} '.format(candidate),
+                            exc_info=True)
+                # This is an optimisation: we can skip this revision, purge it
+                # and then keep verifying other chunks. This avoids checking
+                # things unnecessarily in duplicate.
+                # And we only mark it as verified if we never saw any problems.
+                break
+
+        yield
+
+        if errors:
+            # Found any issues? Delete this revision as we can't trust it.
+            logger.error('Found problem - removing revision.'.format(errors))
+            self.revision.remove()
+        else:
+            # No problems found - mark as verified.
+            logger.info('No problems found - marking as verified.')
+            self.revision.verify()
+            self.revision.write_info()
+
+        yield
+
+        # Purge to ensure that we don't leave unused, potentially untrusted
+        # stuff around, especially if this was the last revision.
+        logger.info('Purging ...')
+        self.purge()
+
+        yield END
+        yield None
 
     def scrub(self, backup, type):
         if type == 'light':

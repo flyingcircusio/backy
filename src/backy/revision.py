@@ -9,6 +9,11 @@ import shortuuid
 import yaml
 
 
+TRUST_TRUSTED = 'trusted'
+TRUST_DISTRUSTED = 'distrusted'
+TRUST_VERIFIED = 'verified'
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,6 +24,7 @@ class Revision(object):
     parent = None
     stats = None
     tags = ()
+    trust = TRUST_TRUSTED  # or TRUST_DISTRUSTED, TRUST_VERIFIED
 
     def __init__(self, backup, uuid=None, timestamp=None):
         self.backup = backup
@@ -57,6 +63,8 @@ class Revision(object):
         r.parent = metadata['parent']
         r.stats = metadata.get('stats', {})
         r.tags = set(metadata.get('tags', []))
+        # Assume trusted by default to support migration
+        r.trust = metadata.get('trust', TRUST_TRUSTED)
         # If the metadata does not show the backend type, then it's cowfile.
         r.backend_type = metadata.get('backend_type', 'cowfile')
         return r
@@ -82,6 +90,7 @@ class Revision(object):
             'timestamp': self.timestamp,
             'parent': self.parent,
             'stats': self.stats,
+            'trust': self.trust,
             'tags': list(self.tags)}
         with SafeFile(self.info_filename, encoding='utf-8') as f:
             f.open_new('wb')
@@ -92,12 +101,20 @@ class Revision(object):
         safe_symlink(self.filename, p.join(path, name))
         safe_symlink(self.info_filename, p.join(path, name + '.rev'))
 
+    def distrust(self):
+        logger.info('Distrusting revision %s', self.uuid)
+        self.trust = TRUST_DISTRUSTED
+
+    def verify(self):
+        logger.info('Marking revision as verified %s', self.uuid)
+        self.trust = TRUST_VERIFIED
+
     def remove(self):
         for filename in glob.glob(self.filename + '*'):
             if os.path.exists(filename):
-                logging.info('Removing %s', filename)
+                logger.info('Removing %s', filename)
                 os.remove(filename)
-                logging.info('Removed %s', filename)
+                logger.info('Removed %s', filename)
 
         if self in self.backup.history:
             self.backup.history.remove(self)

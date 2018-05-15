@@ -1,7 +1,7 @@
 from .backends.chunked import ChunkedFileBackend
 from .backends.cowfile import COWFileBackend
 from .nbd.server import Server
-from .revision import Revision
+from .revision import Revision, TRUST_DISTRUSTED
 from .sources import select_source
 from .utils import SafeFile, CHUNK_SIZE, posix_fadvise, copy
 from backy.utils import min_date
@@ -191,15 +191,32 @@ class Backup(object):
             # once" when we're done. This is as safe but much faster.
             os.sync()
 
+    def distrust(self, revision):
+        if revision:
+            r = self.find(revision)
+            r.distrust()
+            r.write_info()
+        else:
+            for r in self.clean_history:
+                r.distrust()
+                r.write_info()
+
+    @locked(target='.purge', mode='exclusive')
+    def verify(self, revision):
+        if revision:
+            r = self.find(revision)
+            backend = self.backend_factory(r)
+            backend.verify()
+        else:
+            for r in list(self.clean_history):
+                if r.trust == TRUST_DISTRUSTED:
+                    backend = self.backend_factory(r)
+                    backend.verify()
+
     @locked(target='.purge', mode='exclusive')
     def purge(self):
         backend = self.backend_factory(self.history[0])
-        backend.purge(self)
-
-    @locked(target='.purge', mode='shared')
-    def scrub(self, type):
-        backend = self.backend_factory(self.history[0])
-        backend.scrub(self, type)
+        backend.purge()
 
     #################
     # Restoring

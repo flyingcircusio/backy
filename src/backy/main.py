@@ -46,7 +46,7 @@ class Command(object):
         b = backy.backup.Backup(self.path)
         total_bytes = 0
 
-        t = PrettyTable(['Date (UTC)', 'ID', 'Size', 'Durat', 'Tags'])
+        t = PrettyTable(['Date (UTC)', 'ID', 'Size', 'Durat', 'Tags', 'Trust'])
         t.align = 'l'
         t.align['Size'] = 'r'
         t.align['Durat'] = 'r'
@@ -57,7 +57,8 @@ class Command(object):
                        r.uuid,
                        format_bytes_flexible(r.stats.get('bytes_written', 0)),
                        str(round(r.stats.get('duration', 0), 1)) + ' s',
-                       ','.join(r.tags)])
+                       ','.join(r.tags),
+                       r.trust])
 
         print(t)
 
@@ -100,13 +101,17 @@ class Command(object):
         b = backy.backup.Backup('.')
         b.nbd_server(host, port)
 
-    def scrub(self, type):
-        b = backy.backup.Backup('.')
-        b.scrub(type)
-
     def upgrade(self):
         b = backy.backup.Backup('.')
         b.upgrade()
+
+    def distrust(self, revision):
+        b = backy.backup.Backup('.')
+        b.distrust(revision)
+
+    def verify(self, revision):
+        b = backy.backup.Backup('.')
+        b.verify(revision)
 
 
 def setup_argparser():
@@ -195,15 +200,6 @@ Serve the revisions of this backup through an NBD server.
 
     p.set_defaults(func='nbd')
 
-    # scrub
-    p = subparsers.add_parser('scrub', help="""\
-Perform scrubbing to ensure data integrity. Lightweight scrubbing reduces IO
-load and runtime by only verifying metadata. Deep scrubbing ensures actual
-data consistency.
-""")
-    p.add_argument('type', choices=['light', 'deep'])
-    p.set_defaults(func='scrub')
-
     # upgrade
     p = subparsers.add_parser('upgrade', help="""\
 Upgrade this backup (incl. its data) to the newest supported version.
@@ -229,6 +225,29 @@ Check whether all jobs adhere to their schedules' SLA.
     p.set_defaults(func='check')
     p.add_argument(
         '-c', '--config', default='/etc/backy.conf')
+
+    # DISTRUST
+    p = subparsers.add_parser(
+        'distrust',
+        help="""\
+Distrust one or all revisions.
+""")
+    p.add_argument('-r', '--revision', metavar='SPEC', default='',
+                   help='use revision SPEC to distrust, '
+                        'distrusting all if not given')
+    p.set_defaults(func='distrust')
+
+    # VERIFY
+    p = subparsers.add_parser(
+        'verify',
+        help="""\
+Verify one or all revisions.
+""")
+    p.add_argument('-r', '--revision', metavar='SPEC', default='',
+                   help='use revision SPEC to verify, '
+                        'verifying all if not given')
+    p.set_defaults(func='verify')
+
     return parser
 
 

@@ -4,7 +4,6 @@ import lzo
 import mmh3
 import os
 import tempfile
-import threading
 import time
 
 
@@ -38,8 +37,6 @@ class Chunk(object):
             self.file._access_stats[id] = (0, 0)
 
         self.data = None
-
-        self._flush_lock = threading.Lock()
 
     def _cache_prio(self):
         return self.file._access_stats[self.id]
@@ -87,44 +84,34 @@ class Chunk(object):
         - the _data_ remaining
 
         """
-        with self._flush_lock:
-            self._touch()
+        self._touch()
 
-            remaining_data = data[self.CHUNK_SIZE - offset:]
-            data = data[:self.CHUNK_SIZE - offset]
+        remaining_data = data[self.CHUNK_SIZE - offset:]
+        data = data[:self.CHUNK_SIZE - offset]
 
-            if offset == 0 and len(data) == self.CHUNK_SIZE:
-                # Special case: overwrite the entire chunk.
-                self._init_data(data)
-                chunk_stats['write_full'] += 1
-            else:
-                self._read_existing()
-                self.data.seek(offset)
-                self.data.write(data)
-                chunk_stats['write_partial'] += 1
-            self.clean = False
+        if offset == 0 and len(data) == self.CHUNK_SIZE:
+            # Special case: overwrite the entire chunk.
+            self._init_data(data)
+            chunk_stats['write_full'] += 1
+        else:
+            self._read_existing()
+            self.data.seek(offset)
+            self.data.write(data)
+            chunk_stats['write_partial'] += 1
+        self.clean = False
 
-            return len(data), remaining_data
+        return len(data), remaining_data
 
     def flush(self):
         if self.clean:
             return
         assert self.data is not None
-
-        with self._flush_lock:
-            # Keep the lock time as minimal as possible to still help the
-            # source to continue. Make the data/hash thing atomic for this
-            # method and then give up the lock again.
-            self._update_hash()
-            target = self.store.chunk_path(self.hash)
-            data = self.data.getvalue()
-
+        self._update_hash()
+        target = self.store.chunk_path(self.hash)
         if not os.path.exists(target):
-            # XXX open close, open close, why?
             fd, tmpfile_name = tempfile.mkstemp(dir=self.store.path)
-            os.close(fd)
-            with open(tmpfile_name, mode='wb') as f:
-                f.write(lzo.compress(data))
+            with os.fdopen(fd, mode='wb') as f:
+                f.write(lzo.compress(self.data.getvalue()))
             subdir = os.path.dirname(target)
             try:
                 os.makedirs(subdir)

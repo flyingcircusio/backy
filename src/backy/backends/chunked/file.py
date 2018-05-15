@@ -3,8 +3,6 @@ import io
 import json
 import os
 import os.path
-import threading
-import time
 
 
 class File(object):
@@ -26,8 +24,6 @@ class File(object):
     """
 
     flush_target = 10
-
-    _flush_chunks_thread = None
 
     def __init__(self, name, store, mode='rw', overlay=False):
         self.name = name
@@ -74,35 +70,31 @@ class File(object):
         # Chunks that we are working on.
         self._chunks = {}
 
-        self._flush_chunks_lock = threading.Lock()
-
     def fileno(self):
         raise OSError('ChunkedFile does not support use through a file '
                       'descriptor.')
 
-    def _flush_chunks_async(self):
-        while self._flush_chunks_thread.running:
-            time.sleep(0.25)
-            self._flush_chunks()
-
     def _flush_chunks(self, target=None):
-        with self._flush_chunks_lock:
-            # Support an override to the general flush/cache mechanism to
-            # allow the final() flush to actually flush everything.
-            target = target if target is not None else self.flush_target
-            if target == 0:
-                remove_chunks = list(self._chunks.values())
-            elif len(self._chunks) < (2 * target):
-                return
-            else:
-                chunks = sorted(self._chunks.values(),
-                                key=lambda x: x._cache_prio())
-                remove_chunks = chunks[:-target]
-
-            for chunk in remove_chunks:
+        # Support an override to the general flush/cache mechanism to
+        # allow the final() flush to actually flush everything.
+        target = target if target is not None else self.flush_target
+        if target == 0:
+            for chunk in self._chunks.values():
                 chunk.flush()
-                del self._chunks[chunk.id]
-                self._flush_chunks_counter.release()
+            self._chunks = {}
+            return
+        elif len(self._chunks) < (2 * target):
+            return
+
+        chunks = list(self._chunks.values())
+        chunks.sort(key=lambda x: x._cache_prio())
+        keep_chunks = chunks[-target:]
+        remove_chunks = chunks[:-target]
+
+        for chunk in remove_chunks:
+            chunk.flush()
+
+        self._chunks = {c.id: c for c in keep_chunks}
 
     def flush(self):
         assert 'w' in self.mode and not self.closed
@@ -118,7 +110,6 @@ class File(object):
 
     def close(self):
         assert not self.closed
-        self._finish_flush()
         if 'w' in self.mode:
             self.flush()
         self.closed = True
@@ -222,41 +213,13 @@ class File(object):
                 self.size = self._position
 
     def _current_chunk(self):
-        self._init_flush()
         chunk_id = self._position // Chunk.CHUNK_SIZE
         offset = self._position % Chunk.CHUNK_SIZE
-        chunk = self._chunks.get(chunk_id)
-        if chunk is None:
-            self._flush_chunks_counter.acquire()
-            self._chunks[chunk_id] = chunk = Chunk(
+        if chunk_id not in self._chunks:
+            self._flush_chunks()
+            self._chunks[chunk_id] = Chunk(
                 self, chunk_id, self.store, self._mapping.get(chunk_id))
-        return chunk, offset
-
-    def _init_flush(self):
-        """start the flush thread.
-
-        This is only necessary when an actual chunk has been created
-        (in _current_chunk).
-
-        """
-        if self._flush_chunks_thread is not None:
-            return
-        # Write to disk in a separate thread, so it's decoupled from reading.
-        self._flush_chunks_lock = threading.Lock()
-        # hard limit on max "live" chunks
-        self._flush_chunks_counter = threading.BoundedSemaphore(
-            self.flush_target*10)
-        self._flush_chunks_thread = threading.Thread(
-            name='chunked-file-%s' % self.name,
-            target=self._flush_chunks_async)
-        self._flush_chunks_thread.running = True
-        self._flush_chunks_thread.start()
-
-    def _finish_flush(self):
-        if self._flush_chunks_thread is None:
-            return
-        self._flush_chunks_thread.running = False
-        self._flush_chunks_thread.join()
+        return self._chunks[chunk_id], offset
 
     def __enter__(self):
         assert not self.closed

@@ -22,7 +22,7 @@ kiB = Bytes * 1024
 MiB = kiB * 1024
 GiB = MiB * 1024
 TiB = GiB * 1024
-# Conversion, Suffix, Format,  Plurals
+# Conversion, Suffix, Format, Plurals
 BYTE_UNITS = [
     (Bytes, 'Byte', '%d', True),
     (kiB, 'kiB', '%0.2f', False),

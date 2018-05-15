@@ -39,10 +39,10 @@ def test_purge(simple_file_config):
     # Reassign as the scan will create a new reference
     r = b.history[0]
     assert len(list(r.backend.store.ls())) == 1
-    r.backend.purge(b)
+    r.backend.purge()
     assert len(list(r.backend.store.ls())) == 1
     r.remove()
-    r.backend.purge(b)
+    r.backend.purge()
     assert len(list(r.backend.store.ls())) == 0
 
 

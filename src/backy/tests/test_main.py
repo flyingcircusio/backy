@@ -25,8 +25,8 @@ def test_display_usage(capsys, argv):
     out, err = capsys.readouterr()
     assert """\
 usage: py.test [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
-               {init,backup,restore,purge,find,status,nbd-server,scrub,\
-upgrade,scheduler,check}
+               {init,backup,restore,purge,find,status,nbd-server,\
+upgrade,scheduler,check,distrust,verify}
                ...
 """ == out
     assert err == ""
@@ -40,8 +40,8 @@ def test_display_help(capsys, argv):
     out, err = capsys.readouterr()
     assert Ellipsis("""\
 usage: py.test [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
-               {init,backup,restore,purge,find,status,nbd-server,scrub,\
-upgrade,scheduler,check}
+               {init,backup,restore,purge,find,status,nbd-server,\
+upgrade,scheduler,check,distrust,verify}
                ...
 
 Backup and restore for block devices.
@@ -241,10 +241,10 @@ def test_commands_wrapper_status(commands, tmpdir, capsys, clock):
 
     assert err == ""
     assert out == """\
-+---------------------+----+---------+-------+------+
-| Date (UTC)          | ID |    Size | Durat | Tags |
-+---------------------+----+---------+-------+------+
-| 2015-09-01 07:06:47 | 1  | 0 Bytes |   0 s |      |
-+---------------------+----+---------+-------+------+
++---------------------+----+---------+-------+------+---------+
+| Date (UTC)          | ID |    Size | Durat | Tags | Trust   |
++---------------------+----+---------+-------+------+---------+
+| 2015-09-01 07:06:47 | 1  | 0 Bytes |   0 s |      | trusted |
++---------------------+----+---------+-------+------+---------+
 1 revisions containing 0 Bytes data (estimated)
 """

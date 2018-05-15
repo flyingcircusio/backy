@@ -93,14 +93,14 @@ def test_chunk_fails_wrong_content(tmpdir):
     store = Store(str(tmpdir / 'store'))
 
     chunk_hash = hash('asdf')
-    p = store.chunk_path('asdf')
+    p = store.chunk_path(chunk_hash)
     os.makedirs(os.path.dirname(p))
     with open(p, 'wb') as existing:
-        existing.write(lzo.compress(b'asdf'))
+        existing.write(lzo.compress(b'bsdf'))
 
     f = File(str(tmpdir / 'asdf'), store)
 
-    chunk = Chunk(f, 1, store, 'asdf')
+    chunk = Chunk(f, 1, store, chunk_hash)
     with pytest.raises(ValueError):
         chunk.read(0)
 

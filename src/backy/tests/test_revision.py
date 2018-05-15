@@ -71,6 +71,7 @@ def test_store_revision_data(backup, clock):
             "uuid": "asdf2",
             "stats": {"bytes_written": 0},
             "tags": [],
+            "trust": "trusted",
             "timestamp": datetime.datetime(2015, 9, 1, 7, 6, 47)}
 
 

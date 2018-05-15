@@ -62,7 +62,6 @@ setup(
             'pytest-codecheckers',
             'pytest-cov',
             'pytest-timeout',
-            'pytest-threadleak',
         ],
     },
     entry_points="""

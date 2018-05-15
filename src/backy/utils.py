@@ -56,7 +56,7 @@ def report_status(f):
             remaining = steps - step
             time_remaining = remaining * per_chunk
             eta = (datetime.datetime.now() +
-                   datetime.timedelta(seconds=int(remaining)))
+                   datetime.timedelta(seconds=int(time_remaining)))
             if step == 5 or not step % 100:  # pragma: nocover
                 logger.info(
                     "Progress: {} of {} ({:.2f}%) "

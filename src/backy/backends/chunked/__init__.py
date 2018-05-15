@@ -44,6 +44,7 @@ class ChunkedFileBackend(object):
                     logger.warn(
                         'Noticed untrusted revisions - forcing full writes.')
                     self.store.force_writes = True
+                    break
 
         return file
 

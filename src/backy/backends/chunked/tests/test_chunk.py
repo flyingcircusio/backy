@@ -1,8 +1,9 @@
-from backy.backends.chunked.chunk import Chunk
+from backy.backends.chunked.chunk import Chunk, hash
 from backy.backends.chunked.file import File
 from backy.backends.chunked.store import Store
 import lzo
 import os
+import pytest
 
 
 SPACE_CHUNK = b' ' * Chunk.CHUNK_SIZE
@@ -55,14 +56,15 @@ def test_chunk_write_partial_offset(tmpdir):
 def test_chunk_read_existing(tmpdir):
     store = Store(str(tmpdir / 'store'))
 
-    p = store.chunk_path('asdf')
+    chunk_hash = hash('asdf')
+    p = store.chunk_path(chunk_hash)
     os.makedirs(os.path.dirname(p))
     with open(p, 'wb') as existing:
         existing.write(lzo.compress(b'asdf'))
 
     f = File(str(tmpdir / 'asdf'), store)
 
-    chunk = Chunk(f, 1, store, 'asdf')
+    chunk = Chunk(f, 1, store, chunk_hash)
     assert chunk.read(0) == (b'asdf', -1)
     assert chunk.read(0, 10) == (b'asdf', 6)
 
@@ -73,6 +75,24 @@ def test_chunk_read_existing(tmpdir):
 def test_chunk_write_existing_partial_joins_with_existing_data(tmpdir):
     store = Store(str(tmpdir / 'store'))
 
+    chunk_hash = hash('asdf')
+    p = store.chunk_path(chunk_hash)
+    os.makedirs(os.path.dirname(p))
+    with open(p, 'wb') as existing:
+        existing.write(lzo.compress(b'asdf'))
+
+    f = File(str(tmpdir / 'asdf'), store)
+
+    chunk = Chunk(f, 1, store, chunk_hash)
+    chunk.write(2, b'xxsdf')
+    assert chunk.read(0) == (b'asxxsdf', -1)
+    assert chunk._read_existing_called
+
+
+def test_chunk_fails_wrong_content(tmpdir):
+    store = Store(str(tmpdir / 'store'))
+
+    chunk_hash = hash('asdf')
     p = store.chunk_path('asdf')
     os.makedirs(os.path.dirname(p))
     with open(p, 'wb') as existing:
@@ -81,9 +101,8 @@ def test_chunk_write_existing_partial_joins_with_existing_data(tmpdir):
     f = File(str(tmpdir / 'asdf'), store)
 
     chunk = Chunk(f, 1, store, 'asdf')
-    chunk.write(2, b'xxsdf')
-    assert chunk.read(0) == (b'asxxsdf', -1)
-    assert chunk._read_existing_called
+    with pytest.raises(ValueError):
+        chunk.read(0)
 
 
 def test_chunk_write_existing_partial_complete_does_not_read_existing_data(

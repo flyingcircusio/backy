@@ -57,6 +57,12 @@ class Chunk(object):
             with open(chunk_file, 'rb') as f:
                 data = f.read()
                 data = lzo.decompress(data)
+            disk_hash = hash(data)
+            # This is a safety belt. Hashing is sufficiently fast to avoid
+            # us accidentally reading garbage.
+            if disk_hash != self.hash:
+                raise ValueError("Expected hash {} but data has {}".format(
+                    self.hash, disk_hash))
         self._init_data(data)
 
     def _init_data(self, data):

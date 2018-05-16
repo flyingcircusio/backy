@@ -5,8 +5,25 @@ Changelog
 2.2.1 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Add major operational support for handling inconsistencies.
 
+- Operators can mark revisions as 'distrusted', either all for a backup, or
+  individual revisions or time ranges.
+
+- If the newest revision is distrusted then we always perform a full backup
+  instead of a differential backup.
+
+- If there is any revision that is distrusted then every chunk will be written
+  even if it exists (once during a backup, identical chunks within a backup will
+  be trusted once written).
+
+- Implement an explicit verification procedure that will automatically trigger
+  after a backup and will verify distrusted revisions and either delete them or
+  mark them as verified.
+
+- Safety belt: always verify content hashes when reading chunks.
+
+- Improve status report logging.
 
 2.2 (2017-08-28)
 ================

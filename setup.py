@@ -44,6 +44,7 @@ setup(
     version=version(),
     install_requires=[
         'consulate',
+        'packaging',
         'prettytable',
         'pytz',
         'PyYaml',

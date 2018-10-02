@@ -1,6 +1,8 @@
 from ...ext_deps import RBD
 from ...utils import CHUNK_SIZE
 from .diff import RBDDiffV1
+from packaging.version import Version
+import backy.sources.ceph
 import contextlib
 import json
 import logging
@@ -13,7 +15,7 @@ class RBDClient(object):
 
     def _rbd(self, cmd, format=None):
         cmd = filter(None, cmd)
-        rbd = [RBD, '--no-progress']
+        rbd = [RBD]
 
         if format == 'json':
             rbd.append('--format=json')
@@ -59,16 +61,20 @@ class RBDClient(object):
 
     @contextlib.contextmanager
     def export_diff(self, new, old):
+        if backy.sources.ceph.CEPH_VERSION >= Version("10.0"):
+            # Introduced in Jewel, major version 10
+            EXPORT_WHOLE_OBJECT = ['--whole-object']
+        else:
+            EXPORT_WHOLE_OBJECT = []
         proc = subprocess.Popen(
-            [RBD, '--no-progress',
+            [RBD,
              'export-diff', new,
-             '--from-snap', old,
-             '-'],
+             '--from-snap', old] + EXPORT_WHOLE_OBJECT + ['-'],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             # Have a rather largish buffer size, so rbd has some room to
             # push its data to, when we are busy writing.
-            bufsize=4*CHUNK_SIZE)
+            bufsize=8*CHUNK_SIZE)
         try:
             yield RBDDiffV1(proc.stdout)
         finally:
@@ -88,7 +94,7 @@ class RBDClient(object):
     @contextlib.contextmanager
     def export(self, image):
         proc = subprocess.Popen(
-            [RBD, '--no-progress',
+            [RBD, 
              'export', image,
              '-'],
             stdin=subprocess.DEVNULL,

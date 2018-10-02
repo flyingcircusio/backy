@@ -5,7 +5,9 @@ Changelog
 2.3.1 (unreleased)
 ==================
 
-- Add support for Ceph Jewel's --whole-object diff export.
+- Add support for Ceph Jewel's --whole-object diff export. (#24636)
+
+- Improve garbage collection of old snapshot requests. (#100024)
 
 - Require Python 3.6.
 

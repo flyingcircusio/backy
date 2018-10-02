@@ -1,8 +1,6 @@
 from subprocess import run, PIPE
 import packaging.version
 
-CEPH_VERSION = None
-
 
 def get_ceph_major_version():
     result = run(['ceph', '-v'], stdout=PIPE, stderr=PIPE, check=True)
@@ -13,4 +11,8 @@ def get_ceph_major_version():
             'Unexpected version line: {:r}'.format(version_string))
     return packaging.version.parse(version_parts[3])
 
-CEPH_VERSION = get_ceph_major_version()
+
+try:
+    CEPH_VERSION = get_ceph_major_version()
+except FileNotFoundError:
+    CEPH_VERSION = packaging.version.Version("0")

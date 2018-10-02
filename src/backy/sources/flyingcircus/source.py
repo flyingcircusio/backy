@@ -42,7 +42,7 @@ class FlyingCircusRootDisk(CephRBD):
 
         consul.kv[snapshot_key] = {'vm': self.vm, 'snapshot': name}
 
-        time.sleep(1)
+        time.sleep(3)
         try:
             timeout = TimeOut(self.snapshot_timeout, interval=2,
                               raise_on_timeout=True)
@@ -69,5 +69,5 @@ class FlyingCircusRootDisk(CephRBD):
                 if s['snapshot'].startswith('backy-'):
                     logger.info(
                         'Consul: removing snapshot request of %s@%s via %s',
-                                s['vm'], s['snapshot'], key)
+                        s['vm'], s['snapshot'], key)
                     del consul.kv[key]

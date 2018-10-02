@@ -94,7 +94,7 @@ class RBDClient(object):
     @contextlib.contextmanager
     def export(self, image):
         proc = subprocess.Popen(
-            [RBD, 
+            [RBD,
              'export', image,
              '-'],
             stdin=subprocess.DEVNULL,

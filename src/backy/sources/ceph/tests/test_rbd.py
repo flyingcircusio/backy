@@ -11,13 +11,12 @@ def test_rbd_command_wrapper(check_output):
     client = RBDClient()
 
     client._rbd(['foo'])
-    check_output.assert_called_with([RBD, '--no-progress', 'foo'])
+    check_output.assert_called_with([RBD, 'foo'])
 
     check_output.return_value = b'{"asdf": 1}'
     result = client._rbd(['foo'], format='json')
     assert result == {'asdf': 1}
-    check_output.assert_called_with(
-        [RBD, '--no-progress', '--format=json', 'foo'])
+    check_output.assert_called_with([RBD, '--format=json', 'foo'])
 
 
 @pytest.fixture
@@ -125,7 +124,7 @@ def test_rbd_export_diff(popen, rbdclient, tmpdir):
     with rbdclient.export_diff('test/test04.root@new', 'old') as diff:
         assert isinstance(diff, RBDDiffV1)
     popen.assert_has_calls([
-        mock.call([RBD, '--no-progress',
+        mock.call([RBD,
                   'export-diff', 'test/test04.root@new',
                    '--from-snap', 'old', '-'],
                   stdin=subprocess.DEVNULL,
@@ -174,7 +173,7 @@ def test_rbd_export(popen, rbdclient, tmpdir):
     with rbdclient.export(mock.sentinel.image) as f:
         assert f == stdout
     popen.assert_has_calls([
-        mock.call([RBD, '--no-progress',
+        mock.call([RBD,
                   'export', mock.sentinel.image, '-'],
                   stdin=subprocess.DEVNULL,
                   stdout=subprocess.PIPE,

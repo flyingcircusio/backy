@@ -1,8 +1,9 @@
 from backy.sources import select_source
 from backy.sources.flyingcircus.source import FlyingCircusRootDisk
+from unittest import mock
 import backy.timeout
 import consulate
-from unittest import mock
+import json
 import pytest
 import subprocess
 
@@ -50,7 +51,7 @@ def test_flyingcircus_source_from_cli_invalid():
 def test_flyingcircus_consul_interaction(monkeypatch, fcrd):
     consul_class = mock.Mock()
     consul = consul_class()
-    consul.kv = {}
+    consul.kv = ConsulKVDict()
     monkeypatch.setattr(consulate, 'Consul', consul_class)
 
     check_output = mock.Mock()
@@ -61,11 +62,24 @@ def test_flyingcircus_consul_interaction(monkeypatch, fcrd):
     fcrd.create_snapshot('asdf')
 
 
+class ConsulKVDict(dict):
+
+    def __setitem__(self, k, v):
+        if not isinstance(v, bytes):
+            v = json.dumps(v)
+        super(ConsulKVDict, self).__setitem__(k, v)
+
+    def find(self, prefix):
+        for key in self:
+            if key.startswith(prefix):
+                yield key
+
+
 @pytest.mark.slow
 def test_flyingcircus_consul_interaction_timeout(monkeypatch, fcrd):
     consul_class = mock.Mock()
     consul = consul_class()
-    consul.kv = {}
+    consul.kv = ConsulKVDict()
     monkeypatch.setattr(consulate, 'Consul', consul_class)
 
     check_output = mock.Mock()

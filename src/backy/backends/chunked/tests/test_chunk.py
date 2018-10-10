@@ -58,7 +58,6 @@ def test_chunk_read_existing(tmpdir):
 
     chunk_hash = hash('asdf')
     p = store.chunk_path(chunk_hash)
-    os.makedirs(os.path.dirname(p))
     with open(p, 'wb') as existing:
         existing.write(lzo.compress(b'asdf'))
 
@@ -77,7 +76,6 @@ def test_chunk_write_existing_partial_joins_with_existing_data(tmpdir):
 
     chunk_hash = hash('asdf')
     p = store.chunk_path(chunk_hash)
-    os.makedirs(os.path.dirname(p))
     with open(p, 'wb') as existing:
         existing.write(lzo.compress(b'asdf'))
 
@@ -94,7 +92,6 @@ def test_chunk_fails_wrong_content(tmpdir):
 
     chunk_hash = hash('asdf')
     p = store.chunk_path(chunk_hash)
-    os.makedirs(os.path.dirname(p))
     with open(p, 'wb') as existing:
         existing.write(lzo.compress(b'bsdf'))
 

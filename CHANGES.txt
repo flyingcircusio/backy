@@ -9,6 +9,12 @@ Changelog
 
 - Improve garbage collection of old snapshot requests. (#100024)
 
+- Switch to a new chunked store format: remove one level of directories
+  reducing seeky IO.
+
+- Reorder and improve potentially seeky IOPS in the per-chunk write effort.
+  Do not create directories lazily.
+
 - Require Python 3.6.
 
 2.3 (2018-05-16)

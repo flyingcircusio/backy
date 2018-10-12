@@ -61,6 +61,7 @@ class RBDClient(object):
 
     @contextlib.contextmanager
     def export_diff(self, new, old):
+        logger.info(str(backy.sources.ceph.CEPH_VERSION))
         if backy.sources.ceph.CEPH_VERSION >= Version("10.0"):
             # Introduced in Jewel, major version 10
             EXPORT_WHOLE_OBJECT = ['--whole-object']

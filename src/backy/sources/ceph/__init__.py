@@ -9,7 +9,7 @@ def get_ceph_major_version():
     if version_parts[:2] != ['ceph', 'version']:
         raise ValueError(
             'Unexpected version line: {:r}'.format(version_string))
-    return packaging.version.parse(version_parts[3])
+    return packaging.version.parse(version_parts[2])
 
 
 try:

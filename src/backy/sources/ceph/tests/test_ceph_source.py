@@ -50,10 +50,8 @@ def test_context_manager(check_output, backup):
         pass
 
     assert check_output.call_args_list == [
-        mock.call([RBD, '--no-progress', 'snap', 'create',
-                   'test/foo@backy-1']),
-        mock.call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
-                   'test/foo'])]
+        mock.call([RBD, 'snap', 'create', 'test/foo@backy-1']),
+        mock.call([RBD, '--format=json', 'snap', 'ls', 'test/foo'])]
 
 
 def test_context_manager_cleans_out_snapshots(check_output, backup, nosleep):
@@ -75,11 +73,9 @@ def test_context_manager_cleans_out_snapshots(check_output, backup, nosleep):
         backup.scan()
 
     assert check_output.call_args_list == [
-        mock.call([RBD, '--no-progress', 'snap', 'create',
-                   'test/foo@backy-1']),
-        mock.call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
-                   'test/foo']),
-        mock.call([RBD, '--no-progress', 'snap', 'rm', 'test/foo@backy-2'])]
+        mock.call([RBD, 'snap', 'create', 'test/foo@backy-1']),
+        mock.call([RBD, '--format=json', 'snap', 'ls', 'test/foo']),
+        mock.call([RBD, 'snap', 'rm', 'test/foo@backy-2'])]
 
 
 @pytest.mark.parametrize("backend_factory",
@@ -208,11 +204,11 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep, backend_factory):
             'backy-ed968696-5ab0-4fe0-af1c-14cadab44661')
 
     assert check_output.call_args_list == [
-        mock.call([RBD, '--no-progress', 'snap', 'create',
+        mock.call([RBD, 'snap', 'create',
                    'test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802']),
-        mock.call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
+        mock.call([RBD, '--format=json', 'snap', 'ls',
                    'test/foo']),
-        mock.call([RBD, '--no-progress', 'snap', 'rm',
+        mock.call([RBD, 'snap', 'rm',
                    'test/foo@backy-ed968696-5ab0-4fe0-af1c-14cadab44661'])]
 
 
@@ -242,10 +238,8 @@ def test_full_backup(check_output, backup, tmpdir, backend_factory):
         export.assert_called_with('test/foo@backy-a0')
 
     assert check_output.call_args_list == [
-        mock.call([RBD, '--no-progress', 'snap', 'create',
-                   'test/foo@backy-a0']),
-        mock.call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
-                   'test/foo'])]
+        mock.call([RBD, 'snap', 'create', 'test/foo@backy-a0']),
+        mock.call([RBD, '--format=json', 'snap', 'ls', 'test/foo'])]
 
     with backend.open('rb') as f:
         f.read() == b'Han likes Leia.'
@@ -360,13 +354,11 @@ def test_verify_fail(check_output, backup, tmpdir, backend_factory):
 
     assert check_output.call_args_list == [
         mock.call(
-            [RBD, '--no-progress', 'snap', 'create', 'test/foo@backy-a0']),
-        mock.call([RBD, '--no-progress', '--read-only', 'map',
-                   'test/foo@backy-a0']),
-        mock.call([RBD, '--no-progress', '--format=json', 'showmapped']),
-        mock.call([RBD, '--no-progress', 'unmap', rbd_source]),
-        mock.call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
-                   'test/foo'])]
+            [RBD, 'snap', 'create', 'test/foo@backy-a0']),
+        mock.call([RBD, '--read-only', 'map', 'test/foo@backy-a0']),
+        mock.call([RBD, '--format=json', 'showmapped']),
+        mock.call([RBD, 'unmap', rbd_source]),
+        mock.call([RBD, '--format=json', 'snap', 'ls', 'test/foo'])]
 
 
 @pytest.mark.parametrize("backend_factory",
@@ -408,13 +400,11 @@ def test_verify(check_output, backup, tmpdir, backend_factory):
 
     assert check_output.call_args_list == [
         mock.call(
-            [RBD, '--no-progress', 'snap', 'create', 'test/foo@backy-a0']),
-        mock.call([RBD, '--no-progress', '--read-only', 'map',
-                  'test/foo@backy-a0']),
-        mock.call([RBD, '--no-progress', '--format=json', 'showmapped']),
-        mock.call([RBD, '--no-progress', 'unmap', rbd_source]),
-        mock.call([RBD, '--no-progress', '--format=json', 'snap', 'ls',
-                   'test/foo'])]
+            [RBD, 'snap', 'create', 'test/foo@backy-a0']),
+        mock.call([RBD, '--read-only', 'map', 'test/foo@backy-a0']),
+        mock.call([RBD, '--format=json', 'showmapped']),
+        mock.call([RBD, 'unmap', rbd_source]),
+        mock.call([RBD, '--format=json', 'snap', 'ls', 'test/foo'])]
 
 
 def test_ceph_config_from_cli():

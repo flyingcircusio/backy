@@ -1,8 +1,12 @@
 from . import chunk
 from backy.utils import report_status, END
 import glob
+import logging
 import lzo
 import os.path
+
+logger = logging.getLogger(__name__)
+
 
 # A chunkstore, is responsible for all revisions for a single backup, for now.
 # We can start having statistics later how much reuse between images is
@@ -25,8 +29,29 @@ class Store(object):
         self.path = path
         self.users = []
         self.seen_forced = set()
-        if not os.path.exists(self.path):
-            os.makedirs(self.path)
+        for x in range(256):
+            subdir = os.path.join(self.path, f'{x:02x}')
+            if not os.path.exists(subdir):
+                try:
+                    os.makedirs(subdir)
+                except FileExistsError:
+                    pass
+        if not os.path.exists(os.path.join(self.path, 'store')):
+            self.convert_to_v2()
+
+    def convert_to_v2(self):
+        logger.info('Converting chunk store to v2')
+        for path in glob.iglob(os.path.join(self.path, '*/*/*.chunk.lzo')):
+            new = path.replace(self.path + '/', '', 1)
+            dir, _, chunk = new.split('/')
+            new = os.path.join(self.path, dir, chunk)
+            os.rename(path, new)
+        for path in glob.iglob(os.path.join(self.path, '*/??')):
+            if os.path.isdir(path):
+                os.rmdir(path)
+        with open(os.path.join(self.path, 'store'), 'wb') as f:
+            f.write(b'v2')
+        logger.info('Finished conversion to v2')
 
     @report_status
     def validate_chunks(self):
@@ -51,7 +76,7 @@ class Store(object):
 
     def ls(self):
         # XXX this is fucking expensive
-        pattern = os.path.join(self.path, '*/*/*.chunk.lzo')
+        pattern = os.path.join(self.path, '*/*.chunk.lzo')
         for file in glob.iglob(pattern):
             hash = rreplace(os.path.split(file)[1], '.chunk.lzo', '')
             yield file, hash, lambda f: lzo.decompress(open(f, 'rb').read())
@@ -62,7 +87,6 @@ class Store(object):
         used_hashes = set()
         for user in self.users:
             used_hashes.update(user._mapping.values())
-
         unlinked = 0
         for file, file_hash, _ in self.ls():
             if file_hash not in used_hashes:
@@ -72,6 +96,5 @@ class Store(object):
 
     def chunk_path(self, hash):
         dir1 = hash[:2]
-        dir2 = hash[2:4]
         extension = '.chunk.lzo'
-        return os.path.join(self.path, dir1, dir2, hash + extension)
+        return os.path.join(self.path, dir1, hash + extension)

@@ -1,6 +1,7 @@
-from ..ceph.source import CephRBD
 from ...timeout import TimeOut
+from ..ceph.source import CephRBD
 import consulate
+import json
 import logging
 import time
 import uuid
@@ -38,7 +39,9 @@ class FlyingCircusRootDisk(CephRBD):
         snapshot_key = 'snapshot/{}'.format(str(uuid.uuid4()))
         logger.info('Consul: requesting consistent snapshot of %s@%s via %s',
                     self.vm, name, snapshot_key)
+
         consul.kv[snapshot_key] = {'vm': self.vm, 'snapshot': name}
+
         time.sleep(3)
         try:
             timeout = TimeOut(self.snapshot_timeout, interval=2,
@@ -50,5 +53,21 @@ class FlyingCircusRootDisk(CephRBD):
         finally:
             # In case the snapshot still gets created: the general snapshot
             # deletion code in ceph/source will clean up unused backy snapshots
-            # anyway.
-            del consul.kv[snapshot_key]
+            # anyway. However, we need to work a little harder to delete old
+            # snapshot requests, otherwise we've seen those sometimes not
+            # getting deleted and then re-created all the time.
+            for key in list(consul.kv.find('snapshot/')):
+                try:
+                    s = consul.kv[key]
+                except AttributeError:
+                    continue
+                s = json.loads(s)
+                if s['vm'] != self.vm:
+                    continue
+                # The knowledge about the `backy-` prefix  isn't properly
+                # encapsulated here.
+                if s['snapshot'].startswith('backy-'):
+                    logger.info(
+                        'Consul: removing snapshot request of %s@%s via %s',
+                        s['vm'], s['snapshot'], key)
+                    del consul.kv[key]

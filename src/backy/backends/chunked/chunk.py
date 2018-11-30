@@ -118,19 +118,17 @@ class Chunk(object):
             self.store.force_writes and
             self.hash not in self.store.seen_forced)
         if not os.path.exists(target) or needs_forced_write:
-            fd, tmpfile_name = tempfile.mkstemp(dir=self.store.path)
+            # Create the tempfile in the right directory to increase locality
+            # of our change - avoid renaming between multiple directories to
+            # reduce traffic on the directory nodes.
+            fd, tmpfile_name = tempfile.mkstemp(dir=os.path.dirname(target))
             with os.fdopen(fd, mode='wb') as f:
                 data = lzo.compress(self.data.getvalue())
                 f.write(data)
-            subdir = os.path.dirname(target)
-            try:
-                os.makedirs(subdir)
-            except FileExistsError:
-                # Someone else accessing the store may have created this
-                # already.
-                pass
+            # Micro-optimization: chmod before rename to help against
+            # metadata flushes and then changing metadata again.
+            os.chmod(tmpfile_name, 0o440)
             os.rename(tmpfile_name, target)
-            os.chmod(target, 0o440)
             self.store.seen_forced.add(self.hash)
         self.clean = True
 

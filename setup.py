@@ -44,6 +44,7 @@ setup(
     version=version(),
     install_requires=[
         'consulate',
+        'packaging',
         'prettytable',
         'pytz',
         'PyYaml',
@@ -59,8 +60,8 @@ setup(
             'pytest',
             'pytest-asyncio',
             'pytest-cache',
-            'pytest-codecheckers',
             'pytest-cov',
+            'pytest-flake8',
             'pytest-timeout',
         ],
     },

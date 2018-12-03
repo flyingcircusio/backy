@@ -30,3 +30,4 @@ tags
 .todo
 vagrant/.vagrant
 .pytest_cache
+share/

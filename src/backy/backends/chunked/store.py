@@ -93,9 +93,9 @@ class Store(object):
         to_delete = self.known.copy()
         for user in self.users:
             to_delete = to_delete - set(user._mapping.values())
-        for file_hash in to_delete:
+        print("Purging: {} chunks".format(len(to_delete)))
+        for file_hash in sorted(to_delete):
             os.unlink(self.chunk_path(file_hash))
-        print("Purged: {} chunks".format(len(to_delete)))
 
     def chunk_path(self, hash):
         dir1 = hash[:2]

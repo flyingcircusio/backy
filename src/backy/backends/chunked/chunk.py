@@ -1,3 +1,4 @@
+from backy.utils import posix_fadvise
 import binascii
 import io
 import lzo
@@ -55,6 +56,7 @@ class Chunk(object):
         if self.hash:
             chunk_file = self.store.chunk_path(self.hash)
             with open(chunk_file, 'rb') as f:
+                posix_fadvise(f.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
                 data = f.read()
                 data = lzo.decompress(data)
             disk_hash = hash(data)
@@ -117,11 +119,12 @@ class Chunk(object):
         needs_forced_write = (
             self.store.force_writes and
             self.hash not in self.store.seen_forced)
-        if not os.path.exists(target) or needs_forced_write:
+        if not self.hash in self.store.known or needs_forced_write:
             # Create the tempfile in the right directory to increase locality
             # of our change - avoid renaming between multiple directories to
             # reduce traffic on the directory nodes.
             fd, tmpfile_name = tempfile.mkstemp(dir=os.path.dirname(target))
+            posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
             with os.fdopen(fd, mode='wb') as f:
                 data = lzo.compress(self.data.getvalue())
                 f.write(data)
@@ -130,6 +133,7 @@ class Chunk(object):
             os.chmod(tmpfile_name, 0o440)
             os.rename(tmpfile_name, target)
             self.store.seen_forced.add(self.hash)
+            self.store.known.add(self.hash)
         self.clean = True
 
     def _update_hash(self):

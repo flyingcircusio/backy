@@ -29,6 +29,7 @@ class Store(object):
         self.path = path
         self.users = []
         self.seen_forced = set()
+        self.known = set()
         for x in range(256):
             subdir = os.path.join(self.path, f'{x:02x}')
             if not os.path.exists(subdir):
@@ -38,6 +39,11 @@ class Store(object):
                     pass
         if not os.path.exists(os.path.join(self.path, 'store')):
             self.convert_to_v2()
+
+        for chunk in glob.iglob(os.path.join(self.path, '*/*.chunk.lzo')):
+            hash = os.path.basename(chunk).replace('.chunk.lzo', '')
+            self.known.add(hash)
+        logger.info('Loaded {} known chunks.'.format(len(self.known)))
 
     def convert_to_v2(self):
         logger.info('Converting chunk store to v2')
@@ -84,15 +90,12 @@ class Store(object):
     def purge(self):
         # This assumes exclusive lock on the store. This is guaranteed by
         # backy's main locking.
-        used_hashes = set()
+        to_delete = self.known.copy()
         for user in self.users:
-            used_hashes.update(user._mapping.values())
-        unlinked = 0
-        for file, file_hash, _ in self.ls():
-            if file_hash not in used_hashes:
-                os.unlink(file)
-                unlinked += 1
-        print("Purged: {} chunks".format(unlinked))
+            to_delete = to_delete - set(user._mapping.values())
+        for file_hash in to_delete:
+            os.unlink(self.chunk_path(file_hash))
+        print("Purged: {} chunks".format(len(to_delete)))
 
     def chunk_path(self, hash):
         dir1 = hash[:2]

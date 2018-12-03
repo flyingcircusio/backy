@@ -10,6 +10,7 @@ import os.path
 logger = logging.getLogger(__name__)
 
 
+
 class ChunkedFileBackend(object):
 
     # Normally a new revision will be made by copying the last revision's file.
@@ -17,10 +18,15 @@ class ChunkedFileBackend(object):
     # format.
     clone_parent = True
 
+    STORES = dict()
+
     def __init__(self, revision):
         self.backup = revision.backup
         self.revision = revision
-        self.store = Store(path=self.revision.backup.path + '/chunks')
+        path = self.revision.backup.path + '/chunks'
+        if path not in self.STORES:
+            self.STORES[path] = Store(path=self.revision.backup.path + '/chunks')
+        self.store = self.STORES[path]
 
     def open(self, mode='rb'):
 

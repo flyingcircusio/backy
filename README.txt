@@ -167,6 +167,41 @@ Backup jobs can be triggered at specific times as well: just invoke `backy
 backup` manually.
 
 
+Performance
+===========
+
+Backy is designed to use all of the available storage and network bandwidth by
+running several instances in parallel. The backing storage must be prepared for
+this kind of load. Finding optimal settings needs a bit of experimentation given
+that hardware and load profiles differ from site to site. The following
+section contains a few points to start off.
+
+Storage backend
+---------------
+
+If the backing storage is a RAID array, its stripe size should be aligned with
+the filesystem. We have made good experiences with 256k stripes. Also check for
+512B/4K block misalignments on HDDs.
+
+Filesystem
+----------
+
+We generally recommend XFS since it provides a high degree of parallelism and is
+able to handle very large directories well.
+
+Note that the standard `cfq` I/O scheduler is not a good pick for
+highly parallel bulk I/O on multiple drives. Use `deadline` or `noop`.
+
+Kernel
+------
+
+Since backy performs a lot of metadata operations, make sure that inodes and
+dentries are not evicted from the VFS cache too early. We found that lowering
+the `vm.vfs_cache_pressure` sysctl can make quite a difference in total backup
+performance. You may also want to increase `vm.min_free_kbytes` to avoid page
+allocation errors on 10 GbE network interfaces.
+
+
 Authors
 =======
 

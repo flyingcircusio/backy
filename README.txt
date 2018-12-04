@@ -36,54 +36,12 @@ Operations
 Full restore
 ------------
 
-The most important question is: I screwed up -- how do I get my data back?
-
-Here's the fast answer to make a full restore of the most recent backup::
-
-   $ cd /srv/backy/my-virtual-machine
-   $ dd if=last of=/srv/kvm/my-virtual-machine.img bs=4096k
-
-In case Ceph is used for image storage, just import the image directly::
-
-   $ rbd import last rbd/my-volume
-
-If you like to pick a specific version, it's only a little more effort::
-
-   $ backy status
-   +---------------------+------------+------------+---------+--------------+
-   | Date                | ID         |       Size |   Durat | Tags         |
-   +---------------------+------------+------------+---------+--------------+
-   | 2015-11-04 11:09:26 | UT7PkENubw |  60.00 GiB | 845.0 s | weekly,daily |
-   | 2015-11-05 10:32:03 | fPnbSvEHHy | 264.85 MiB |  88.1 s | daily        |
-   | 2015-11-06 10:32:03 | cErS5GJ5sL | 172.34 MiB |  84.5 s | daily        |
-   +---------------------+------------+------------+---------+--------------+
-   3 revisions containing 60.43 GiB data (estimated)
-   $ dd if=fPnbSvEHHymfztN9FuegLQ of=/srv/kvm/my-virtual-machine bs=4096k
-
-Or try `backy find` to locate the latest backup for a specific tag::
-
-   $ rbd import $(backy find -r weekly) rbd/my-volume
-
+XXX this has changed over time and needs to be rewritten
 
 Restoring individual files
 --------------------------
 
-The image files are exact copies of the data from the virtual disks. You can use
-regular Linux tools to interact with them::
-
-    $ kpartx -av last
-    add map loop0p1 (253:9): 0 41934815 linear /dev/loop0 8192
-    $ mkdir /mnt/restore
-    $ mount -o ro /dev/mapper/loop0p1 /mnt/restore
-    $ cd /mnt/restore
-    $ ls
-    bin  boot  dev  etc  home  lib  lost+found  media  mnt  opt  proc  root  run
-    sbin  srv  sys  tmp  usr  var
-
-To clean up::
-
-    $ umount /mnt/restore
-    $ kpartx -d last
+XXX this has changed over time and needs to be rewritten
 
 
 Setting up backy
@@ -172,8 +130,8 @@ Performance
 
 Backy is designed to use all of the available storage and network bandwidth by
 running several instances in parallel. The backing storage must be prepared for
-this kind of load. Finding optimal settings needs a bit of experimentation given
-that hardware and load profiles differ from site to site. The following
+this kind of (mixed) load. Finding optimal settings needs a bit of experimentation
+given that hardware and load profiles differ from site to site. The following
 section contains a few points to start off.
 
 Storage backend
@@ -181,7 +139,8 @@ Storage backend
 
 If the backing storage is a RAID array, its stripe size should be aligned with
 the filesystem. We have made good experiences with 256k stripes. Also check for
-512B/4K block misalignments on HDDs.
+512B/4K block misalignments on HDDs. We're using it usually with RAID-6 and have
+seen reasonable performance with both hardware and software RAID.
 
 Filesystem
 ----------
@@ -198,8 +157,9 @@ Kernel
 Since backy performs a lot of metadata operations, make sure that inodes and
 dentries are not evicted from the VFS cache too early. We found that lowering
 the `vm.vfs_cache_pressure` sysctl can make quite a difference in total backup
-performance. You may also want to increase `vm.min_free_kbytes` to avoid page
-allocation errors on 10 GbE network interfaces.
+performance. We're currently getting good results setting it to `10`.
+You may also want to increase `vm.min_free_kbytes` to avoid page allocation
+errors on 10 GbE network interfaces.
 
 
 Authors

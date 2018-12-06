@@ -2,10 +2,16 @@
 Changelog
 =========
 
-2.5 (unreleased)
-================
+2.4.1 (unreleased)
+==================
 
-- Nothing changed yet.
+- Optimization: bundle 'unlink' calls to improve cache locality of VFS metadata
+
+- Optimization: load all known chunks at startup to avoid further seeky IO
+  and large metadata parsing, this also speeds up purges.
+
+- Reduce OS VFS cache trashing by explicitly indicating data we don't expect
+  to read again.
 
 
 2.4 (2018-11-30)

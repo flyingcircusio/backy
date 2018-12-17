@@ -36,12 +36,38 @@ Operations
 Full restore
 ------------
 
-XXX this has changed over time and needs to be rewritten
+Check which revision to restore::
+
+  $ backy -b /srv/backy/<vm> status
+
+Maybe set up the Ceph environment - depending on your configuration::
+
+  $ export CEPH_ARGS="--id $HOSTNAME"
+
+Restore the full image through a Pipe::
+
+  $ backy restore -r <revision> - | rbd import - <pool>/<rootimage>
 
 Restoring individual files
 --------------------------
 
-XXX this has changed over time and needs to be rewritten
+Backy provides an NBD server to access backups through a mountable device::
+
+  $ cd /srv/backy/$vm
+  $ backy nbd-server
+
+In a different shell you can now mount this::
+
+  $ nbd-client -N <revision> localhost 9000 /dev/nbd0
+  $ mkdir  -p /mnt/restore/<vm>
+  $ mount -r /dev/nbd0p1 /mnt/restore/<vm>
+
+When done::
+
+  $ umount /mnt/restore/<vm>
+  $ nbd-client -d /dev/nbd0
+
+Also stop the nbd-server with Ctrl-C.
 
 
 Setting up backy

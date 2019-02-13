@@ -1,5 +1,6 @@
 #!/bin/sh
-set -x
+set -ex
+set | grep PATH
 rm -rf bin/ lib/ eggs/ include/ parts/
 python3 -m venv .
 bin/pip install zc.buildout

@@ -88,6 +88,7 @@ def test_flyingcircus_consul_interaction_timeout(monkeypatch, fcrd):
     monkeypatch.setattr(subprocess, 'check_output', check_output)
 
     fcrd.snapshot_timeout = 2
+    fcrd.create_snapshot('asdf')
 
-    with pytest.raises(backy.timeout.TimeOutError):
-        fcrd.create_snapshot('asdf')
+    assert check_output.call_args[0][0] == [
+        'rbd', 'snap', 'create', 'test/test01.root@asdf']

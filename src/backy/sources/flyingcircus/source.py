@@ -1,4 +1,4 @@
-from ...timeout import TimeOut
+from ...timeout import TimeOut, TimeOutError
 from ..ceph.source import CephRBD
 import consulate
 import json

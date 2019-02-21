@@ -50,11 +50,15 @@ class FlyingCircusRootDisk(CephRBD):
                 for snapshot in self.rbd.snap_ls(self._image_name):
                     if snapshot['name'] == name:
                         return
+        except TimeOutError:
+            # The VM might have been shut down. Try doing a regular Ceph
+            # snapshot locally.
+            super(FlyingCircusRootDisk, self).create_snapshot(name)
         finally:
             # In case the snapshot still gets created: the general snapshot
             # deletion code in ceph/source will clean up unused backy snapshots
             # anyway. However, we need to work a little harder to delete old
-            # snapshot requests, otherwise we've seen those sometimes not
+            # snapshot requests, otherwise we've somtimes seen those not
             # getting deleted and then re-created all the time.
             for key in list(consul.kv.find('snapshot/')):
                 try:

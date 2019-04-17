@@ -5,14 +5,15 @@ Changelog
 2.4.3 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Avoid superfluous work when a source is missing, specifically avoid
+  unnecessary Ceph/KVM interaction. (#27020)
 
 
 2.4.2 (2019-04-17)
 ==================
 
 - Optimize handling offline/deletion pending VMs: don't just timeout. Take
-  snapshots and make backups (as long as the image exists).
+  snapshots and make backups (as long as the image exists). (#22345)
 
 - Documentation update about performance implications.
 

@@ -31,6 +31,19 @@ class CephRBD(object):
         pool, image = param
         return dict(pool=pool, image=image)
 
+    def ready(self):
+        """Check whether the source can be backed up.
+
+        For RBD sources this means the volume exists and is accessible.
+
+        """
+        try:
+            if self.rbd.exists(self._image_name):
+                return True
+        except Exception:
+            pass
+        return False
+
     def __call__(self, revision):
         self.revision = revision
         return self

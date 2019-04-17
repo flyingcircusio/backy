@@ -167,6 +167,10 @@ class Backup(object):
     def backup(self, tags):
         start = time.time()
 
+        if not self.source.ready():
+            raise RuntimeError(
+                "Source is not ready (does it exist? can you access it?)")
+
         new_revision = Revision.create(self, tags)
         new_revision.materialize()
         logger.info('New revision {} [{}]'.format(

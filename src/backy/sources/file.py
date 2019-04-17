@@ -24,6 +24,19 @@ class File(object):
     def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
         pass
 
+    def ready(self):
+        """Check whether the source can be backed up.
+
+        For files this means the file exists and is readable.
+
+        """
+        try:
+            with open(self.filename, 'rb'):
+                pass
+        except Exception:
+            return False
+        return True
+
     def backup(self, target):
         logger.info('Performing full backup')
         s = open(self.filename, 'rb')

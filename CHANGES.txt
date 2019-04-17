@@ -8,6 +8,10 @@ Changelog
 - Optimize handling offline/deletion pending VMs: don't just timeout. Take
   snapshots and make backups (as long as the image exists).
 
+- Documentation update about performance implications.
+
+- Clean up build system instrumentation to get our Jenkins going again.
+
 
 2.4.1 (2018-12-06)
 ==================

@@ -51,8 +51,8 @@ setup(
         'setuptools',
         'shortuuid',
         'python-lzo',
-        'telnetlib3>=0.5,<1.0',
-        'murmurhash3',
+        'telnetlib3>=1.0',
+        'mmh3',
         'structlog',
     ],
     extras_require={

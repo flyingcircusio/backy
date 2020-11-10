@@ -43,6 +43,8 @@ class RBDDiffV1(object):
         self.phase = 'metadata'
 
     def read_record(self):
+        if self.phase == 'end':
+            return
         assert not self._streaming, "Unread data from read_w. Consume first."
         self.last_record_type = self.record_type
         self.record_type = self.f.read(1).decode('ascii')
@@ -78,7 +80,7 @@ class RBDDiffV1(object):
 
     def read_e(self):
         self.phase = 'end'
-        raise StopIteration()
+        return None
 
     def read_w(self):
         "updated data"
@@ -114,11 +116,14 @@ class RBDDiffV1(object):
             yield record
 
     def read_data(self):
-        if self.phase == 'end':
-            raise StopIteration()
+        if not self.first_data_record:
+            return
         yield self.first_data_record
         while True:
-            yield self.read_record()
+            record = self.read_record()
+            if record is None:
+                return
+            yield record
 
     def integrate(self, target, snapshot_from, snapshot_to, clean=True):
         """Integrate this diff into the given target.

@@ -28,7 +28,7 @@ def test_init_ceph(tmpdir):
 def test_init_file(tmpdir):
     Backup.init(str(tmpdir), 'file', '/dev/foo')
     with open(str(tmpdir / 'config')) as f:
-        config = yaml.load(f)
+        config = yaml.safe_load(f)
     assert config == {
         "type": "file",
         "filename": "/dev/foo"}

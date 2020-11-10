@@ -7,7 +7,7 @@ def backup_with_revisions(backup, tmpdir):
     with open(str(tmpdir / '123-0.rev'), 'wb') as f:
         f.write(b"""\
 uuid: 123-0
-timestamp: 2015-08-29 00:00:00
+timestamp: 2015-08-29 00:00:00+00:00
 parent:
 stats: {bytes_written: 14868480, duration: 31.1}
 tags: [daily, weekly, monthly]
@@ -15,7 +15,7 @@ tags: [daily, weekly, monthly]
     with open(str(tmpdir / '123-1.rev'), 'wb') as f:
         f.write(b"""\
 uuid: 123-1
-timestamp: 2015-08-30 01:00:00
+timestamp: 2015-08-30 01:00:00+00:00
 parent: 123-0
 stats: {bytes_written: 1486880, duration: 3.7}
 tags: [daily, weekly]
@@ -23,7 +23,7 @@ tags: [daily, weekly]
     with open(str(tmpdir / '123-2.rev'), 'wb') as f:
         f.write(b"""\
 uuid: 123-2
-timestamp: 2015-08-30 02:00:00
+timestamp: 2015-08-30 02:00:00+00:00
 parent: 123-1
 stats: {}
 tags: [daily]

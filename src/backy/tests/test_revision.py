@@ -65,14 +65,15 @@ def test_store_revision_data(backup, clock):
     r.backup = backup
     r.write_info()
     with open(r.info_filename, encoding='utf-8') as info:
-        assert yaml.load(info) == {
+        assert yaml.safe_load(info) == {
             "parent": "asdf",
             "backend_type": "chunked",
             "uuid": "asdf2",
             "stats": {"bytes_written": 0},
             "tags": [],
             "trust": "trusted",
-            "timestamp": datetime.datetime(2015, 9, 1, 7, 6, 47)}
+            "timestamp": datetime.datetime(
+                2015, 9, 1, 7, 6, 47, tzinfo=datetime.timezone.utc)}
 
 
 def test_delete_revision(backup):

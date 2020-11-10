@@ -24,10 +24,10 @@ def test_display_usage(capsys, argv):
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert """\
-usage: py.test [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
-               {init,backup,restore,purge,find,status,nbd-server,\
+usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
+              {init,backup,restore,purge,find,status,nbd-server,\
 upgrade,scheduler,check,distrust,verify}
-               ...
+              ...
 """ == out
     assert err == ""
 
@@ -39,10 +39,10 @@ def test_display_help(capsys, argv):
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert Ellipsis("""\
-usage: py.test [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
-               {init,backup,restore,purge,find,status,nbd-server,\
+usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
+              {init,backup,restore,purge,find,status,nbd-server,\
 upgrade,scheduler,check,distrust,verify}
-               ...
+              ...
 
 Backup and restore for block devices.
 
@@ -79,7 +79,7 @@ def test_call_status(capsys, caplog, backup, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-main.py   ... DEBUG    backup.status(**{})
+DEBUG    backy.main:main.py:... backup.status(**{})
 """) == caplog.text
 
 
@@ -96,7 +96,8 @@ def test_call_init(capsys, caplog, backup, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-main.py   ... DEBUG    backup.init(**{...ceph-rbd...})
+DEBUG    backy.main:main.py:... backup.init(\
+**{'source': 'test/test04', 'type': 'ceph-rbd'})
 """) == caplog.text
 
 
@@ -122,8 +123,8 @@ filename: {}
 {}
 """) == out
     assert Ellipsis("""\
-main.py   ... DEBUG    backup.backup(**{'tags': 'test'})
-backup.py ... DEBUG    Backup("...")
+DEBUG    backy.main:main.py:... backup.backup(**{'tags': 'test'})
+DEBUG    backy.backup:backup.py:... Backup(".../test_call_backup0/backy")
 """) == caplog.text
     assert exit.value.code == 0
 
@@ -141,7 +142,7 @@ def test_call_find(capsys, caplog, backup, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-main.py   ... DEBUG    backup.find(...
+DEBUG    backy.main:main.py:... backup.find(**{'revision': '1'})
 """) == caplog.text
     assert exit.value.code == 0
 
@@ -159,8 +160,7 @@ def test_call_check(capsys, caplog, backup, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-main.py   ... DEBUG    backup.check(**{'config': \
-'/etc/backy.conf'})
+DEBUG    backy.main:main.py:... backup.check(**{'config': '/etc/backy.conf'})
 """) == caplog.text
     assert exit.value.code == 0
 
@@ -178,8 +178,8 @@ def test_call_scheduler(capsys, caplog, backup, argv, monkeypatch):
 """) == out
     assert err == ""
     assert Ellipsis("""\
-main.py   ... DEBUG    backup.scheduler(**{'config': \
-'/etc/backy.conf'})
+DEBUG    backy.main:main.py:... backup.scheduler(\
+**{'config': '/etc/backy.conf'})
 """) == caplog.text
     assert exit.value.code == 0
 
@@ -200,15 +200,15 @@ def test_call_unexpected_exception(capsys, backup, caplog, argv, monkeypatch):
     assert "" == out
     assert "Error: test\n" == err
     assert Ellipsis("""\
-main.py   ... DEBUG    backup.status(**{})
-main.py   ... ERROR    test
+DEBUG    backy.main:main.py:... backup.status(**{})
+ERROR    backy.main:main.py:... test
 Traceback (most recent call last):
   File ".../main.py", line ..., in main
     func(**func_args)
   File ".../src/backy/tests/test_main.py", line ..., in do_raise
     raise RuntimeError("test")
 RuntimeError: test
-main.py   ... INFO     Backy operation failed.
+INFO     backy.main:main.py:... Backy operation failed.
 """) == caplog.text
 
 
@@ -224,7 +224,7 @@ def test_commands_wrapper_init(commands, tmpdir):
         # Already initialized by fixture. Doing again causes exception.
         commands.init('file', str(tmpdir) + '/source')
     with open(str(tmpdir) + '/config') as f:
-        config = yaml.load(f)
+        config = yaml.safe_load(f)
         assert config == {
             'filename': str(tmpdir) + '/source',
             'type': 'file'}

@@ -1,19 +1,21 @@
 let
-  pkgs_18_09_src = (import <nixpkgs> {}).fetchFromGitHub {
-    owner = "NixOS";
+  # FCIO 20.09
+  pkgs_src = (import <nixpkgs> {}).fetchFromGitHub {
+    owner = "flyingcircusio";
     repo = "nixpkgs";
-    rev = "3b44ccd99";
-    sha256 = "17704307xdkxkgharwnlxg46fzchrfz28niprz4z3cjd50shf6hh";
+    rev = "b37976e902f753a5bc8be443aeb92e1030946ccb";
+    sha256 = "1n5fplxv7rbndhz5ahhhljp6cywdd7s2v5qp783mm4ncwm2dng8k";
   };
-  pkgs_18_09 = import pkgs_18_09_src {};
+  pkgs = import pkgs_src {};
 in
-with pkgs_18_09;
+with pkgs;
 stdenv.mkDerivation rec {
   name = "env";
   env = buildEnv { name = name; paths = buildInputs; };
   buildInputs = [
-    python36Full
+    python38Full
     lzo
+    libyaml
   ];
 
   shellHook = ''

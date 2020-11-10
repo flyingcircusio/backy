@@ -166,7 +166,7 @@ def test_update_status(daemon, clock, tmpdir):
 
 
 @pytest.mark.asyncio
-def test_task_generator(daemon, clock, tmpdir, monkeypatch):
+async def test_task_generator(daemon, clock, tmpdir, monkeypatch):
     # This is really just a smoke tests, but it covers the task pool,
     # so hey, better than nothing.
 
@@ -176,8 +176,7 @@ def test_task_generator(daemon, clock, tmpdir, monkeypatch):
     job = daemon.jobs['test01']
     job.start()
 
-    @asyncio.coroutine
-    def null_coroutine(self):
+    async def null_coroutine(self):
         return
 
     monkeypatch.setattr(Task, 'wait_for_deadline', null_coroutine)
@@ -188,16 +187,15 @@ def test_task_generator(daemon, clock, tmpdir, monkeypatch):
             job.stop()
     job.update_status = patched_update_status
 
-    @asyncio.coroutine
-    def wait_for_job_finished():
+    async def wait_for_job_finished():
         while job._generator_handle is not None:
-            yield from asyncio.sleep(.1)
+            await asyncio.sleep(.1)
 
-    yield from wait_for_job_finished()
+    await wait_for_job_finished()
 
 
 @pytest.mark.asyncio
-def test_task_generator_backoff(caplog, daemon, clock, tmpdir, monkeypatch):
+async def test_task_generator_backoff(caplog, daemon, clock, tmpdir, monkeypatch):
     # This is really just a smoke tests, but it covers the task pool,
     # so hey, better than nothing.
 
@@ -207,8 +205,7 @@ def test_task_generator_backoff(caplog, daemon, clock, tmpdir, monkeypatch):
     job = daemon.jobs['test01']
     job.start()
 
-    @asyncio.coroutine
-    def null_coroutine(self):
+    async def null_coroutine(self):
         return
 
     failures = [1, 2, 3]
@@ -228,34 +225,33 @@ def test_task_generator_backoff(caplog, daemon, clock, tmpdir, monkeypatch):
             job.stop()
     job.update_status = patched_update_status
 
-    @asyncio.coroutine
-    def wait_for_job_finished():
+    async def wait_for_job_finished():
         while job._generator_handle is not None:
-            yield from asyncio.sleep(.1)
+            await asyncio.sleep(.1)
 
-    yield from wait_for_job_finished()
+    await wait_for_job_finished()
     assert Ellipsis("""\
-... INFO     test01: started task generator loop
-... INFO     test01: got deadline trigger
-... WARNING  test01: retrying in 120 seconds
-... INFO     test01: got deadline trigger
-... WARNING  test01: retrying in 240 seconds
-... INFO     test01: got deadline trigger
-... WARNING  test01: retrying in 480 seconds
-... INFO     test01: got deadline trigger
-... INFO     test01: got deadline trigger
+INFO     backy.scheduler:scheduler.py:... test01: started task generator loop
+INFO     backy.scheduler:scheduler.py:... test01: got deadline trigger
+WARNING  backy.scheduler:scheduler.py:... test01: retrying in 120 seconds
+INFO     backy.scheduler:scheduler.py:... test01: got deadline trigger
+WARNING  backy.scheduler:scheduler.py:... test01: retrying in 240 seconds
+INFO     backy.scheduler:scheduler.py:... test01: got deadline trigger
+WARNING  backy.scheduler:scheduler.py:... test01: retrying in 480 seconds
+INFO     backy.scheduler:scheduler.py:... test01: got deadline trigger
+INFO     backy.scheduler:scheduler.py:... test01: got deadline trigger
 """) == caplog.text
 
 
 @pytest.mark.asyncio
-def test_write_status_file(daemon, event_loop):
+async def test_write_status_file(daemon, event_loop):
     daemon.running = True
     daemon.status_interval = .01
     assert not p.exists(daemon.status_file)
-    asyncio.async(daemon.save_status_file())
-    yield from asyncio.sleep(.02)
+    asyncio.ensure_future(daemon.save_status_file())
+    await asyncio.sleep(.02)
     daemon.running = False
-    yield from asyncio.sleep(.02)
+    await asyncio.sleep(.02)
     assert p.exists(daemon.status_file)
 
 

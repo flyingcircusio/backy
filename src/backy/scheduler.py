@@ -70,11 +70,10 @@ class Task(object):
             logger.exception(e)
         return returncode
 
-    @asyncio.coroutine
-    def wait_for_deadline(self):
+    async def wait_for_deadline(self):
         remaining_time = self.ideal_start - backy.utils.now()
         print(self.name, self.ideal_start, remaining_time)
-        yield from next(asyncio.as_completed([
+        await next(asyncio.as_completed([
             asyncio.sleep(remaining_time.total_seconds()),
             self.run_immediately.wait()]))
 
@@ -154,8 +153,7 @@ class Job(object):
             if p.exists(config) and filecmp.cmp(config, f.name):
                 raise ValueError('not changed')
 
-    @asyncio.coroutine
-    def generate_tasks(self):
+    async def generate_tasks(self):
         """Generate backup tasks for this job.
 
         Tasks are based on the ideal next time in the future and
@@ -192,10 +190,10 @@ class Job(object):
             self.task.tags.update(next_tags)
 
             self.update_status("waiting for deadline")
-            yield from task.wait_for_deadline()
+            await task.wait_for_deadline()
             logger.info("%s: got deadline trigger", self.name)
             self.update_status("queued for execution")
-            returncode = yield from self.daemon.loop.run_in_executor(
+            returncode = await self.daemon.loop.run_in_executor(
                 None, self.task.backup)
             if returncode:
                 self.update_status("failed")
@@ -208,7 +206,7 @@ class Job(object):
                 # 6 hours maximum for retries.
                 # 2, 4, 8, 16, 32, 65, ..., 6*60, 6*60
                 backoff = min([2**errors, 6 * 60]) * 60
-                logger.warn('{}: retrying in {} seconds'.format(
+                logger.warning('{}: retrying in {} seconds'.format(
                     self.name, backoff))
             else:
                 errors = 0
@@ -217,7 +215,7 @@ class Job(object):
 
     def start(self):
         self.stop()
-        self._generator_handle = asyncio.async(self.generate_tasks())
+        self._generator_handle = asyncio.ensure_future(self.generate_tasks())
 
     def stop(self):
         if self._generator_handle:

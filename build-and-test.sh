@@ -1,8 +1,8 @@
 #!/bin/sh
-set -ex
-set | grep PATH
+set -e
+
 rm -rf bin/ lib/ eggs/ include/ parts/
 python3 -m venv .
-bin/pip install zc.buildout
+bin/pip install zc.buildout setuptools==47.3.1
 bin/buildout
-bin/py.test -m1 --junitxml=parts/tests.xml
+bin/pytest

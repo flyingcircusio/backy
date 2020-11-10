@@ -122,7 +122,7 @@ class BackyDaemon(object):
         for job in self.jobs.values():
             job.start()
 
-        self.async_tasks.add(asyncio.async(self.save_status_file()))
+        self.async_tasks.add(asyncio.ensure_future(self.save_status_file()))
 
         def sighandler(signum, _traceback):
             logger.info('Received signal %s', signum)
@@ -138,9 +138,9 @@ class BackyDaemon(object):
         for addr in (a.strip() for a in self.telnet_addrs.split(',')):
             logger.info('starting telnet server on %s:%i',
                         addr, self.telnet_port)
-            self.async_tasks.add(asyncio.async(self.loop.create_server(
-                lambda: telnetlib3.TelnetServer(shell=SchedulerShell),
-                addr, self.telnet_port)))
+            server = telnetlib3.create_server(
+                host=addr, port=self.telnet_port, shell=telnet_server_shell)
+            self.async_tasks.add(asyncio.ensure_future(server))
 
     def terminate(self):
         logger.info('Terminating all tasks')
@@ -184,14 +184,13 @@ class BackyDaemon(object):
             tmp.open_new('w')
             yaml.safe_dump(self.status(), tmp.f)
 
-    @asyncio.coroutine
-    def save_status_file(self):
+    async def save_status_file(self):
         while self.running:
             try:
                 self._write_status_file()
             except Exception as e:  # pragma: no cover
                 logger.exception(e)
-            yield from asyncio.sleep(self.status_interval)
+            await asyncio.sleep(self.status_interval)
 
     def check(self):
         self._read_config()
@@ -228,7 +227,58 @@ class BackyDaemon(object):
         sys.exit(0)
 
 
-class SchedulerShell(telnetlib3.Telsh):
+async def telnet_server_shell(reader, writer):
+    """
+    A default telnet shell, appropriate for use with telnetlib3.create_server.
+    This shell provides a very simple REPL, allowing introspection and state
+    toggling of the connected client session.
+    This function is a :func:`~asyncio.coroutine`.
+    """
+    writer.write("Ready." + CR + LF)
+
+    linereader = readline(reader, writer)
+    linereader.send(None)
+
+    command = None
+    while True:
+        if command:
+            writer.write(CR + LF)
+        writer.write('backy> ')
+        command = None
+        while command is None:
+            # TODO: use reader.readline()
+            inp = await reader.read(1)
+            if not inp:
+                return
+            command = linereader.send(inp)
+        writer.write(CR + LF)
+        if command == 'quit':
+            writer.write('Goodbye.' + CR + LF)
+            break
+        elif command == 'help':
+            writer.write('quit, writer, slc, toggle [option|all], '
+                         'reader, proto')
+        elif command == 'writer':
+            writer.write(repr(writer))
+        elif command == 'reader':
+            writer.write(repr(reader))
+        elif command == 'proto':
+            writer.write(repr(writer.protocol))
+        elif command == 'version':
+            writer.write(accessories.get_version())
+        elif command == 'slc':
+            writer.write(get_slcdata(writer))
+        elif command.startswith('toggle'):
+            option = command[len('toggle '):] or None
+            writer.write(do_toggle(writer, option))
+        elif command:
+            writer.write('no such command.')
+    writer.close()
+
+
+
+
+class SchedulerShell(object):
 
     shell_name = 'backy'
     shell_ver = pkg_resources.require("backy")[0].version

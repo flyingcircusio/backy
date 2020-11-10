@@ -52,14 +52,10 @@ class Revision(object):
     def load(cls, filename, backup):
         with open(filename, encoding='utf-8') as f:
             metadata = yaml.safe_load(f)
-        if isinstance(metadata['timestamp'], float):
-            metadata['timestamp'] = datetime.datetime.fromtimestamp(
-                metadata['timestamp'])
-        # PyYAML doesn't support round-trip for timezones. :(
-        # http://pyyaml.org/ticket/202
+        assert metadata['timestamp'].tzinfo == datetime.timezone.utc
         r = Revision(backup,
                      uuid=metadata['uuid'],
-                     timestamp=pytz.UTC.localize(metadata['timestamp']))
+                     timestamp=metadata['timestamp'])
         r.parent = metadata['parent']
         r.stats = metadata.get('stats', {})
         r.tags = set(metadata.get('tags', []))

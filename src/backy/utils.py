@@ -222,7 +222,7 @@ def format_bytes_flexible(number):
 if hasattr(os, 'posix_fadvise'):
     posix_fadvise = os.posix_fadvise
 else:  # pragma: no cover
-    logger.warn('Running without `posix_fadvise`.')
+    logger.warning('Running without `posix_fadvise`.')
     os.POSIX_FADV_RANDOM = None
     os.POSIX_FADV_SEQUENTIAL = None
     os.POSIX_FADV_WILLNEED = None
@@ -345,7 +345,7 @@ def cp_reflink(source, target):
         subprocess.check_call([CP, '--reflink=always', source, target],
                               stderr=subprocess.PIPE)
     except subprocess.CalledProcessError:
-        logger.warn('Performing non-COW copy: %s -> %s', source, target)
+        logger.warning('Performing non-COW copy: %s -> %s', source, target)
         if os.path.exists(target):
             os.unlink(target)
         subprocess.check_call([CP, source, target])

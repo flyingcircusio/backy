@@ -75,15 +75,13 @@ class Server(object):
         self.address = addr
         self.backup = backup
 
-    @asyncio.coroutine
-    def nbd_response(self, writer, handle, error=0, data=None):
+    async def nbd_response(self, writer, handle, error=0, data=None):
         writer.write(struct.pack('>LLQ', self.NBD_RESPONSE, error, handle))
         if data:
             writer.write(data)
-        yield from writer.drain()
+        await writer.drain()
 
-    @asyncio.coroutine
-    def handler(self, reader, writer):
+    async def handler(self, reader, writer):
         """Handle the connection"""
         revision = None
         try:
@@ -94,9 +92,9 @@ class Server(object):
             writer.write(
                 b"NBDMAGIC" + struct.pack(
                     ">QH", self.NBD_HANDSHAKE, self.NBD_HANDSHAKE_FLAGS))
-            yield from writer.drain()
+            await writer.drain()
 
-            data = yield from reader.readexactly(4)
+            data = await reader.readexactly(4)
             try:
                 client_flag = struct.unpack(">L", data)[0]
             except struct.error:
@@ -113,7 +111,7 @@ class Server(object):
 
             # negotiation phase
             while True:
-                header = yield from reader.readexactly(16)
+                header = await reader.readexactly(16)
                 try:
                     (magic, opt, length) = struct.unpack(">QLL", header)
                 except struct.error as ex:
@@ -125,7 +123,7 @@ class Server(object):
                                   % magic)
 
                 if length:
-                    data = yield from reader.readexactly(length)
+                    data = await reader.readexactly(length)
                     if(len(data) != length):
                         raise IOError("Negotiation failed: %s bytes expected"
                                       % length)
@@ -155,7 +153,7 @@ class Server(object):
                         writer.write(struct.pack(
                             ">QLLL", self.NBD_REPLY, opt,
                             self.NBD_REP_ERR_UNSUP, 0))
-                        yield from writer.drain()
+                        await writer.drain()
                         continue
 
                     self.log.info("[%s:%s] Negotiated export: %s"
@@ -170,7 +168,7 @@ class Server(object):
                     revision.seek(0)
                     writer.write(struct.pack('>QH', size, export_flags))
                     writer.write(b"\x00" * 124)
-                    yield from writer.drain()
+                    await writer.drain()
 
                     break
 
@@ -186,16 +184,16 @@ class Server(object):
                         revision_encoded = uuid.encode("utf-8")
                         writer.write(struct.pack(">L", len(revision_encoded)))
                         writer.write(revision_encoded)
-                        yield from writer.drain()
+                        await writer.drain()
 
                     writer.write(struct.pack(">QLLL", self.NBD_REPLY, opt,
                                              self.NBD_REP_ACK, 0))
-                    yield from writer.drain()
+                    await writer.drain()
 
                 elif opt == self.NBD_OPT_ABORT:
                     writer.write(struct.pack(">QLLL", self.NBD_REPLY, opt,
                                              self.NBD_REP_ACK, 0))
-                    yield from writer.drain()
+                    await writer.drain()
 
                     raise AbortedNegotiationError()
                 else:
@@ -205,11 +203,11 @@ class Server(object):
 
                     writer.write(struct.pack(">QLLL", self.NBD_REPLY, opt,
                                              self.NBD_REP_ERR_UNSUP, 0))
-                    yield from writer.drain()
+                    await writer.drain()
 
             # operation phase
             while True:
-                header = yield from reader.readexactly(28)
+                header = await reader.readexactly(28)
                 try:
                     (magic, cmd, handle, offset, length) = struct.unpack(
                         ">LLQQL", header)
@@ -231,7 +229,7 @@ class Server(object):
                     # removed when disconnecting and are never associated
                     # with the original revision.
 
-                    data = yield from reader.readexactly(length)
+                    data = await reader.readexactly(length)
                     if(len(data) != length):
                         raise IOError("%s bytes expected, disconnecting" %
                                       length)
@@ -242,11 +240,11 @@ class Server(object):
                         revision._flush_chunks()
                     except IOError as ex:
                         self.log.error("[%s:%s] %s" % (host, port, ex))
-                        yield from self.nbd_response(writer, handle,
+                        await self.nbd_response(writer, handle,
                                                      error=ex.errno)
                         continue
 
-                    yield from self.nbd_response(writer, handle)
+                    await self.nbd_response(writer, handle)
 
                 elif cmd == self.NBD_CMD_READ:
                     try:
@@ -255,15 +253,15 @@ class Server(object):
                         revision._flush_chunks()
                     except IOError as ex:
                         self.log.error("[%s:%s] %s" % (host, port, ex))
-                        yield from self.nbd_response(writer, handle,
+                        await self.nbd_response(writer, handle,
                                                      error=ex.errno)
                         continue
 
-                    yield from self.nbd_response(writer, handle, data=data)
+                    await self.nbd_response(writer, handle, data=data)
 
                 elif cmd == self.NBD_CMD_FLUSH:
                     # Not relevant in overlay mode as we do not persist anyway.
-                    yield from self.nbd_response(writer, handle)
+                    await self.nbd_response(writer, handle)
 
                 else:
                     self.log.warning("[%s:%s] Unknown cmd %s, disconnecting"

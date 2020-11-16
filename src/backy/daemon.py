@@ -146,8 +146,10 @@ class BackyDaemon(object):
         logger.info('Terminating all tasks')
         self.taskpool.shutdown()
         self.running = False
+        logger.info('Cancelling all tasks')
         for t in self.async_tasks:
             t.cancel()
+        logger.info('Stopping loop')
         self.loop.stop()
 
     def status(self, filter_re=None):
@@ -234,10 +236,16 @@ async def telnet_server_shell(reader, writer):
     toggling of the connected client session.
     This function is a :func:`~asyncio.coroutine`.
     """
+    from telnetlib3.server_shell import CR, LF, NUL, readline, get_slcdata
+
+    writer.write('backy {}'.format(pkg_resources.require("backy")[0].version) + CR + LF)
     writer.write("Ready." + CR + LF)
 
     linereader = readline(reader, writer)
     linereader.send(None)
+
+    shell = SchedulerShell(writer=writer)
+
 
     command = None
     while True:
@@ -256,21 +264,23 @@ async def telnet_server_shell(reader, writer):
             writer.write('Goodbye.' + CR + LF)
             break
         elif command == 'help':
-            writer.write('quit, writer, slc, toggle [option|all], '
-                         'reader, proto')
-        elif command == 'writer':
-            writer.write(repr(writer))
-        elif command == 'reader':
-            writer.write(repr(reader))
-        elif command == 'proto':
-            writer.write(repr(writer.protocol))
-        elif command == 'version':
-            writer.write(accessories.get_version())
-        elif command == 'slc':
-            writer.write(get_slcdata(writer))
-        elif command.startswith('toggle'):
-            option = command[len('toggle '):] or None
-            writer.write(do_toggle(writer, option))
+            writer.write('jobs [filter], status, run <job>, runall')
+        elif command.startswith('jobs'):
+            if ' ' in command:
+                _, filter_re = command.split(' ', maxsplit=1)
+            else:
+                filter_re = None
+            shell.jobs(filter_re)
+        elif command == 'status':
+            shell.status()
+        elif command.startswith('runall'):
+            shell.runall()
+        elif command.startswith('run'):
+            if ' ' in command:
+                _, job = command.split(' ', maxsplit=1)
+            else:
+                job = None
+            shell.run(job)
         elif command:
             writer.write('no such command.')
     writer.close()
@@ -280,14 +290,13 @@ async def telnet_server_shell(reader, writer):
 
 class SchedulerShell(object):
 
-    shell_name = 'backy'
-    shell_ver = pkg_resources.require("backy")[0].version
+    writer = None
 
-    def cmdset_jobs(self, filter_re=None, *extra_args):
+    def __init__(self, writer):
+        self.writer = writer
+
+    def jobs(self, filter_re=None):
         """List status of all known jobs. Optionally filter by regex."""
-        if len(extra_args) > 0:
-            self.stream.write('Usage: jobs [REGEX]')
-            return 1
         filter_re = re.compile(filter_re) if filter_re else None
         t = prettytable.PrettyTable([
             'Job', 'SLA', 'Status', 'Last Backup (UTC)', 'Last Tags',
@@ -307,11 +316,10 @@ class SchedulerShell(object):
                        job['next_time'].replace(' UTC', ''),
                        job['next_tags']])
 
-        self.stream.write(t.get_string().replace('\n', '\r\n') + '\r\n')
-        self.stream.write('{} jobs shown'.format(len(jobs)))
-        return 0
+        self.writer.write(t.get_string().replace('\n', '\r\n') + '\r\n')
+        self.writer.write('{} jobs shown'.format(len(jobs)))
 
-    def cmdset_status(self, *_args):
+    def status(self):
         """Show job status overview"""
         t = prettytable.PrettyTable(['Status', '#'])
         state_summary = {}
@@ -321,40 +329,31 @@ class SchedulerShell(object):
 
         for state in sorted(state_summary):
             t.add_row([state, state_summary[state]])
-        self.stream.write(t.get_string().replace('\n', '\r\n'))
-        return 0
+        self.writer.write(t.get_string().replace('\n', '\r\n'))
 
-    def cmdset_run(self, job, *extra_args):
+    def run(self, job):
         """Show job status overview"""
-        job = daemon.jobs[job]
+        try:
+            job = daemon.jobs[job]
+        except KeyError:
+            self.writer.write('Unknown job {}'.format(job))
+            return
         if not hasattr(job, 'task'):
-            self.stream.write('Task not ready. Try again later.')
-            return 1
+            self.writer.write('Task not ready. Try again later.')
+            return
         job.task.run_immediately.set()
-        self.stream.write('Triggered immediate run for {}'.format(job.name))
-        return 0
+        self.writer.write('Triggered immediate run for {}'.format(job.name))
 
-    def cmdset_runall(self, *extra_args):
+    def runall(self):
         """Show job status overview"""
         for job in daemon.jobs.values():
             if not hasattr(job, 'task'):
-                self.stream.write(
+                self.writer.write(
                     '{} not ready. Try again later.'.format(job.name))
                 continue
             job.task.run_immediately.set()
-            self.stream.write(
+            self.writer.write(
                 'Triggered immediate run for {}'.format(job.name))
-        return 0
-
-    autocomplete_cmdset = collections.OrderedDict([
-        ('jobs', None),
-        ('status', None),
-        ('run', None),
-        ('quit', None),
-    ])
-
-    autocomplete_cmdset.update(collections.OrderedDict([
-        ('help', autocomplete_cmdset)]))
 
 
 def check(config_file):  # pragma: no cover

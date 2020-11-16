@@ -94,6 +94,7 @@ class Backup(object):
         except IndexError:
             logger.error("No source type named `{}` exists.".format(
                 self.config['type']))
+            raise
         self.source = source_factory(self.config)
 
         # Initialize our backend

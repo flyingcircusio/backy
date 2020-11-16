@@ -2,10 +2,10 @@
 Changelog
 =========
 
-2.4.4 (unreleased)
-==================
+2.5 (unreleased)
+================
 
-- Nothing changed yet.
+- Port to Python 3.8+.
 
 
 2.4.3 (2019-04-17)

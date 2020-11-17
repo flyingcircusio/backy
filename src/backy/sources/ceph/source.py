@@ -40,8 +40,8 @@ class CephRBD(object):
         try:
             if self.rbd.exists(self._image_name):
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.exception(e)
         return False
 
     def __call__(self, revision):

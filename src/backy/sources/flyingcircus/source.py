@@ -58,14 +58,20 @@ class FlyingCircusRootDisk(CephRBD):
             # In case the snapshot still gets created: the general snapshot
             # deletion code in ceph/source will clean up unused backy snapshots
             # anyway. However, we need to work a little harder to delete old
-            # snapshot requests, otherwise we've somtimes seen those not
+            # snapshot requests, otherwise we've sometimes seen those not
             # getting deleted and then re-created all the time.
             for key in list(consul.kv.find('snapshot/')):
                 try:
                     s = consul.kv[key]
                 except AttributeError:
                     continue
-                s = json.loads(s)
+                try:
+                    s = json.loads(s)
+                except json.decoder.JSONDecodeError:
+                    # Clean up garbage.
+                    logger.warning(
+                        'Consul: removing garbage request {}'.format(key))
+                    del consul.kv[key]
                 if s['vm'] != self.vm:
                     continue
                 # The knowledge about the `backy-` prefix  isn't properly

@@ -150,4 +150,8 @@ class CephRBD(object):
             if uuid != keep_snapshot_revision:
                 time.sleep(3)  # avoid race condition while unmapping
                 logger.info('Removing old snapshot %s', snapshot['name'])
-                self.rbd.snap_rm(self._image_name + '@' + snapshot['name'])
+                try:
+                    self.rbd.snap_rm(self._image_name + '@' + snapshot['name'])
+                except Exception as e:
+                    logger.exception('Could not delete snapshot ' +
+                                     snapshot['name'])

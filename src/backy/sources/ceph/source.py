@@ -72,21 +72,32 @@ class CephRBD(object):
             self.full(target)
             return
         try:
-            parent = self.revision.backup.find(self.revision.parent)
-            if parent.trust == TRUST_DISTRUSTED:
-                raise KeyError('Full backup: distrusted parent')
-            if not self.rbd.exists(self._image_name + '@backy-' + parent.uuid):
-                raise KeyError('Full backup: could not find snapshot for '
-                               'previous revision')
+            revision = self.revision
+            while True:
+                if not revision.parent:
+                    raise KeyError('Full backup: no valid parent found')
+                parent = self.revision.backup.find(revision.parent)
+                if parent.trust == TRUST_DISTRUSTED:
+                    logger.info('Ignoring distrusted revision {} '.format(
+                        revision.parent))
+                    revision = parent
+                    continue
+                if not self.rbd.exists(self._image_name + '@backy-' +
+                                       parent.uuid):
+                    logger.info('Ignoring revision {} without snapshot'.format(
+                        revision.parent))
+                    revision = parent
+                    continue
+                # Ok, it's trusted and we have a snapshot. Let's do a diff.
+                break
+            self.diff(target, parent)
         except KeyError as e:
             logger.info(e.args[0])
             self.full(target)
-            return
-        self.diff(target)
 
-    def diff(self, target):
+    def diff(self, target, parent):
         logger.info('Performing differential backup')
-        snap_from = 'backy-' + self.revision.parent
+        snap_from = 'backy-' + parent.uuid
         snap_to = 'backy-' + self.revision.uuid
         s = self.rbd.export_diff(self._image_name + '@' + snap_to, snap_from)
         t = target.open('r+b')

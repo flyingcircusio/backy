@@ -201,7 +201,8 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep, backend_factory):
             io.BytesIO(SAMPLE_RBDDIFF))
         backend = backend_factory(revision)
         with source(revision):
-            source.diff(backend)
+            parent = backup.find(revision.parent)
+            source.diff(backend, parent)
             backup.history.append(revision)
         export.assert_called_with(
             'test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802',

@@ -7,6 +7,7 @@ Changelog
 
 - Port to Python 3.8+.
 
+- Continue deleting snapshots even if some are protected.
 
 2.4.3 (2019-04-17)
 ==================

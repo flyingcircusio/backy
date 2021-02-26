@@ -1,9 +1,10 @@
-from .rbd import RBDClient
-from backy.revision import TRUST_DISTRUSTED
-import backy.utils
 import logging
 import time
 
+import backy.utils
+from backy.revision import TRUST_DISTRUSTED
+
+from .rbd import RBDClient
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,6 @@ class CephRBD(object):
     Manages snapshots corresponding to revisions and provides a verification
     that tries to balance reliability and performance.
     """
-
     def __init__(self, config):
         self.pool = config['pool']
         self.image = config['image']
@@ -76,9 +76,8 @@ class CephRBD(object):
             if parent.trust == TRUST_DISTRUSTED:
                 raise KeyError('Full backup: distrusted parent')
             if not self.rbd.exists(self._image_name + '@backy-' + parent.uuid):
-                raise KeyError(
-                    'Full backup: could not find snapshot for '
-                    'previous revision')
+                raise KeyError('Full backup: could not find snapshot for '
+                               'previous revision')
         except KeyError as e:
             logger.info(e.args[0])
             self.full(target)
@@ -89,8 +88,7 @@ class CephRBD(object):
         logger.info('Performing differential backup')
         snap_from = 'backy-' + self.revision.parent
         snap_to = 'backy-' + self.revision.uuid
-        s = self.rbd.export_diff(
-            self._image_name + '@' + snap_to, snap_from)
+        s = self.rbd.export_diff(self._image_name + '@' + snap_to, snap_from)
         t = target.open('r+b')
         with s as source, t as target:
             bytes = source.integrate(target, snap_from, snap_to)
@@ -104,13 +102,13 @@ class CephRBD(object):
 
     def full(self, target):
         logger.info('Performing full backup')
-        s = self.rbd.export('{}/{}@backy-{}'.format(
-            self.pool, self.image, self.revision.uuid))
+        s = self.rbd.export('{}/{}@backy-{}'.format(self.pool, self.image,
+                                                    self.revision.uuid))
         t = target.open('r+b')
         copied = 0
         with s as source, t as target:
             while True:
-                buf = source.read(4*backy.utils.MiB)
+                buf = source.read(4 * backy.utils.MiB)
                 if not buf:
                     break
                 target.write(buf)

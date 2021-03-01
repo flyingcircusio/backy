@@ -9,6 +9,11 @@ Changelog
 
 - Continue deleting snapshots even if some are protected.
 
+- Improve detection for 'whole object' RBD export: we failed to detect this is
+  Ceph is built with wrong version options and shows itself as 'Development'
+  instead of a real version.
+
+
 2.4.3 (2019-04-17)
 ==================
 

@@ -1,18 +1,19 @@
-from ...ext_deps import RBD
-from ...utils import CHUNK_SIZE
-from .diff import RBDDiffV1
-from packaging.version import Version
-import backy.sources.ceph
 import contextlib
 import json
 import logging
 import subprocess
 
+import backy.sources.ceph
+from packaging.version import Version
+
+from ...ext_deps import RBD
+from ...utils import CHUNK_SIZE
+from .diff import RBDDiffV1
+
 logger = logging.getLogger(__name__)
 
 
 class RBDClient(object):
-
     def _rbd(self, cmd, format=None):
         cmd = filter(None, cmd)
         rbd = [RBD]
@@ -62,20 +63,18 @@ class RBDClient(object):
     @contextlib.contextmanager
     def export_diff(self, new, old):
         logger.info(str(backy.sources.ceph.CEPH_VERSION))
-        if backy.sources.ceph.CEPH_VERSION >= Version("10.0"):
-            # Introduced in Jewel, major version 10
+        if backy.sources.ceph.CEPH_RBD_SUPPORTS_WHOLE_OBJECT_DIFF:
             EXPORT_WHOLE_OBJECT = ['--whole-object']
         else:
             EXPORT_WHOLE_OBJECT = []
         proc = subprocess.Popen(
-            [RBD,
-             'export-diff', new,
-             '--from-snap', old] + EXPORT_WHOLE_OBJECT + ['-'],
+            [RBD, 'export-diff', new, '--from-snap', old] +
+            EXPORT_WHOLE_OBJECT + ['-'],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             # Have a rather largish buffer size, so rbd has some room to
             # push its data to, when we are busy writing.
-            bufsize=8*CHUNK_SIZE)
+            bufsize=8 * CHUNK_SIZE)
         try:
             yield RBDDiffV1(proc.stdout)
         finally:
@@ -95,14 +94,12 @@ class RBDClient(object):
     @contextlib.contextmanager
     def export(self, image):
         proc = subprocess.Popen(
-            [RBD,
-             'export', image,
-             '-'],
+            [RBD, 'export', image, '-'],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             # Have a rather largish buffer size, so rbd has some room to
             # push its data to, when we are busy writing.
-            bufsize=4*CHUNK_SIZE)
+            bufsize=4 * CHUNK_SIZE)
         try:
             yield proc.stdout
         finally:

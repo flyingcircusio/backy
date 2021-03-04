@@ -24,6 +24,8 @@ def test_rbd_command_wrapper(check_output):
 def rbdclient():
     client = RBDClient()
     client._rbd = mock.Mock()
+    import backy.sources.ceph
+    backy.sources.ceph.CEPH_RBD_SUPPORTS_WHOLE_OBJECT_DIFF = True
     return client
 
 
@@ -133,9 +135,9 @@ def test_rbd_export_diff(popen, rbdclient, tmpdir):
     with rbdclient.export_diff('test/test04.root@new', 'old') as diff:
         assert isinstance(diff, RBDDiffV1)
     popen.assert_has_calls([
-        mock.call([RBD,
-                  'export-diff', 'test/test04.root@new',
-                   '--from-snap', 'old', '-'],
+        mock.call([
+            RBD, 'export-diff', 'test/test04.root@new', '--from-snap', 'old',
+            '--whole-object', '-'],
                   stdin=subprocess.DEVNULL,
                   stdout=subprocess.PIPE,
                   bufsize=mock.ANY)])

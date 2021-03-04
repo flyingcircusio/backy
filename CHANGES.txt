@@ -13,6 +13,9 @@ Changelog
   Ceph is built with wrong version options and shows itself as 'Development'
   instead of a real version.
 
+- Do not count running jobs as overdue.
+
+- Regularly log overdue jobs.
 
 2.4.3 (2019-04-17)
 ==================

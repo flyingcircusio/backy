@@ -168,6 +168,7 @@ class BackyDaemon(object):
                 dict(
                     job=job.name,
                     sla='OK' if job.sla else 'TOO OLD',
+                    sla_overdue=job.sla_overdue,
                     status=job.status,
                     last_time=(format_timestamp(last.timestamp)
                                if last else '-'),
@@ -184,10 +185,16 @@ class BackyDaemon(object):
         return result
 
     def _write_status_file(self):
+        status = self.status()
         with SafeFile(self.status_file, sync=False) as tmp:
             tmp.protected_mode = 0o644
             tmp.open_new('w')
-            yaml.safe_dump(self.status(), tmp.f)
+            yaml.safe_dump(status, tmp.f)
+        for job in status:
+            if not job['sla_overdue']:
+                continue
+            logger.warning(
+                f'SLA violation: {job["job"]} - {job["sla_overdue"]}s overdue')
 
     async def save_status_file(self):
         while self.running:
@@ -222,9 +229,10 @@ class BackyDaemon(object):
 
         if failed_jobs:
             print('CRITICAL: {} jobs not within SLA\n{}'.format(
-                len(failed_jobs), '\n'.join(
-                    '{} (last time: {})'.format(f['job'], f['last_time'])
-                    for f in failed_jobs)))
+                len(failed_jobs),
+                '\n'.join('{} (last time: {}, overdue: {})'.format(
+                    f['job'], f['last_time'], f['sla_overdue'])
+                          for f in failed_jobs)))
             logging.debug('failed jobs: %r', failed_jobs)
             sys.exit(2)
 
@@ -300,8 +308,8 @@ class SchedulerShell(object):
         """List status of all known jobs. Optionally filter by regex."""
         filter_re = re.compile(filter_re) if filter_re else None
         t = prettytable.PrettyTable([
-            'Job', 'SLA', 'Status', 'Last Backup (UTC)', 'Last Tags',
-            'Last Dur', 'Next Backup (UTC)', 'Next Tags'])
+            'Job', 'SLA', 'SLA overdue', 'Status', 'Last Backup (UTC)',
+            'Last Tags', 'Last Dur', 'Next Backup (UTC)', 'Next Tags'])
         t.align = 'l'
         t.align['Last Dur'] = 'r'
         t.sortby = 'Job'
@@ -309,7 +317,7 @@ class SchedulerShell(object):
         jobs = daemon.status(filter_re)
         for job in jobs:
             t.add_row([
-                job['job'], job['sla'], job['status'],
+                job['job'], job['sla'], job['sla_overdue'], job['status'],
                 job['last_time'].replace(' UTC', ''), job['last_tags'],
                 job['last_duration'], job['next_time'].replace(' UTC', ''),
                 job['next_tags']])

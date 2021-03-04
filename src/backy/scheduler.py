@@ -125,13 +125,21 @@ class Job(object):
         those are not indicators whether and admin needs to do something
         right now.
         """
+        return not (self.sla_overdue)
+
+    @property
+    def sla_overdue(self):
+        """Amount of time the SLA is currently overdue.
+        """
         if not self.backup.clean_history:
-            return True
+            return 0
+        if self.status == 'running':
+            return 0
         age = backy.utils.now() - self.backup.clean_history[-1].timestamp
         max_age = min(x['interval'] for x in self.schedule.schedule.values())
         if age > max_age * 1.5:
-            return False
-        return True
+            return age.total_seconds()
+        return 0
 
     @property
     def schedule(self):

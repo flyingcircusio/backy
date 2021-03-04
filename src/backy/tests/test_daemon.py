@@ -292,7 +292,7 @@ def test_check_tooold(daemon, clock, tmpdir, capsys):
     out, err = capsys.readouterr()
     assert out == """\
 CRITICAL: 1 jobs not within SLA
-test01 (last time: 2015-08-30 07:06:47 UTC)
+test01 (last time: 2015-08-30 07:06:47 UTC, overdue: 172800.0)
 """
 
 

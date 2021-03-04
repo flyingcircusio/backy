@@ -1,17 +1,18 @@
+import asyncio
+import datetime
+import os
+import os.path as p
+import re
+import time
+from unittest import mock
+
+import backy.utils
+import pytest
 from backy.backends.chunked import ChunkedFileBackend
 from backy.daemon import BackyDaemon
 from backy.revision import Revision
 from backy.scheduler import Task
 from backy.tests import Ellipsis
-from unittest import mock
-import asyncio
-import backy.utils
-import datetime
-import os
-import os.path as p
-import pytest
-import re
-import time
 
 
 @pytest.yield_fixture
@@ -185,6 +186,7 @@ async def test_task_generator(daemon, clock, tmpdir, monkeypatch):
     def patched_update_status(status):
         if status == "finished":
             job.stop()
+
     job.update_status = patched_update_status
 
     async def wait_for_job_finished():
@@ -195,7 +197,8 @@ async def test_task_generator(daemon, clock, tmpdir, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_task_generator_backoff(caplog, daemon, clock, tmpdir, monkeypatch):
+async def test_task_generator_backoff(caplog, daemon, clock, tmpdir,
+                                      monkeypatch):
     # This is really just a smoke tests, but it covers the task pool,
     # so hey, better than nothing.
 
@@ -223,6 +226,7 @@ async def test_task_generator_backoff(caplog, daemon, clock, tmpdir, monkeypatch
     def patched_update_status(status):
         if status == "finished":
             job.stop()
+
     job.update_status = patched_update_status
 
     async def wait_for_job_finished():

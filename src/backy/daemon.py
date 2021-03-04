@@ -1,21 +1,23 @@
-from .schedule import Schedule
-from .scheduler import Job
-from .utils import format_timestamp, SafeFile
-from concurrent.futures import ThreadPoolExecutor
 import asyncio
 import collections
 import fcntl
 import logging
 import os
 import os.path as p
-import pkg_resources
-import prettytable
 import re
 import signal
 import sys
-import telnetlib3
 import time
+from concurrent.futures import ThreadPoolExecutor
+
+import pkg_resources
+import prettytable
+import telnetlib3
 import yaml
+
+from .schedule import Schedule
+from .scheduler import Job
+from .utils import SafeFile, format_timestamp
 
 logger = logging.getLogger(__name__)
 daemon = None
@@ -45,9 +47,8 @@ class BackyDaemon(object):
 
     def _read_config(self):
         if not p.exists(self.config_file):
-            logger.error(
-                'Could not load configuration. `%s` does not exist.',
-                self.config_file)
+            logger.error('Could not load configuration. `%s` does not exist.',
+                         self.config_file)
             raise SystemExit(1)
         with open(self.config_file, encoding='utf-8') as f:
             fcntl.flock(f, fcntl.LOCK_SH)
@@ -59,8 +60,8 @@ class BackyDaemon(object):
         if not self.status_file:
             self.status_file = p.join(self.base_dir, 'status')
         self.status_file = g.get('status-file', self.status_file)
-        self.status_interval = int(g.get('status-interval',
-                                         self.status_interval))
+        self.status_interval = int(
+            g.get('status-interval', self.status_interval))
         self.telnet_addrs = g.get('telnet-addrs', self.telnet_addrs)
         self.telnet_port = int(g.get('telnet-port', self.telnet_port))
 
@@ -136,8 +137,8 @@ class BackyDaemon(object):
         """Starts to listen on all configured telnet addresses."""
         assert self.loop, 'cannot start telnet server without event loop'
         for addr in (a.strip() for a in self.telnet_addrs.split(',')):
-            logger.info('starting telnet server on %s:%i',
-                        addr, self.telnet_port)
+            logger.info('starting telnet server on %s:%i', addr,
+                        self.telnet_port)
             server = telnetlib3.create_server(
                 host=addr, port=self.telnet_port, shell=telnet_server_shell)
             self.async_tasks.add(asyncio.ensure_future(server))
@@ -163,21 +164,23 @@ class BackyDaemon(object):
                 last = job.backup.clean_history[-1]
             else:
                 last = None
-            result.append(dict(
-                job=job.name,
-                sla='OK' if job.sla else 'TOO OLD',
-                status=job.status,
-                last_time=(format_timestamp(last.timestamp)
-                           if last else '-'),
-                last_tags=(','.join(job.schedule.sorted_tags(last.tags))
-                           if last else '-'),
-                last_duration=(
-                    str(round(last.stats.get('duration', 0), 1)) + ' s'
-                    if last else '-'),
-                next_time=(format_timestamp(job.task.ideal_start)
-                           if job.task else '-'),
-                next_tags=(','.join(job.schedule.sorted_tags(job.task.tags))
-                           if job.task else '-')))
+            result.append(
+                dict(
+                    job=job.name,
+                    sla='OK' if job.sla else 'TOO OLD',
+                    status=job.status,
+                    last_time=(format_timestamp(last.timestamp)
+                               if last else '-'),
+                    last_tags=(','.join(job.schedule.sorted_tags(last.tags))
+                               if last else '-'),
+                    last_duration=(
+                        str(round(last.stats.get('duration', 0), 1)) +
+                        ' s' if last else '-'),
+                    next_time=(format_timestamp(job.task.ideal_start)
+                               if job.task else '-'),
+                    next_tags=(','.join(
+                        job.schedule.sorted_tags(job.task.tags))
+                               if job.task else '-')))
         return result
 
     def _write_status_file(self):
@@ -238,14 +241,14 @@ async def telnet_server_shell(reader, writer):
     """
     from telnetlib3.server_shell import CR, LF, NUL, readline, get_slcdata
 
-    writer.write('backy {}'.format(pkg_resources.require("backy")[0].version) + CR + LF)
+    writer.write('backy {}'.format(pkg_resources.require("backy")[0].version) +
+                 CR + LF)
     writer.write("Ready." + CR + LF)
 
     linereader = readline(reader, writer)
     linereader.send(None)
 
     shell = SchedulerShell(writer=writer)
-
 
     command = None
     while True:
@@ -286,8 +289,6 @@ async def telnet_server_shell(reader, writer):
     writer.close()
 
 
-
-
 class SchedulerShell(object):
 
     writer = None
@@ -307,14 +308,11 @@ class SchedulerShell(object):
 
         jobs = daemon.status(filter_re)
         for job in jobs:
-            t.add_row([job['job'],
-                       job['sla'],
-                       job['status'],
-                       job['last_time'].replace(' UTC', ''),
-                       job['last_tags'],
-                       job['last_duration'],
-                       job['next_time'].replace(' UTC', ''),
-                       job['next_tags']])
+            t.add_row([
+                job['job'], job['sla'], job['status'],
+                job['last_time'].replace(' UTC', ''), job['last_tags'],
+                job['last_duration'], job['next_time'].replace(' UTC', ''),
+                job['next_tags']])
 
         self.writer.write(t.get_string().replace('\n', '\r\n') + '\r\n')
         self.writer.write('{} jobs shown'.format(len(jobs)))
@@ -348,12 +346,12 @@ class SchedulerShell(object):
         """Show job status overview"""
         for job in daemon.jobs.values():
             if not hasattr(job, 'task'):
-                self.writer.write(
-                    '{} not ready. Try again later.'.format(job.name))
+                self.writer.write('{} not ready. Try again later.'.format(
+                    job.name))
                 continue
             job.task.run_immediately.set()
-            self.writer.write(
-                'Triggered immediate run for {}'.format(job.name))
+            self.writer.write('Triggered immediate run for {}'.format(
+                job.name))
 
 
 def check(config_file):  # pragma: no cover

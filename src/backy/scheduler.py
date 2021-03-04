@@ -1,9 +1,4 @@
-from .backup import Backup
-from .ext_deps import BACKY_CMD
-from .utils import SafeFile
-from datetime import timedelta
 import asyncio
-import backy.utils
 import filecmp
 import hashlib
 import logging
@@ -11,7 +6,14 @@ import os
 import os.path as p
 import random
 import subprocess
+from datetime import timedelta
+
+import backy.utils
 import yaml
+
+from .backup import Backup
+from .ext_deps import BACKY_CMD
+from .utils import SafeFile
 
 logger = logging.getLogger(__name__)
 
@@ -37,22 +39,22 @@ class Task(object):
         returncode = 1
         try:
             self.job.update_status('running')
-            logger.info('%s: running backup [%s] due %s',
-                        self.name, ', '.join(self.tags),
-                        self.ideal_start.isoformat())
+            logger.info('%s: running backup [%s] due %s', self.name,
+                        ', '.join(self.tags), self.ideal_start.isoformat())
 
             self.job.update_config()
 
             # Run backy command
             logfile = p.join(self.job.path, 'backy.log')
-            cmd = [BACKY_CMD, '-b', self.job.path, '-l', logfile, 'backup',
-                   ','.join(self.tags)]
+            cmd = [
+                BACKY_CMD, '-b', self.job.path, '-l', logfile, 'backup',
+                ','.join(self.tags)]
             # capture stdout and stderr from shellouts into logfile as well
             with open(logfile, 'a', encoding='utf-8', buffering=1) as log:
                 returncode = subprocess.call(cmd, stdout=log, stderr=log)
 
-            logger.info('%s: finished backup with return code %s',
-                        self.name, returncode)
+            logger.info('%s: finished backup with return code %s', self.name,
+                        returncode)
 
             logger.info('%s: Expiring old revisions', self.name)
             self.job.schedule.expire(self.job.backup)
@@ -61,8 +63,8 @@ class Task(object):
             logger.info('%s: Purging unused data', self.name)
             cmd = [BACKY_CMD, '-b', self.job.path, '-l', logfile, 'purge']
             purge_returncode = subprocess.call(cmd)
-            logger.info('%s: finished purging with return code %s',
-                        self.name, purge_returncode)
+            logger.info('%s: finished purging with return code %s', self.name,
+                        purge_returncode)
         except Exception as e:
             # I'm not resetting the return code here. If we managed to make
             # a backup then we are not picky about whether expiry or purging
@@ -73,9 +75,10 @@ class Task(object):
     async def wait_for_deadline(self):
         remaining_time = self.ideal_start - backy.utils.now()
         print(self.name, self.ideal_start, remaining_time)
-        await next(asyncio.as_completed([
-            asyncio.sleep(remaining_time.total_seconds()),
-            self.run_immediately.wait()]))
+        await next(
+            asyncio.as_completed([
+                asyncio.sleep(remaining_time.total_seconds()),
+                self.run_immediately.wait()]))
 
 
 class Job(object):
@@ -171,8 +174,8 @@ class Job(object):
         backoff = 0
         logger.info("%s: started task generator loop", self.name)
         while True:
-            next_time, next_tags = self.schedule.next(
-                backy.utils.now(), self.spread, self.backup)
+            next_time, next_tags = self.schedule.next(backy.utils.now(),
+                                                      self.spread, self.backup)
 
             if errors:
                 # We're retrying - do not pay attention to the schedule but
@@ -182,8 +185,7 @@ class Job(object):
                 # not able to make backups for a longer period.
                 # This way we also use the queuing mechanism correctly so that
                 # one can still manually trigger a run if one wishes to.
-                next_time = (
-                    backy.utils.now() + timedelta(seconds=backoff))
+                next_time = (backy.utils.now() + timedelta(seconds=backoff))
 
             self.task = task = Task(self)
             self.task.ideal_start = next_time

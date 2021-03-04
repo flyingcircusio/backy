@@ -1,12 +1,13 @@
-from backy.revision import Revision
-from backy.tests import Ellipsis
-import backy.backup
-import backy.main
 import os
 import pprint
-import pytest
 import sys
+
+import backy.backup
+import backy.main
+import pytest
 import yaml
+from backy.revision import Revision
+from backy.tests import Ellipsis
 
 
 @pytest.yield_fixture
@@ -185,8 +186,10 @@ DEBUG    backy.main:main.py:... backup.scheduler(\
 
 
 def test_call_unexpected_exception(capsys, backup, caplog, argv, monkeypatch):
+
     def do_raise(*args, **kw):
         raise RuntimeError("test")
+
     monkeypatch.setattr(backy.main.Command, 'status', do_raise)
     import os
     monkeypatch.setattr(os, '_exit', lambda x: None)
@@ -225,9 +228,7 @@ def test_commands_wrapper_init(commands, tmpdir):
         commands.init('file', str(tmpdir) + '/source')
     with open(str(tmpdir) + '/config') as f:
         config = yaml.safe_load(f)
-        assert config == {
-            'filename': str(tmpdir) + '/source',
-            'type': 'file'}
+        assert config == {'filename': str(tmpdir) + '/source', 'type': 'file'}
 
 
 def test_commands_wrapper_status(commands, tmpdir, capsys, clock):

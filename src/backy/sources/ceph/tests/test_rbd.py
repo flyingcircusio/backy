@@ -1,9 +1,10 @@
+import subprocess
+from unittest import mock
+
+import pytest
 from backy.ext_deps import RBD
 from backy.sources.ceph.diff import RBDDiffV1
 from backy.sources.ceph.rbd import RBDClient
-from unittest import mock
-import pytest
-import subprocess
 
 
 @mock.patch('subprocess.check_output')
@@ -49,8 +50,11 @@ def test_rbd_nonexisting_image_turned_to_false(rbdclient):
 
 def test_rbd_map_writable(rbdclient):
     rbdclient._rbd.side_effect = [
-        None,
-        {'1': {'pool': 'test', 'name': 'test04.root', 'snap': 'backup'}}]
+        None, {
+            '1': {
+                'pool': 'test',
+                'name': 'test04.root',
+                'snap': 'backup'}}]
     mapped = rbdclient.map('test/test04.root@backup')
     assert mapped == {'pool': 'test', 'name': 'test04.root', 'snap': 'backup'}
     rbdclient._rbd.assert_has_calls([
@@ -60,8 +64,11 @@ def test_rbd_map_writable(rbdclient):
 
 def test_rbd_map_readonly(rbdclient):
     rbdclient._rbd.side_effect = [
-        None,
-        {'1': {'pool': 'test', 'name': 'test04.root', 'snap': 'backup'}}]
+        None, {
+            '1': {
+                'pool': 'test',
+                'name': 'test04.root',
+                'snap': 'backup'}}]
     mapped = rbdclient.map('test/test04.root@backup', readonly=True)
     assert mapped == {'pool': 'test', 'name': 'test04.root', 'snap': 'backup'}
     rbdclient._rbd.assert_has_calls([
@@ -80,8 +87,11 @@ def test_rbd_map_writable_missing_map_no_maps(rbdclient):
 
 def test_rbd_map_writable_missing_map(rbdclient):
     rbdclient._rbd.side_effect = [
-        None,
-        {'sadf': {'pool': 'sadf', 'name': 'asdf', 'snap': 'asdf'}}]
+        None, {
+            'sadf': {
+                'pool': 'sadf',
+                'name': 'asdf',
+                'snap': 'asdf'}}]
     with pytest.raises(RuntimeError):
         rbdclient.map('test/test04.root@backup', readonly=True)
     rbdclient._rbd.assert_has_calls([
@@ -91,8 +101,7 @@ def test_rbd_map_writable_missing_map(rbdclient):
 
 def test_rbd_unmap(rbdclient):
     rbdclient.unmap('asdf')
-    rbdclient._rbd.assert_has_calls([
-        mock.call(['unmap', 'asdf'])])
+    rbdclient._rbd.assert_has_calls([mock.call(['unmap', 'asdf'])])
 
 
 def test_rbd_snap_create(rbdclient):
@@ -129,19 +138,19 @@ def test_rbd_export_diff(popen, rbdclient, tmpdir):
                    '--from-snap', 'old', '-'],
                   stdin=subprocess.DEVNULL,
                   stdout=subprocess.PIPE,
-                  bufsize=mock.ANY,
-                  ),
-       ])
+                  bufsize=mock.ANY)])
 
 
 def test_rbd_image_reader(rbdclient, tmpdir):
     device = str(tmpdir / 'device')
     open(device, 'wb').write(b'asdf')
     rbdclient._rbd.side_effect = [
-        None,
-        {'1': {'device': device, 'pool': 'test',
-               'name': 'test04.root', 'snap': 'foo'}},
-        None]
+        None, {
+            '1': {
+                'device': device,
+                'pool': 'test',
+                'name': 'test04.root',
+                'snap': 'foo'}}, None]
     with rbdclient.image_reader('test/test04.root@foo') as f:
         assert f.name == device
     rbdclient._rbd.assert_has_calls([
@@ -154,10 +163,12 @@ def test_rbd_image_reader_explicit_closed(rbdclient, tmpdir):
     device = str(tmpdir / 'device')
     open(device, 'wb').write(b'asdf')
     rbdclient._rbd.side_effect = [
-        None,
-        {'1': {'device': device, 'pool': 'test',
-               'name': 'test04.root', 'snap': 'foo'}},
-        None]
+        None, {
+            '1': {
+                'device': device,
+                'pool': 'test',
+                'name': 'test04.root',
+                'snap': 'foo'}}, None]
     with rbdclient.image_reader('test/test04.root@foo') as f:
         f.close()
     rbdclient._rbd.assert_has_calls([
@@ -173,10 +184,9 @@ def test_rbd_export(popen, rbdclient, tmpdir):
     with rbdclient.export(mock.sentinel.image) as f:
         assert f == stdout
     popen.assert_has_calls([
-        mock.call([RBD,
-                  'export', mock.sentinel.image, '-'],
-                  stdin=subprocess.DEVNULL,
-                  stdout=subprocess.PIPE,
-                  bufsize=mock.ANY,
-                  ),
-        ])
+        mock.call(
+            [RBD, 'export', mock.sentinel.image, '-'],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            bufsize=mock.ANY,
+        ),])

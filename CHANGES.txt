@@ -5,6 +5,12 @@ Changelog
 2.5 (unreleased)
 ================
 
+- Separate pool into fast an slow. According to our statistics 90% of jobs are
+  faster than 10 minutes and after that they might run for hours. We now run
+  the configured amount of workers both in a fast and slow pool so that long
+  jobs may delay other long jobs but fast jobs should be able to squeeze
+  through quickly.
+
 - Port to Python 3.8+.
 
 - Continue deleting snapshots even if some are protected.

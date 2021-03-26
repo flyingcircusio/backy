@@ -202,9 +202,18 @@ class Job(object):
             self.update_status("waiting for deadline")
             await task.wait_for_deadline()
             logger.info("%s: got deadline trigger", self.name)
-            self.update_status("queued for execution")
+
+            if (self.backup.clean_history
+                    and self.backup.clean_history[-1].stats['duration'] < 600):
+                self.update_status("queued for execution in fast pool")
+                pool = self.daemon.taskpool_fast
+            else:
+                self.update_status("queued for execution in slow pool")
+                pool = self.daemon.taskpool_slow
+
             returncode = await self.daemon.loop.run_in_executor(
-                None, self.task.backup)
+                pool, self.task.backup)
+
             if returncode:
                 self.update_status("failed")
                 # Something went wrong. Use truncated expontial backoff to

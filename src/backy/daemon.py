@@ -34,7 +34,8 @@ class BackyDaemon(object):
     telnet_port = 6023
 
     loop = None
-    taskpool = None
+    taskpool_slow = None
+    taskpool_fast = None
     running = False
     async_tasks = None
 
@@ -106,8 +107,8 @@ class BackyDaemon(object):
         self.lock()
 
         self.loop = loop
-        self.taskpool = ThreadPoolExecutor(self.worker_limit)
-        self.loop.set_default_executor(self.taskpool)
+        self.taskpool_slow = ThreadPoolExecutor(self.worker_limit)
+        self.taskpool_fast = ThreadPoolExecutor(self.worker_limit)
 
         self.running = True
         self.async_tasks = set()
@@ -145,7 +146,8 @@ class BackyDaemon(object):
 
     def terminate(self):
         logger.info('Terminating all tasks')
-        self.taskpool.shutdown()
+        self.taskpool_slow.shutdown()
+        self.taskpool_fast.shutdown()
         self.running = False
         logger.info('Cancelling all tasks')
         for t in self.async_tasks:

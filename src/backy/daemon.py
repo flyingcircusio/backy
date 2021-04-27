@@ -444,9 +444,9 @@ class SchedulerShell(object):
 
     def reload(self):
         """Reload the configuration."""
-        self.writer.write('Triggering daemon reload.')
+        self.writer.write('Triggering daemon reload.\r\n')
         daemon.reload()
-        self.writer.write('Daemon configuration reloaded.')
+        self.writer.write('Daemon configuration reloaded.\r\n')
 
 
 def check(config_file):  # pragma: no cover

@@ -1,18 +1,19 @@
-from .backends.chunked import ChunkedFileBackend
-from .backends.cowfile import COWFileBackend
-from .nbd.server import Server
-from .revision import Revision, TRUST_DISTRUSTED
-from .sources import select_source
-from .utils import SafeFile, CHUNK_SIZE, posix_fadvise, copy
-from backy.utils import min_date
 import fcntl
 import glob
 import logging
 import os
 import os.path as p
 import time
-import yaml
 
+import yaml
+from backy.utils import min_date
+
+from .backends.chunked import ChunkedFileBackend
+from .backends.cowfile import COWFileBackend
+from .nbd.server import Server
+from .revision import TRUST_DISTRUSTED, Revision
+from .sources import select_source
+from .utils import CHUNK_SIZE, SafeFile, copy, posix_fadvise
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ def locked(target=None, mode=None):
         raise ValueError("Unknown lock mode '{}'".format(mode))
 
     def wrap(f):
+
         def locked_function(self, *args, **kw):
             if target in self._lock_fds:
                 raise RuntimeError('Bug: Locking is not re-entrant.')
@@ -59,8 +61,10 @@ def locked(target=None, mode=None):
                     fcntl.flock(self._lock_fds[target], fcntl.LOCK_UN)
             finally:
                 del self._lock_fds[target]
+
         locked_function.__name__ = 'locked({}, {})'.format(f.__name__, target)
         return locked_function
+
     return wrap
 
 
@@ -159,8 +163,8 @@ class Backup(object):
         """Clean-up incomplete revisions."""
         for revision in self.history:
             if 'duration' not in revision.stats:
-                logger.warning('Removing incomplete revision {}'.
-                               format(revision.uuid))
+                logger.warning('Removing incomplete revision {}'.format(
+                    revision.uuid))
                 revision.remove()
 
     @locked(target='.backup', mode='exclusive')
@@ -174,8 +178,8 @@ class Backup(object):
 
         new_revision = Revision.create(self, tags)
         new_revision.materialize()
-        logger.info('New revision {} [{}]'.format(
-                    new_revision.uuid, ','.join(new_revision.tags)))
+        logger.info('New revision {} [{}]'.format(new_revision.uuid,
+                                                  ','.join(new_revision.tags)))
 
         backend = self.backend_factory(new_revision)
         with self.source(new_revision) as source:
@@ -223,7 +227,7 @@ class Backup(object):
                 r.distrust()
                 r.write_info()
 
-    @locked(target='.purge', mode='exclusive')
+    @locked(target='.purge', mode='shared')
     def verify(self, revision=None):
         if revision:
             r = self.find(revision)
@@ -308,8 +312,8 @@ class Backup(object):
 
         while True:
             self.scan()
-            to_upgrade = [r for r in self.clean_history
-                          if r.backend_type == 'cowfile']
+            to_upgrade = [
+                r for r in self.clean_history if r.backend_type == 'cowfile']
             if not to_upgrade:
                 break
             if to_upgrade == last_worklist:
@@ -326,8 +330,8 @@ class Backup(object):
             # have to re-upgrade it again.
             try:
                 revision = to_upgrade[-1]
-                print("Converting {} from {}".format(
-                    revision.uuid, revision.timestamp))
+                print("Converting {} from {}".format(revision.uuid,
+                                                     revision.timestamp))
                 original_file = revision.filename + '.old'
                 if not os.path.exists(original_file):
                     # We may be resuming a partial upgrade. Only move the file
@@ -340,8 +344,8 @@ class Backup(object):
                 revision.writable()
                 chunked = ChunkedFileBackend(revision)
                 chunked.clone_parent = False
-                cowfile = File(dict(filename=original_file,
-                                    cow=False))(revision)
+                cowfile = File(dict(filename=original_file, cow=False))(
+                    revision)
                 # Keep a copy of the statistics as it will get replaced when
                 # running the full copy.
                 original_stats = revision.stats.copy()
@@ -371,7 +375,7 @@ class Backup(object):
 
         """
         last_times = {}
-        for revision in self.history:
+        for revision in self.clean_history:
             for tag in revision.tags:
                 last_times.setdefault(tag, min_date())
                 last_times[tag] = max([last_times[tag], revision.timestamp])
@@ -383,8 +387,7 @@ class Backup(object):
         """
         if isinstance(spec, str) and spec.startswith('tag:'):
             tag = spec.replace('tag:', '')
-            result = [r for r in self.history
-                      if tag in r.tags]
+            result = [r for r in self.history if tag in r.tags]
         elif spec == 'all':
             result = self.history[:]
         else:
@@ -404,7 +407,7 @@ class Backup(object):
         spec = int(spec)
         if spec < 0:
             raise KeyError('Integer revisions must be positive')
-        return self.history[-spec-1]
+        return self.history[-spec - 1]
 
     def find_by_tag(self, spec):
         """Returns the latest revision matching a given tag.

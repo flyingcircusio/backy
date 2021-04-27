@@ -4,20 +4,25 @@ import fcntl
 import logging
 import os
 import os.path as p
+import queue
 import re
+import shutil
 import signal
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 
+import humanize
 import pkg_resources
 import prettytable
 import telnetlib3
+import tzlocal
 import yaml
 
 from .schedule import Schedule
 from .scheduler import Job
-from .utils import SafeFile, format_timestamp
+from .utils import SafeFile, has_recent_changes
 
 logger = logging.getLogger(__name__)
 daemon = None
@@ -27,22 +32,19 @@ class BackyDaemon(object):
 
     # config defaults, will be overriden from config file
     worker_limit = 1
-    base_dir = '/srv/backy'
+    base_dir = None
     status_file = None
     status_interval = 30
     telnet_addrs = '::1, 127.0.0.1'
     telnet_port = 6023
 
     loop = None
-    taskpool_slow = None
-    taskpool_fast = None
-    running = False
-    async_tasks = None
 
     def __init__(self, config_file):
         self.config_file = config_file
         self.config = None
         self.schedules = {}
+        self.backup_semaphores = {}
         self.jobs = {}
         self._lock = None
 
@@ -75,19 +77,46 @@ class BackyDaemon(object):
             new[name].configure(config)
         self.schedules = new
 
-        logger.debug('status interval: %s', self.status_interval)
-        logger.debug('status location: %s', self.status_file)
-        logger.debug('worker limit: %s', self.worker_limit)
-        logger.debug('backup location: %s', self.base_dir)
-        logger.debug('available schedules: %s', ', '.join(self.schedules))
+        logger.info('status interval: %s', self.status_interval)
+        logger.info('status location: %s', self.status_file)
+        logger.info('worker limit: %s', self.worker_limit)
+        logger.info('backup location: %s', self.base_dir)
+        logger.info('available schedules: %s', ', '.join(self.schedules))
 
-    def _setup_jobs(self):
-        # To be called after _read_config().
-        self.jobs = {}
+    def _apply_config(self):
+        # Add new jobs and update existing jobs
         for name, config in self.config['jobs'].items():
-            self.jobs[name] = Job(self, name)
-            self.jobs[name].configure(config)
-        logger.debug('configured jobs: %s', ', '.join(self.jobs.keys()))
+            if name not in self.jobs:
+                self.jobs[name] = job = Job(self, name)
+                logger.info(f'{name}: added new job')
+            job = self.jobs[name]
+            if config != job.last_config:
+                logger.info(f'{name}: applying (changed) config')
+                job.configure(config)
+                job.stop()
+                job.start()
+
+        for name, job in list(self.jobs.items()):
+            if name not in self.config['jobs']:
+                job.stop()
+                del self.jobs[name]
+                logger.info(f'{name}: stopped and deleted job')
+
+        if (not self.backup_semaphores
+                or self.backup_semaphores['slow']._bound_value !=
+                self.worker_limit):
+            # Adjusting the settings of a semaphore is not obviously simple. So
+            # here is a simplified version with hopefully clear semantics:
+            # when the semaphores are replaced all the currently running +
+            # waiting backups will still use the old semaphores. This may
+            # cause a total of 2*old_limit + 2*new_limit of jobs to be active
+            # at one time until this settings.
+            # We only change the semaphores when the settings actually change
+            # to avoid unnecessary overlap.
+            self.backup_semaphores['slow'] = asyncio.BoundedSemaphore(
+                self.worker_limit)
+            self.backup_semaphores['fast'] = asyncio.BoundedSemaphore(
+                self.worker_limit)
 
     def lock(self):
         """Ensures that only a single daemon instance is active."""
@@ -99,40 +128,38 @@ class BackyDaemon(object):
             logger.critical('failed to acquire lock %s: %s', lockfile, e)
             sys.exit(69)
 
-    def _prepare(self, loop):  # pragma: no cover
+    def start(self, loop):
         """Starts the scheduler daemon."""
+        self.loop = loop
+
         self._read_config()
-        self._setup_jobs()
+
+        os.chdir(self.base_dir)
         # Ensure single daemon instance.
         self.lock()
 
-        self.loop = loop
-        self.taskpool_slow = ThreadPoolExecutor(self.worker_limit)
-        self.taskpool_fast = ThreadPoolExecutor(self.worker_limit)
+        self._apply_config()
 
-        self.running = True
-        self.async_tasks = set()
+        loop.create_task(self.save_status_file(), name='save-status')
+        loop.create_task(self.purge_old_files(), name='purge-old-files')
+        loop.create_task(self.shutdown_loop(), name='shutdown-cleanup')
 
-    def start(self, loop):
-        self._prepare(loop)
-
-        # semi-daemonize
-        os.chdir(self.base_dir)
-        with open('/dev/null', 'r+b') as null:
-            os.dup2(null.fileno(), 0)
-
-        for job in self.jobs.values():
-            job.start()
-
-        self.async_tasks.add(asyncio.ensure_future(self.save_status_file()))
-
-        def sighandler(signum, _traceback):
+        def handle_signals(signum, _traceback):
             logger.info('Received signal %s', signum)
-            self.terminate()
+
+            if signum in [signal.SIGINT, signal.SIGQUIT, signal.SIGTERM]:
+                self.terminate()
+            elif signum == signal.SIGHUP:
+                self.reload()
 
         for sig in (signal.SIGHUP, signal.SIGINT, signal.SIGQUIT,
                     signal.SIGTERM):
-            signal.signal(sig, sighandler)
+            signal.signal(sig, handle_signals)
+
+    def reload(self):
+        logger.info("Triggering reload")
+        self._read_config()
+        self._apply_config()
 
     def telnet_server(self):
         """Starts to listen on all configured telnet addresses."""
@@ -142,16 +169,28 @@ class BackyDaemon(object):
                         self.telnet_port)
             server = telnetlib3.create_server(
                 host=addr, port=self.telnet_port, shell=telnet_server_shell)
-            self.async_tasks.add(asyncio.ensure_future(server))
+            self.loop.create_task(
+                server, name=f'telnet-server-{addr}-{self.telnet_port}')
 
     def terminate(self):
         logger.info('Terminating all tasks')
-        self.taskpool_slow.shutdown()
-        self.taskpool_fast.shutdown()
-        self.running = False
-        logger.info('Cancelling all tasks')
-        for t in self.async_tasks:
-            t.cancel()
+        for task in asyncio.all_tasks():
+            if task.get_coro().__name__ == 'async_finalizer':
+                # Support pytest-asyncio integration.
+                continue
+            if task.get_coro().__name__.startswith('test_'):
+                # Support pytest-asyncio integration.
+                continue
+            print(f'Cancelling: {task.get_name()}, {task.get_coro().__name__}')
+            task.cancel()
+
+    async def shutdown_loop(self):
+        logger.info('Waiting for shutdown')
+        while True:
+            try:
+                await asyncio.sleep(0.25)
+            except asyncio.CancelledError:
+                break
         logger.info('Stopping loop')
         self.loop.stop()
 
@@ -172,18 +211,15 @@ class BackyDaemon(object):
                     sla='OK' if job.sla else 'TOO OLD',
                     sla_overdue=job.sla_overdue,
                     status=job.status,
-                    last_time=(format_timestamp(last.timestamp)
-                               if last else '-'),
+                    last_time=last.timestamp if last else None,
                     last_tags=(','.join(job.schedule.sorted_tags(last.tags))
-                               if last else '-'),
-                    last_duration=(
-                        str(round(last.stats.get('duration', 0), 1)) +
-                        ' s' if last else '-'),
-                    next_time=(format_timestamp(job.task.ideal_start)
-                               if job.task else '-'),
+                               if last else None),
+                    last_duration=(last.stats.get('duration', 0)
+                                   if last else None),
+                    next_time=job.next_time,
                     next_tags=(','.join(
-                        job.schedule.sorted_tags(job.task.tags))
-                               if job.task else '-')))
+                        job.schedule.sorted_tags(job.next_tags))
+                               if job.next_tags else None)))
         return result
 
     def _write_status_file(self):
@@ -195,16 +231,33 @@ class BackyDaemon(object):
         for job in status:
             if not job['sla_overdue']:
                 continue
-            logger.warning(
-                f'SLA violation: {job["job"]} - {job["sla_overdue"]}s overdue')
+            overdue = humanize.naturaldelta(job['sla_overdue'])
+            logger.warning(f'SLA violation: {job["job"]} - {overdue} overdue')
 
     async def save_status_file(self):
-        while self.running:
+        while True:
             try:
                 self._write_status_file()
             except Exception as e:  # pragma: no cover
                 logger.exception(e)
             await asyncio.sleep(self.status_interval)
+
+    async def purge_old_files(self):
+        # `stat` and other file system access things are _not_
+        # properly async, we might want to spawn those off into a separate
+        # thread.
+        while True:
+            logger.info('Scanning old directories to purge')
+            for candidate in os.scandir(self.base_dir):
+                if not candidate.is_dir(follow_symlinks=False):
+                    continue
+                print(candidate)
+                reference_time = time.time() - 3 * 31 * 24 * 60 * 60
+                if not has_recent_changes(candidate, reference_time):
+                    logger.info(f'Purging {candidate.path}')
+                    shutil.rmtree(candidate)
+            logger.info('Finished scanning old directories to purge')
+            await asyncio.sleep(24 * 60 * 60)
 
     def check(self):
         self._read_config()
@@ -268,22 +321,28 @@ async def telnet_server_shell(reader, writer):
         command = None
         while command is None:
             # TODO: use reader.readline()
-            inp = await reader.read(1)
+            try:
+                inp = await reader.read(1)
+            except Exception:
+                inp = None  # Likely a timeout
             if not inp:
                 return
             command = linereader.send(inp)
+        command = command.strip()
         writer.write(CR + LF)
         if command == 'quit':
             writer.write('Goodbye.' + CR + LF)
             break
         elif command == 'help':
-            writer.write('jobs [filter], status, run <job>, runall')
+            writer.write('jobs [filter], status, run <job>, runall, reload')
         elif command.startswith('jobs'):
             if ' ' in command:
                 _, filter_re = command.split(' ', maxsplit=1)
             else:
                 filter_re = None
             shell.jobs(filter_re)
+        elif command == 'reload':
+            shell.reload()
         elif command == 'status':
             shell.status()
         elif command.startswith('runall'):
@@ -309,20 +368,40 @@ class SchedulerShell(object):
     def jobs(self, filter_re=None):
         """List status of all known jobs. Optionally filter by regex."""
         filter_re = re.compile(filter_re) if filter_re else None
+
+        tz = tzlocal.get_localzone()
+
         t = prettytable.PrettyTable([
-            'Job', 'SLA', 'SLA overdue', 'Status', 'Last Backup (UTC)',
-            'Last Tags', 'Last Dur', 'Next Backup (UTC)', 'Next Tags'])
+            'Job', 'SLA', 'SLA overdue', 'Status', f'Last Backup ({tz.zone})',
+            'Last Tags', 'Last Duration', f'Next Backup ({tz.zone})',
+            'Next Tags'])
         t.align = 'l'
         t.align['Last Dur'] = 'r'
         t.sortby = 'Job'
 
         jobs = daemon.status(filter_re)
         for job in jobs:
+            overdue = humanize.naturaldelta(
+                job['sla_overdue']) if job['sla_overdue'] else '-'
+            last_duration = humanize.naturaldelta(
+                job['last_duration']) if job['last_duration'] else '-'
+            last_time = job['last_time']
+            if last_time:
+                last_time = last_time.astimezone(tz).replace(
+                    tzinfo=None).strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                last_time = '-'
+
+            next_time = job['next_time']
+            if next_time:
+                next_time = next_time.astimezone(tz).replace(
+                    tzinfo=None).strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                next_time = '-'
+
             t.add_row([
-                job['job'], job['sla'], job['sla_overdue'], job['status'],
-                job['last_time'].replace(' UTC', ''), job['last_tags'],
-                job['last_duration'], job['next_time'].replace(' UTC', ''),
-                job['next_tags']])
+                job['job'], job['sla'], overdue, job['status'], last_time,
+                job['last_tags'], last_duration, next_time, job['next_tags']])
 
         self.writer.write(t.get_string().replace('\n', '\r\n') + '\r\n')
         self.writer.write('{} jobs shown'.format(len(jobs)))
@@ -346,10 +425,10 @@ class SchedulerShell(object):
         except KeyError:
             self.writer.write('Unknown job {}'.format(job))
             return
-        if not hasattr(job, 'task'):
+        if not hasattr(job, '_task'):
             self.writer.write('Task not ready. Try again later.')
             return
-        job.task.run_immediately.set()
+        job.run_immediately.set()
         self.writer.write('Triggered immediate run for {}'.format(job.name))
 
     def runall(self):
@@ -362,6 +441,12 @@ class SchedulerShell(object):
             job.task.run_immediately.set()
             self.writer.write('Triggered immediate run for {}'.format(
                 job.name))
+
+    def reload(self):
+        """Reload the configuration."""
+        self.writer.write('Triggering daemon reload.')
+        daemon.reload()
+        self.writer.write('Daemon configuration reloaded.')
 
 
 def check(config_file):  # pragma: no cover
@@ -377,12 +462,6 @@ def main(config_file):  # pragma: no cover
     daemon.start(loop)
     daemon.telnet_server()
 
-    try:
-        # Blocking call
-        loop.run_forever()
-    except KeyboardInterrupt:
-        logger.warning('Caught keyboard interrupt')
-        daemon.terminate()
-    finally:
-        loop.stop()
-        loop.close()
+    logger.info('Starting async loop.')
+    loop.run_forever()
+    loop.close()

@@ -26,11 +26,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from backy import utils
 import asyncio
 import logging
 import signal
 import struct
+
+from backy import utils
 
 
 class AbortedNegotiationError(IOError):
@@ -89,9 +90,8 @@ class Server(object):
             self.log.info("Incoming connection from %s:%s" % (host, port))
 
             # initial handshake
-            writer.write(
-                b"NBDMAGIC" + struct.pack(
-                    ">QH", self.NBD_HANDSHAKE, self.NBD_HANDSHAKE_FLAGS))
+            writer.write(b"NBDMAGIC" + struct.pack(">QH", self.NBD_HANDSHAKE,
+                                                   self.NBD_HANDSHAKE_FLAGS))
             await writer.drain()
 
             data = await reader.readexactly(4)
@@ -119,19 +119,19 @@ class Server(object):
                                   "disconnecting")
 
                 if magic != self.NBD_HANDSHAKE:
-                    raise IOError("Negotiation failed: bad magic number: %s"
-                                  % magic)
+                    raise IOError("Negotiation failed: bad magic number: %s" %
+                                  magic)
 
                 if length:
                     data = await reader.readexactly(length)
-                    if(len(data) != length):
-                        raise IOError("Negotiation failed: %s bytes expected"
-                                      % length)
+                    if (len(data) != length):
+                        raise IOError("Negotiation failed: %s bytes expected" %
+                                      length)
                 else:
                     data = None
 
-                self.log.debug("[%s:%s]: opt=%s, len=%s, data=%s"
-                               % (host, port, opt, length, data))
+                self.log.debug("[%s:%s]: opt=%s, len=%s, data=%s" %
+                               (host, port, opt, length, data))
 
                 if opt == self.NBD_OPT_EXPORTNAME:
                     if not data:
@@ -150,14 +150,14 @@ class Server(object):
                             raise IOError("Negotiation failed: unknown export "
                                           "name {}".format(e))
 
-                        writer.write(struct.pack(
-                            ">QLLL", self.NBD_REPLY, opt,
-                            self.NBD_REP_ERR_UNSUP, 0))
+                        writer.write(
+                            struct.pack(">QLLL", self.NBD_REPLY, opt,
+                                        self.NBD_REP_ERR_UNSUP, 0))
                         await writer.drain()
                         continue
 
-                    self.log.info("[%s:%s] Negotiated export: %s"
-                                  % (host, port, uuid))
+                    self.log.info("[%s:%s] Negotiated export: %s" %
+                                  (host, port, uuid))
 
                     export_flags = self.NBD_EXPORT_FLAGS
                     # export_flags ^= self.NBD_RO_FLAG
@@ -176,23 +176,25 @@ class Server(object):
                     for r in self.backup.history:
                         uuid = ' '.join([
                             self.backup.path, r.uuid,
-                            utils.format_timestamp(r.timestamp),
-                            ','.join(r.tags)])
-                        writer.write(struct.pack(
-                            ">QLLL", self.NBD_REPLY, opt,
-                            self.NBD_REP_SERVER, len(uuid) + 4))
+                            r.timestamp.isoformat(), ','.join(r.tags)])
+                        writer.write(
+                            struct.pack(">QLLL", self.NBD_REPLY, opt,
+                                        self.NBD_REP_SERVER,
+                                        len(uuid) + 4))
                         revision_encoded = uuid.encode("utf-8")
                         writer.write(struct.pack(">L", len(revision_encoded)))
                         writer.write(revision_encoded)
                         await writer.drain()
 
-                    writer.write(struct.pack(">QLLL", self.NBD_REPLY, opt,
-                                             self.NBD_REP_ACK, 0))
+                    writer.write(
+                        struct.pack(">QLLL", self.NBD_REPLY, opt,
+                                    self.NBD_REP_ACK, 0))
                     await writer.drain()
 
                 elif opt == self.NBD_OPT_ABORT:
-                    writer.write(struct.pack(">QLLL", self.NBD_REPLY, opt,
-                                             self.NBD_REP_ACK, 0))
+                    writer.write(
+                        struct.pack(">QLLL", self.NBD_REPLY, opt,
+                                    self.NBD_REP_ACK, 0))
                     await writer.drain()
 
                     raise AbortedNegotiationError()
@@ -201,24 +203,26 @@ class Server(object):
                     if not fixed:
                         raise IOError("Unsupported option")
 
-                    writer.write(struct.pack(">QLLL", self.NBD_REPLY, opt,
-                                             self.NBD_REP_ERR_UNSUP, 0))
+                    writer.write(
+                        struct.pack(">QLLL", self.NBD_REPLY, opt,
+                                    self.NBD_REP_ERR_UNSUP, 0))
                     await writer.drain()
 
             # operation phase
             while True:
                 header = await reader.readexactly(28)
                 try:
-                    (magic, cmd, handle, offset, length) = struct.unpack(
-                        ">LLQQL", header)
+                    (magic, cmd, handle, offset,
+                     length) = struct.unpack(">LLQQL", header)
                 except struct.error:
                     raise IOError("Invalid request, disconnecting")
 
                 if magic != self.NBD_REQUEST:
                     raise IOError("Bad magic number, disconnecting")
 
-                self.log.debug("[%s:%s]: cmd=%s, handle=%s, offset=%s, len=%s"
-                               % (host, port, cmd, handle, offset, length))
+                self.log.debug(
+                    "[%s:%s]: cmd=%s, handle=%s, offset=%s, len=%s" %
+                    (host, port, cmd, handle, offset, length))
 
                 if cmd == self.NBD_CMD_DISC:
                     self.log.info("[%s:%s] disconnecting" % (host, port))
@@ -230,7 +234,7 @@ class Server(object):
                     # with the original revision.
 
                     data = await reader.readexactly(length)
-                    if(len(data) != length):
+                    if (len(data) != length):
                         raise IOError("%s bytes expected, disconnecting" %
                                       length)
 
@@ -240,8 +244,7 @@ class Server(object):
                         revision._flush_chunks()
                     except IOError as ex:
                         self.log.error("[%s:%s] %s" % (host, port, ex))
-                        await self.nbd_response(writer, handle,
-                                                     error=ex.errno)
+                        await self.nbd_response(writer, handle, error=ex.errno)
                         continue
 
                     await self.nbd_response(writer, handle)
@@ -253,8 +256,7 @@ class Server(object):
                         revision._flush_chunks()
                     except IOError as ex:
                         self.log.error("[%s:%s] %s" % (host, port, ex))
-                        await self.nbd_response(writer, handle,
-                                                     error=ex.errno)
+                        await self.nbd_response(writer, handle, error=ex.errno)
                         continue
 
                     await self.nbd_response(writer, handle, data=data)
@@ -264,8 +266,8 @@ class Server(object):
                     await self.nbd_response(writer, handle)
 
                 else:
-                    self.log.warning("[%s:%s] Unknown cmd %s, disconnecting"
-                                     % (host, port, cmd))
+                    self.log.warning("[%s:%s] Unknown cmd %s, disconnecting" %
+                                     (host, port, cmd))
                     break
 
         except AbortedNegotiationError:

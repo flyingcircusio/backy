@@ -11,12 +11,12 @@ import pytest
 from backy.backends.chunked import ChunkedFileBackend
 from backy.daemon import BackyDaemon
 from backy.revision import Revision
-from backy.scheduler import Task
+from backy.scheduler import Job
 from backy.tests import Ellipsis
 
 
 @pytest.yield_fixture
-def daemon(tmpdir, event_loop):
+async def daemon(tmpdir, event_loop):
     daemon = BackyDaemon(str(tmpdir / 'config'))
     base_dir = str(tmpdir)
     source = str(tmpdir / 'test01.source')
@@ -25,6 +25,7 @@ def daemon(tmpdir, event_loop):
 ---
 global:
     base-dir: {base_dir}
+    status-interval: 1
 schedules:
     default:
         daily:
@@ -46,7 +47,7 @@ jobs:
     with open(source, 'w') as f:
         f.write('I am your father, Luke!')
 
-    daemon._prepare(event_loop)
+    daemon.start(event_loop)
     yield daemon
     daemon.terminate()
 
@@ -57,13 +58,12 @@ def test_fail_on_nonexistent_config():
         daemon._read_config()
 
 
-def test_run_backup(daemon):
+@pytest.mark.asyncio
+async def test_run_backup(daemon):
     job = daemon.jobs['test01']
-    t = Task(job)
-    t.tags = set(['asdf'])
-    # Not having a a deadline set causes this to fail.
-    t.ideal_start = backy.utils.now()
-    t.backup()
+
+    await job.run_backup(set(['asdf']))
+    job.backup.scan()
     assert len(job.backup.history) == 1
     revision = job.backup.history[0]
     assert revision.tags == set(['asdf'])
@@ -73,13 +73,16 @@ def test_run_backup(daemon):
 
     # Run again. This also covers the code path that works if
     # the target backup directory exists already.
-    t.backup()
+    await job.run_backup(set(['asdf']))
+    job.backup.scan()
     assert len(job.backup.history) == 2
     revision = job.backup.history[1]
     assert revision.tags == set(['asdf'])
     backend = ChunkedFileBackend(revision)
     with backend.open('r') as f:
         assert f.read() == b'I am your father, Luke!'
+
+    daemon.terminate()
 
 
 def test_spread(daemon):
@@ -159,11 +162,17 @@ def test_status_should_default_to_basedir(daemon, tmpdir):
     assert str(tmpdir / 'status') == daemon.status_file
 
 
-def test_update_status(daemon, clock, tmpdir):
-    job = daemon.jobs['test01']
+def test_update_status():
+    job = Job(mock.Mock(), 'asdf')
     assert job.status == ''
     job.update_status('asdf')
     assert job.status == 'asdf'
+
+
+async def cancel_and_wait(job):
+    while job._task.cancel():
+        await asyncio.sleep(0.1)
+    job._task = None
 
 
 @pytest.mark.asyncio
@@ -171,27 +180,27 @@ async def test_task_generator(daemon, clock, tmpdir, monkeypatch):
     # This is really just a smoke tests, but it covers the task pool,
     # so hey, better than nothing.
 
-    task = mock.Mock()
-    task.ideal_start = backy.utils.now()
-
+    for j in daemon.jobs.values():
+        await cancel_and_wait(j)
     job = daemon.jobs['test01']
-    job.start()
 
-    async def null_coroutine(self):
+    async def null_coroutine():
         return
 
-    monkeypatch.setattr(Task, 'wait_for_deadline', null_coroutine)
+    monkeypatch.setattr(job, '_wait_for_deadline', null_coroutine)
 
     # This patch causes a single run through the generator loop.
-    def patched_update_status(status):
+    def update_status(status):
         if status == "finished":
             job.stop()
 
-    job.update_status = patched_update_status
+    monkeypatch.setattr(job, 'update_status', update_status)
 
     async def wait_for_job_finished():
-        while job._generator_handle is not None:
+        while job._task is not None:
             await asyncio.sleep(.1)
+
+    job.start()
 
     await wait_for_job_finished()
 
@@ -199,64 +208,93 @@ async def test_task_generator(daemon, clock, tmpdir, monkeypatch):
 @pytest.mark.asyncio
 async def test_task_generator_backoff(caplog, daemon, clock, tmpdir,
                                       monkeypatch):
-    # This is really just a smoke tests, but it covers the task pool,
-    # so hey, better than nothing.
 
-    task = mock.Mock()
-    task.ideal_start = backy.utils.now()
-
+    for j in daemon.jobs.values():
+        await cancel_and_wait(j)
     job = daemon.jobs['test01']
-    job.start()
 
-    async def null_coroutine(self):
-        return
+    async def null_coroutine():
+        await asyncio.sleep(0.1)
 
-    failures = [1, 2, 3]
+    failures = [1, 1, 1]
 
-    def failing_coroutine(self):
-        if failures:
-            failures.pop()
-            return 1
-        return 0
+    async def failing_coroutine(*args, **kw):
+        await asyncio.sleep(0.1)
+        if not failures:
+            return
+        f = failures.pop(0)
+        if f:
+            raise Exception()
+        else:
+            return
 
-    monkeypatch.setattr(Task, 'wait_for_deadline', null_coroutine)
-    monkeypatch.setattr(Task, 'backup', failing_coroutine)
+    monkeypatch.setattr(job, '_wait_for_deadline', null_coroutine)
+    monkeypatch.setattr(job, 'run_expiry', null_coroutine)
+    monkeypatch.setattr(job, 'run_purge', null_coroutine)
+    monkeypatch.setattr(job, 'run_backup', failing_coroutine)
 
     # This patch causes a single run through the generator loop.
-    def patched_update_status(status):
+    def update_status(status):
         if status == "finished":
             job.stop()
 
-    job.update_status = patched_update_status
+    monkeypatch.setattr(job, 'update_status', update_status)
 
     async def wait_for_job_finished():
-        while job._generator_handle is not None:
+        while job._task is not None:
             await asyncio.sleep(.1)
+
+    caplog.clear()
+
+    job.start()
 
     await wait_for_job_finished()
     assert Ellipsis("""\
-INFO     backy.scheduler:scheduler.py:... test01: started task generator loop
-INFO     backy.scheduler:scheduler.py:... test01: got deadline trigger
+INFO     backy.scheduler:scheduler.py:... test01: started backup loop
+INFO     backy.scheduler:scheduler.py:... test01: 2015-09-02 05:32:51+00:00, {'daily'}
+ERROR    backy.scheduler:scheduler.py:...
+Traceback (most recent call last):
+  File "/.../src/backy/scheduler.py", line ..., in run_forever
+    await self.run_backup(next_tags)
+  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
+    raise Exception()
+Exception
 WARNING  backy.scheduler:scheduler.py:... test01: retrying in 120 seconds
-INFO     backy.scheduler:scheduler.py:... test01: got deadline trigger
+INFO     backy.scheduler:scheduler.py:... test01: 2015-09-01 07:08:47+00:00, {'daily'}
+ERROR    backy.scheduler:scheduler.py:...
+Traceback (most recent call last):
+  File "/.../src/backy/scheduler.py", line ..., in run_forever
+    await self.run_backup(next_tags)
+  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
+    raise Exception()
+Exception
 WARNING  backy.scheduler:scheduler.py:... test01: retrying in 240 seconds
-INFO     backy.scheduler:scheduler.py:... test01: got deadline trigger
+INFO     backy.scheduler:scheduler.py:... test01: 2015-09-01 07:10:47+00:00, {'daily'}
+ERROR    backy.scheduler:scheduler.py:...
+Traceback (most recent call last):
+  File "/.../src/backy/scheduler.py", line ..., in run_forever
+    await self.run_backup(next_tags)
+  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
+    raise Exception()
+Exception
 WARNING  backy.scheduler:scheduler.py:... test01: retrying in 480 seconds
-INFO     backy.scheduler:scheduler.py:... test01: got deadline trigger
-INFO     backy.scheduler:scheduler.py:... test01: got deadline trigger
+INFO     backy.scheduler:scheduler.py:... test01: 2015-09-01 07:14:47+00:00, {'daily'}
+INFO     backy.scheduler:scheduler.py:... test01: finished
+INFO     backy.scheduler:scheduler.py:... test01: shutting down
+INFO     backy.scheduler:scheduler.py:... test01: 2015-09-02 05:32:51+00:00, {'daily'}
 """) == caplog.text
+
+    assert job.errors == 0
+    assert job.backoff == 0
 
 
 @pytest.mark.asyncio
 async def test_write_status_file(daemon, event_loop):
-    daemon.running = True
-    daemon.status_interval = .01
-    assert not p.exists(daemon.status_file)
-    asyncio.ensure_future(daemon.save_status_file())
-    await asyncio.sleep(.02)
-    daemon.running = False
-    await asyncio.sleep(.02)
     assert p.exists(daemon.status_file)
+    first = os.stat(daemon.status_file)
+    await asyncio.sleep(1.5)
+    second = os.stat(daemon.status_file)
+    assert first.st_mtime < second.st_mtime
 
 
 def test_daemon_status(daemon):
@@ -278,7 +316,7 @@ def test_check_ok(daemon, capsys):
     assert 'OK: 2 jobs within SLA\n' == out
 
 
-def test_check_tooold(daemon, clock, tmpdir, capsys):
+def test_check_too_old(daemon, tmpdir, clock, capsys):
     job = daemon.jobs['test01']
     revision = Revision(job.backup, '1')
     revision.timestamp = backy.utils.now() - datetime.timedelta(hours=48)
@@ -292,11 +330,12 @@ def test_check_tooold(daemon, clock, tmpdir, capsys):
     out, err = capsys.readouterr()
     assert out == """\
 CRITICAL: 1 jobs not within SLA
-test01 (last time: 2015-08-30 07:06:47 UTC, overdue: 172800.0)
+test01 (last time: 2015-08-30 07:06:47+00:00, overdue: 172800.0)
 """
 
 
 def test_check_no_status_file(daemon, capsys):
+    os.unlink(daemon.status_file)
     try:
         daemon.check()
     except SystemExit as exit:

@@ -1,17 +1,13 @@
-from backy.tests import Ellipsis
-from backy.utils import files_are_equal, files_are_roughly_equal
-from backy.utils import format_timestamp
-from backy.utils import SafeFile, format_bytes_flexible, copy_overwrite
-import backy.utils
 import datetime
 import os
-import pytest
-import pytz
 import sys
 
-
-def test_format_timestamp(clock):
-    assert "2015-09-01 07:06:47 UTC" == format_timestamp(backy.utils.now())
+import backy.utils
+import pytest
+import pytz
+from backy.tests import Ellipsis
+from backy.utils import (SafeFile, copy_overwrite, files_are_equal,
+                         files_are_roughly_equal)
 
 
 def test_ellipsis():
@@ -19,18 +15,14 @@ def test_ellipsis():
     assert Ellipsis("a...c") == "abc"
     assert Ellipsis("a...d") != "abc"
     assert Ellipsis("a...c...g") == "abcdefg"
-    assert (
-        Ellipsis(
-            """\
+    assert (Ellipsis("""\
 ...
 a
 ...
 d...g
 ...
 z
-..."""
-        )
-        == """\
+...""") == """\
 000
 111
 a
@@ -38,48 +30,38 @@ foobar
 drinking
 something
 z
-zoo"""
-    )
+zoo""")
     assert not Ellipsis("") == "asdf"
     with pytest.raises(Exception):
         assert Ellipsis("") == "abcdefg"
 
 
 def test_ellipsis_lines():
-    assert (
-        Ellipsis(
-            """
+    assert (Ellipsis("""
 asdf...bsdf
 csdf
 ...
 dsdf...fooo
-"""
-        )
-        == """
+""") == """
 asdffoobarbsdf
 csdf
 gnar gnarr gnarr
 dsdfblablafooo
-"""
-    )
+""")
 
 
 def test_ellipsis_report():
-    report = Ellipsis(
-        """
+    report = Ellipsis("""
 asdf...bsdf
 csdf
 ...
 dsdf...fooo
-"""
-    ).compare(
-        """
+""").compare("""
 asdffoobarbsdf
 csdf
 gnar gnar gnarr
 dsdfblablafooobar
-"""
-    )
+""")
     assert not report.matches
     assert """\
   asdffoobarbsdf
@@ -88,9 +70,7 @@ dsdfblablafooobar
   dsdfblablafooobar
 - dsdf...fooo
 - \
-""" == "\n".join(
-        report.diff
-    )
+""" == "\n".join(report.diff)
 
 
 def test_ellipsis_escaping():
@@ -126,19 +106,6 @@ def test_compare_files_different_length(tmpdir):
         f.write(b"bsdf")
 
     assert not files_are_equal(open("a", "rb"), open("b", "rb"))
-
-
-def test_format_bytes():
-    assert format_bytes_flexible(0) == "0 Bytes"
-    assert format_bytes_flexible(1) == "1 Byte"
-    assert format_bytes_flexible(100) == "100 Bytes"
-    assert format_bytes_flexible(1024) == "1.00 kiB"
-    assert format_bytes_flexible(2048) == "2.00 kiB"
-    assert format_bytes_flexible(2500) == "2.44 kiB"
-    assert format_bytes_flexible(1024 ** 2) == "1.00 MiB"
-    assert format_bytes_flexible(1024 ** 3) == "1.00 GiB"
-    assert format_bytes_flexible(1024 ** 4) == "1.00 TiB"
-    assert format_bytes_flexible(1024 ** 5) == "1024.00 TiB"
 
 
 def test_safe_writable_rename_no_writeprotect(tmpdir):
@@ -280,7 +247,8 @@ def test_roughly_compare_files_same(tmpdir):
         f.write(b"asdf" * 100)
 
     for x in range(20):
-        assert files_are_roughly_equal(open("a", "rb"), open("b", "rb"), blocksize=10)
+        assert files_are_roughly_equal(
+            open("a", "rb"), open("b", "rb"), blocksize=10)
 
 
 def test_roughly_compare_files_1_changed_block(tmpdir):
@@ -295,8 +263,7 @@ def test_roughly_compare_files_1_changed_block(tmpdir):
     detected = 0
     for x in range(20):
         detected += files_are_roughly_equal(
-            open("a", "rb"), open("b", "rb"), blocksize=10
-        )
+            open("a", "rb"), open("b", "rb"), blocksize=10)
 
     assert detected > 0 and detected <= 20
 

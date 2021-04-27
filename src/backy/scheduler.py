@@ -13,72 +13,9 @@ import yaml
 
 from .backup import Backup
 from .ext_deps import BACKY_CMD
-from .utils import SafeFile
+from .utils import SafeFile, time_or_event
 
 logger = logging.getLogger(__name__)
-
-
-class Task(object):
-    """A single backup task with a specific set of tags to be executed
-    at a specific time.
-    """
-
-    ideal_start = None
-
-    def __init__(self, job):
-        self.job = job
-        self.tags = set()
-        self.run_immediately = asyncio.Event()
-
-    @property
-    def name(self):
-        return self.job.name
-
-    # Run this in an executor!
-    def backup(self):
-        returncode = 1
-        try:
-            self.job.update_status('running')
-            logger.info('%s: running backup [%s] due %s', self.name,
-                        ', '.join(self.tags), self.ideal_start.isoformat())
-
-            self.job.update_config()
-
-            # Run backy command
-            logfile = p.join(self.job.path, 'backy.log')
-            cmd = [
-                BACKY_CMD, '-b', self.job.path, '-l', logfile, 'backup',
-                ','.join(self.tags)]
-            # capture stdout and stderr from shellouts into logfile as well
-            with open(logfile, 'a', encoding='utf-8', buffering=1) as log:
-                returncode = subprocess.call(cmd, stdout=log, stderr=log)
-
-            logger.info('%s: finished backup with return code %s', self.name,
-                        returncode)
-
-            logger.info('%s: Expiring old revisions', self.name)
-            self.job.schedule.expire(self.job.backup)
-
-            # Purge
-            logger.info('%s: Purging unused data', self.name)
-            cmd = [BACKY_CMD, '-b', self.job.path, '-l', logfile, 'purge']
-            purge_returncode = subprocess.call(cmd)
-            logger.info('%s: finished purging with return code %s', self.name,
-                        purge_returncode)
-        except Exception as e:
-            # I'm not resetting the return code here. If we managed to make
-            # a backup then we are not picky about whether expiry or purging
-            # went fine.
-            logger.exception(e)
-        return returncode
-
-    async def wait_for_deadline(self):
-        remaining_time = self.ideal_start - backy.utils.now()
-        print(self.name, self.ideal_start, remaining_time)
-        await next(
-            asyncio.as_completed([
-                asyncio.sleep(remaining_time.total_seconds()),
-                self.run_immediately.wait()]))
 
 
 class Job(object):
@@ -87,24 +24,28 @@ class Job(object):
     source = None
     schedule_name = None
     status = ''
-    task = None
+    next_time = None
+    next_tags = None
     path = None
     backup = None
-    running = False
 
-    _generator_handle = None
+    _task = None
 
     def __init__(self, daemon, name):
+        self.last_config = None
         self.daemon = daemon
         self.name = name
         self.handle = None
+        self.run_immediately = asyncio.Event()
 
     def configure(self, config):
         self.source = config['source']
         self.schedule_name = config['schedule']
         self.path = p.join(self.daemon.base_dir, self.name)
+        self.logfile = p.join(self.path, 'backy.log')
         self.update_config()
         self.backup = Backup(self.path)
+        self.last_config = config
 
     @property
     def spread(self):
@@ -164,7 +105,14 @@ class Job(object):
             if p.exists(config) and filecmp.cmp(config, f.name):
                 raise ValueError('not changed')
 
-    async def generate_tasks(self):
+    async def _wait_for_deadline(self):
+        self.update_status("waiting for deadline")
+        trigger = await time_or_event(self.next_time, self.run_immediately)
+        self.run_immediately.clear()
+        logger.info(f"{self.name}: got woken by {trigger}")
+        return trigger
+
+    async def run_forever(self):
         """Generate backup tasks for this job.
 
         Tasks are based on the ideal next time in the future and
@@ -178,14 +126,16 @@ class Job(object):
         It doesn't care whether the tasks have been successfully worked
         on or not. The task pool needs to deal with that.
         """
-        errors = 0
-        backoff = 0
-        logger.info("%s: started task generator loop", self.name)
+        self.errors = 0
+        self.backoff = 0
+        logger.info(f'{self.name}: started backup loop')
         while True:
+            self.backup.scan()
+
             next_time, next_tags = self.schedule.next(backy.utils.now(),
                                                       self.spread, self.backup)
 
-            if errors:
+            if self.errors:
                 # We're retrying - do not pay attention to the schedule but
                 # we know that we have to make a backup if possible and only
                 # pause for the backoff period.
@@ -193,50 +143,134 @@ class Job(object):
                 # not able to make backups for a longer period.
                 # This way we also use the queuing mechanism correctly so that
                 # one can still manually trigger a run if one wishes to.
-                next_time = (backy.utils.now() + timedelta(seconds=backoff))
+                next_time = (
+                    backy.utils.now() + timedelta(seconds=self.backoff))
 
-            self.task = task = Task(self)
-            self.task.ideal_start = next_time
-            self.task.tags.update(next_tags)
+            self.next_time = next_time
+            self.next_tags = next_tags
+            logger.info(f'{self.name}: {self.next_time}, {next_tags}')
+            await self._wait_for_deadline()
 
-            self.update_status("waiting for deadline")
-            await task.wait_for_deadline()
-            logger.info("%s: got deadline trigger", self.name)
+            # The UI shouldn't show a next any longer now that we have already
+            # triggered.
+            self.next_time = None
+            self.next_tags = None
 
-            if (self.backup.clean_history
-                    and self.backup.clean_history[-1].stats['duration'] < 600):
-                self.update_status("queued for execution in fast pool")
-                pool = self.daemon.taskpool_fast
-            else:
-                self.update_status("queued for execution in slow pool")
-                pool = self.daemon.taskpool_slow
+            try:
+                speed = 'slow'
+                if (self.backup.clean_history and
+                        self.backup.clean_history[-1].stats['duration'] < 600):
+                    speed = 'fast'
+                self.update_status(f"waiting for worker slot ({speed})")
 
-            returncode = await self.daemon.loop.run_in_executor(
-                pool, self.task.backup)
+                async with self.daemon.backup_semaphores[speed]:
+                    self.update_status(f'running ({speed})')
 
-            if returncode:
+                    self.update_config()
+                    await self.run_backup(next_tags)
+                    await self.run_expiry()
+                    await self.run_purge()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.exception(e)
+
                 self.update_status("failed")
-                # Something went wrong. Use truncated expontial backoff to
-                # avoid hogging the workers. We sometimes can't make backups
-                # because of external reasons (i.e. the VM is shut down and
-                # properly making a snapshot fails
-                errors += 1
+                # Something went wrong. Use bounded expontial backoff to avoid
+                # hogging the workers. We sometimes can't make backups because
+                # of external reasons (i.e. the VM is shut down and properly
+                # making a snapshot fails
+                self.errors += 1
                 # Our retry series (in minutes). We converge on waiting
                 # 6 hours maximum for retries.
-                # 2, 4, 8, 16, 32, 65, ..., 6*60, 6*60
-                backoff = min([2**errors, 6 * 60]) * 60
+                # 2, 4, 8, 16, 32, 65, ..., 6*60, 6*60, ...
+                self.backoff = min([2**self.errors, 6 * 60]) * 60
                 logger.warning('{}: retrying in {} seconds'.format(
-                    self.name, backoff))
+                    self.name, self.backoff))
             else:
-                errors = 0
-                backoff = None
+                self.errors = 0
+                self.backoff = 0
+                logger.info(f'{self.name}: finished')
                 self.update_status("finished")
 
+    async def run_backup(self, tags):
+        logger.info(f'{self.name}: running backup [{", ".join(tags)}]')
+        # A hacky way to feed the stdout (i.e. export progress) reasonably
+        # formatted ino the logfile.
+        logfile = p.join(self.path, 'backy.log')
+        with open(logfile, 'a', encoding='utf-8', buffering=1) as log:
+            proc = await asyncio.create_subprocess_exec(
+                BACKY_CMD,
+                '-b',
+                self.path,
+                '-l',
+                self.logfile,
+                'backup',
+                ','.join(tags),
+                close_fds=True,
+                start_new_session=True,  # Avoid signal propagation like Ctrl-C.
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=log)
+            try:
+                returncode = await proc.wait()
+                logger.info(
+                    f'{self.name}: finished backup with return code {returncode}'
+                )
+                if returncode:
+                    raise RuntimeError(
+                        f'Backup failed with return code {returncode}')
+            except asyncio.CancelledError:
+                logger.warning(
+                    f'{self.name}: this job\'s backup loop was cancelled, terminating subprocess'
+                )
+                try:
+                    proc.terminate()
+                except ProcessLookupError:
+                    pass
+                raise
+
+    async def run_expiry(self):
+        logger.info(f'{self.name}: Expiring old revisions')
+        self.schedule.expire(self.backup)
+
+    async def run_purge(self):
+        logger.info(f'{self.name}: Purging unused data')
+        proc = await asyncio.create_subprocess_exec(
+            BACKY_CMD,
+            '-b',
+            self.path,
+            '-l',
+            self.logfile,
+            'purge',
+            # start_new_session=True,  # Avoid signal propagation like Ctrl-C.
+            # close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
+        try:
+            returncode = await proc.wait()
+            logger.info(
+                f'{self.name}: finished purging with return code {returncode}')
+        except asyncio.CancelledError:
+            logger.warning(
+                f'{self.name}: this job\'s backup loop was cancelled, terminating subprocess'
+            )
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+            raise
+
     def start(self):
-        self.stop()
-        self._generator_handle = asyncio.ensure_future(self.generate_tasks())
+        assert self._task is None
+        self._task = self.daemon.loop.create_task(
+            self.run_forever(), name=f'backup-loop-{self.name}')
 
     def stop(self):
-        if self._generator_handle:
-            self._generator_handle.cancel()
-            self._generator_handle = None
+        # XXX make shutdown graceful and let a previous run finish ...
+        # schedule a reload after that.
+        if self._task:
+            logger.info(f"{self.name}: shutting down")
+            self._task.cancel()
+            self._task = None

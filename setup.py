@@ -1,11 +1,12 @@
 """Block-based backup and restore utility for virtual machine images"""
 
-from setuptools import setup, find_packages, Command
 import codecs
 import glob
 import os.path as p
 import subprocess
 import sys
+
+from setuptools import Command, find_packages, setup
 
 
 class PyTest(Command):
@@ -47,14 +48,15 @@ setup(
         'packaging',
         'prettytable',
         'pytz',
+        'tzlocal',
         'PyYaml',
         'setuptools',
         'shortuuid',
         'python-lzo',
         'telnetlib3>=1.0',
+        'humanize',
         'mmh3',
-        'structlog',
-    ],
+        'structlog',],
     extras_require={
         'test': [
             'pytest',
@@ -62,9 +64,7 @@ setup(
             'pytest-cache',
             'pytest-cov',
             'pytest-flake8',
-            'pytest-timeout',
-        ],
-    },
+            'pytest-timeout',],},
     entry_points="""
         [console_scripts]
             backy = backy.main:main

@@ -1,49 +1,42 @@
-from backy.scheduler import Task
-from unittest import mock
 import asyncio
-import backy.utils
 import datetime
+from unittest import mock
+
+import backy.utils
 import pytest
-
-
-def test_task():
-    job = mock.Mock()
-    job.name = 'test01'
-
-    t = Task(job)
-
-    assert t.ideal_start is None
-    assert t.tags == set()
-    assert t.name == 'test01'
+from backy.scheduler import Job
 
 
 @pytest.mark.asyncio
 async def test_wait_for_deadline_no_deadline_fails():
-    job = mock.Mock()
-    t = Task(job)
-    # Not having a a deadline set causes this to fail.
+    daemon = mock.Mock()
+    job = Job(daemon, 'dummy')
+    # Not having a a deadline set causes this to fail (immediately)
     with pytest.raises(TypeError):
-        await t.wait_for_deadline()
+        await job._wait_for_deadline()
 
 
 @pytest.mark.asyncio
 async def test_wait_for_deadline():
-    job = mock.Mock()
-    t = Task(job)
+    daemon = mock.Mock()
+    job = Job(daemon, 'dummy')
     # Not having a a deadline set causes this to fail.
     now = backy.utils.now()
-    t.ideal_start = now + datetime.timedelta(seconds=0.1)
-    await t.wait_for_deadline()
-    assert backy.utils.now() - now >= datetime.timedelta(seconds=0.1)
+    job.next_time = now + datetime.timedelta(seconds=0.3)
+    result = await job._wait_for_deadline()
+    assert result is None  # The deadline sleep was triggered.
+    assert backy.utils.now() - now >= datetime.timedelta(seconds=0.3)
 
 
 @pytest.mark.asyncio
-async def test_skip_deadline():
-    job = mock.Mock()
-    t = Task(job)
-    # Not having a a deadline set causes this to fail.
+async def test_wait_for_deadline():
+    daemon = mock.Mock()
+    job = Job(daemon, 'dummy')
+
     now = backy.utils.now()
-    t.ideal_start = now + datetime.timedelta(seconds=5)
-    t.run_immediately.set()
-    await t.wait_for_deadline()
+    job.next_time = now + datetime.timedelta(seconds=1000)
+    job.run_immediately.set()
+    result = await job._wait_for_deadline()
+    assert result is True  # The event was triggered
+    assert not job.run_immediately.is_set()  # The event was reset.
     assert backy.utils.now() - now < datetime.timedelta(seconds=0.5)

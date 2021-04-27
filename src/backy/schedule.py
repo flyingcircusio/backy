@@ -1,7 +1,7 @@
-from datetime import timedelta
-import backy.utils
-import datetime
 import logging
+from datetime import timedelta
+
+import backy.utils
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ def next_in_interval(relative, interval, spread):
     relative = relative - spread
     current_interval = int(relative / interval)
     next = (current_interval + 1) * interval + spread
-    next = backy.utils.min_date() + datetime.timedelta(seconds=next)
+    next = backy.utils.min_date() + timedelta(seconds=next)
     return next
 
 
@@ -68,7 +68,7 @@ class Schedule(object):
             # Perform an immediate backup if we have any history at all.
             # and when we aren't running a regular backup within the next
             # 5 minutes anyway.
-            grace_period = datetime.timedelta(seconds=5 * 60)
+            grace_period = timedelta(seconds=5 * 60)
             if ideal_time > backy.utils.now() + grace_period:
                 time = backy.utils.now()
                 tags = missed_tags
@@ -136,7 +136,7 @@ class Schedule(object):
         """Return a list of tags, sorted by their interval. Smallest first."""
         t = {}
         for tag in tags:
-            t[tag] = self.schedule.get(
-                tag, {'interval': datetime.timedelta(0)})['interval']
+            t[tag] = self.schedule.get(tag,
+                                       {'interval': timedelta(0)})['interval']
         vals = t.items()
         return (x[0] for x in sorted(vals, key=lambda x: x[1]))

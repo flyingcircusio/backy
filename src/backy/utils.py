@@ -1,5 +1,4 @@
-from .ext_deps import CP
-from .fallocate import punch_hole
+import asyncio
 import contextlib
 import datetime
 import hashlib
@@ -7,13 +6,17 @@ import logging
 import mmap
 import os
 import os.path
-import pytz
 import random
 import subprocess
 import sys
 import tempfile
 import time
 
+import humanize
+import pytz
+
+from .ext_deps import CP
+from .fallocate import punch_hole
 
 logger = logging.getLogger(__name__)
 
@@ -22,24 +25,16 @@ kiB = Bytes * 1024
 MiB = kiB * 1024
 GiB = MiB * 1024
 TiB = GiB * 1024
-# Conversion, Suffix, Format, Plurals
-BYTE_UNITS = [
-    (Bytes, 'Byte', '%d', True),
-    (kiB, 'kiB', '%0.2f', False),
-    (MiB, 'MiB', '%0.2f', False),
-    (GiB, 'GiB', '%0.2f', False),
-    (TiB, 'TiB', '%0.2f', False)
-]
 
 # 64 kiB blocks are a good compromise between sparsiness and fragmentation.
 PUNCH_SIZE = 4 * MiB
 CHUNK_SIZE = 4 * MiB
 
-
 END = object()
 
 
 def report_status(f):
+
     def wrapped(*args, **kw):
         generator = iter(f(*args, **kw))
         steps = next(generator)
@@ -55,17 +50,18 @@ def report_status(f):
             per_chunk = time_elapsed / step
             remaining = steps - step
             time_remaining = remaining * per_chunk
-            eta = (datetime.datetime.now() +
-                   datetime.timedelta(seconds=int(time_remaining)))
+            eta = (
+                datetime.datetime.now() +
+                datetime.timedelta(seconds=int(time_remaining)))
             if step == 5 or not step % 100:  # pragma: nocover
-                logger.info(
-                    "Progress: {} of {} ({:.2f}%) "
-                    "({:.0f}s elapsed, {:.0f}s remaining, ETA {})".format(
-                        step, steps, step / steps * 100,
-                        time_elapsed, time_remaining, eta))
+                logger.info("Progress: {} of {} ({:.2f}%) "
+                            "({:.0f}s elapsed, {} remaining, ETA {})".format(
+                                step, steps, step / steps * 100, time_elapsed,
+                                humanize.naturaldelta(time_remaining), eta))
 
         result = next(generator)
         return result
+
     return wrapped
 
 
@@ -131,9 +127,7 @@ class SafeFile(object):
         """
         assert not self.f
         self.f = tempfile.NamedTemporaryFile(
-            mode,
-            dir=os.path.dirname(self.filename),
-            delete=False)
+            mode, dir=os.path.dirname(self.filename), delete=False)
         self.rename = True
 
     def open_copy(self, mode):
@@ -210,15 +204,6 @@ def safe_symlink(realfile, link):
     os.symlink(os.path.relpath(realfile, os.path.dirname(link)), link)
 
 
-def format_bytes_flexible(number):
-    for factor, label, format, plurals in BYTE_UNITS:
-        if (number / factor) < 1024:
-            break
-    if plurals and number != 1:
-        label += 's'
-    return '%s %s' % (format % (number / factor), label)
-
-
 if hasattr(os, 'posix_fadvise'):
     posix_fadvise = os.posix_fadvise
 else:  # pragma: no cover
@@ -233,10 +218,12 @@ else:  # pragma: no cover
 
 
 if sys.platform == 'darwin':  # pragma: no cover
+
     @contextlib.contextmanager
     def zeroes(size):
         yield '\00' * size
 else:
+
     @contextlib.contextmanager
     def zeroes(size):
         with open('/dev/zero', 'rb', buffering=0) as f:
@@ -363,12 +350,11 @@ def files_are_equal(a, b):
         chunk_a = a.read(CHUNK_SIZE)
         chunk_b = b.read(CHUNK_SIZE)
         if chunk_a != chunk_b:
-            logger.error(
-                "Chunk A ({}, {}) != Chunk B ({}, {}) "
-                "at position {}".format(
-                    repr(chunk_a), hashlib.md5(chunk_a).hexdigest(),
-                    repr(chunk_b), hashlib.md5(chunk_b).hexdigest(),
-                    position))
+            logger.error("Chunk A ({}, {}) != Chunk B ({}, {}) "
+                         "at position {}".format(
+                             repr(chunk_a),
+                             hashlib.md5(chunk_a).hexdigest(), repr(chunk_b),
+                             hashlib.md5(chunk_b).hexdigest(), position))
             errors += 1
         if not chunk_a:
             break
@@ -376,7 +362,10 @@ def files_are_equal(a, b):
     return not errors
 
 
-def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=CHUNK_SIZE,
+def files_are_roughly_equal(a,
+                            b,
+                            samplesize=0.01,
+                            blocksize=CHUNK_SIZE,
                             timeout=5 * 60):
     a.seek(0, os.SEEK_END)
     size = a.tell()
@@ -409,10 +398,9 @@ def files_are_roughly_equal(a, b, samplesize=0.01, blocksize=CHUNK_SIZE,
         chunk_b = b.read(blocksize)
         if chunk_a != chunk_b:
             logger.error(
-                "Chunk A (md5: {}) != Chunk B (md5: {}) at position {}".
-                format(hashlib.md5(chunk_a).hexdigest(),
-                       hashlib.md5(chunk_b).hexdigest(),
-                       block * blocksize))
+                "Chunk A (md5: {}) != Chunk B (md5: {}) at position {}".format(
+                    hashlib.md5(chunk_a).hexdigest(),
+                    hashlib.md5(chunk_b).hexdigest(), block * blocksize))
             return False
     else:
         return True
@@ -432,5 +420,33 @@ def min_date():
     return pytz.UTC.localize(datetime.datetime.min)
 
 
-def format_timestamp(dt):
-    return dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+def has_recent_changes(entry, reference_time):
+    # This is not efficient on a first look as we may stat things twice, but it
+    # makes the recursion easier to read and the VFS will be caching this
+    # anyway.
+    # However, I want to perform a breadth-first analysis as the theory is that
+    # higher levels will propagate changed mtimes do to new/deleted files
+    # instead of just modified files in our case and looking at stats when
+    # traversing a directory level is faster than going depth first.
+    st = entry.stat(follow_symlinks=False)
+    if st.st_mtime >= reference_time:
+        return True
+    if not entry.is_dir(follow_symlinks=False):
+        return False
+    candidates = list(os.scandir(entry.path))
+    # First pass: stat all direct entries
+    for candidate in candidates:
+        if candidate.stat(follow_symlinks=False).st_mtime >= reference_time:
+            return True
+    # Second pass: start traversing
+    for candidate in os.scandir(entry.path):
+        if has_recent_changes(candidate, reference_time):
+            return True
+    return False
+
+
+async def time_or_event(deadline, event):
+    remaining_time = (deadline - now()).total_seconds()
+    return await next(
+        asyncio.as_completed([asyncio.sleep(remaining_time),
+                              event.wait()]))

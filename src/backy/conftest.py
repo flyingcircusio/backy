@@ -1,16 +1,22 @@
+import datetime
+import os
+import shutil
 from unittest import mock
+
 import backy.backup
 import backy.main
 import backy.schedule
-import datetime
-import os
 import pytest
 import pytz
 import structlog
-import shutil
-
 
 fixtures = os.path.dirname(__file__) + '/tests/samples'
+
+
+@pytest.fixture(autouse=True, scope='session')
+def fix_pytest_coverage_465():
+    os.environ['COV_CORE_SOURCE'] = os.path.abspath(
+        os.environ['COV_CORE_SOURCE'])
 
 
 @pytest.fixture
@@ -44,8 +50,10 @@ def fix_cwd():
 
 @pytest.fixture
 def clock(monkeypatch):
+
     class Clock(object):
         now = mock.Mock()
+
     clock = Clock()
     # 2015-09-01 ~09:15
     clock.now.return_value = datetime.datetime(
@@ -90,9 +98,10 @@ def setup_structlog():
                 utils.log_data.extend(exc.splitlines())
         raise structlog.DropEvent
 
-    structlog.configure(processors=(
-        [structlog.processors.format_exc_info] if log_exceptions else [] +
-        [test_logger]))
+    structlog.configure(
+        processors=(
+            [structlog.processors.format_exc_info] if log_exceptions else [] +
+            [test_logger]))
 
 
 @pytest.fixture(autouse=True)

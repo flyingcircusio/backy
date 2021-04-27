@@ -1,11 +1,12 @@
-from ...timeout import TimeOut, TimeOutError
-from ..ceph.source import CephRBD
-import consulate
 import json
 import logging
 import time
 import uuid
 
+import consulate
+
+from ...timeout import TimeOut, TimeOutError
+from ..ceph.source import CephRBD
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +45,8 @@ class FlyingCircusRootDisk(CephRBD):
 
         time.sleep(3)
         try:
-            timeout = TimeOut(self.snapshot_timeout, interval=2,
-                              raise_on_timeout=True)
+            timeout = TimeOut(
+                self.snapshot_timeout, interval=2, raise_on_timeout=True)
             while timeout.tick():
                 for snapshot in self.rbd.snap_ls(self._image_name):
                     if snapshot['name'] == name:
@@ -54,6 +55,8 @@ class FlyingCircusRootDisk(CephRBD):
             # The VM might have been shut down. Try doing a regular Ceph
             # snapshot locally.
             super(FlyingCircusRootDisk, self).create_snapshot(name)
+        except KeyboardInterrupt:
+            raise
         finally:
             # In case the snapshot still gets created: the general snapshot
             # deletion code in ceph/source will clean up unused backy snapshots
@@ -63,7 +66,7 @@ class FlyingCircusRootDisk(CephRBD):
             for key in list(consul.kv.find('snapshot/')):
                 try:
                     s = consul.kv[key]
-                except AttributeError:
+                except KeyError:
                     continue
                 try:
                     s = json.loads(s)

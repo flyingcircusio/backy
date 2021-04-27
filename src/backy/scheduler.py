@@ -13,7 +13,7 @@ import yaml
 
 from .backup import Backup
 from .ext_deps import BACKY_CMD
-from .utils import SafeFile, time_or_event
+from .utils import SafeFile, format_datetime_local, time_or_event
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +148,9 @@ class Job(object):
 
             self.next_time = next_time
             self.next_tags = next_tags
-            logger.info(f'{self.name}: {self.next_time}, {next_tags}')
+            logger.info(
+                f'{self.name}: {format_datetime_local(self.next_time)[0]}, {next_tags}'
+            )
             await self._wait_for_deadline()
 
             # The UI shouldn't show a next any longer now that we have already

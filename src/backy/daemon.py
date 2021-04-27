@@ -17,12 +17,11 @@ import humanize
 import pkg_resources
 import prettytable
 import telnetlib3
-import tzlocal
 import yaml
 
 from .schedule import Schedule
 from .scheduler import Job
-from .utils import SafeFile, has_recent_changes
+from .utils import SafeFile, format_datetime_local, has_recent_changes
 
 logger = logging.getLogger(__name__)
 daemon = None
@@ -369,7 +368,7 @@ class SchedulerShell(object):
         """List status of all known jobs. Optionally filter by regex."""
         filter_re = re.compile(filter_re) if filter_re else None
 
-        tz = tzlocal.get_localzone()
+        tz = format_datetime_local(None)[1]
 
         t = prettytable.PrettyTable([
             'Job', 'SLA', 'SLA overdue', 'Status', f'Last Backup ({tz.zone})',
@@ -385,19 +384,8 @@ class SchedulerShell(object):
                 job['sla_overdue']) if job['sla_overdue'] else '-'
             last_duration = humanize.naturaldelta(
                 job['last_duration']) if job['last_duration'] else '-'
-            last_time = job['last_time']
-            if last_time:
-                last_time = last_time.astimezone(tz).replace(
-                    tzinfo=None).strftime('%Y-%m-%d %H:%M:%S')
-            else:
-                last_time = '-'
-
-            next_time = job['next_time']
-            if next_time:
-                next_time = next_time.astimezone(tz).replace(
-                    tzinfo=None).strftime('%Y-%m-%d %H:%M:%S')
-            else:
-                next_time = '-'
+            last_time = format_datetime_local(job['last_time'])[0]
+            next_time = format_datetime_local(job['next_time'])[0]
 
             t.add_row([
                 job['job'], job['sla'], overdue, job['status'], last_time,

@@ -14,6 +14,7 @@ import time
 
 import humanize
 import pytz
+import tzlocal
 
 from .ext_deps import CP
 from .fallocate import punch_hole
@@ -450,3 +451,11 @@ async def time_or_event(deadline, event):
     return await next(
         asyncio.as_completed([asyncio.sleep(remaining_time),
                               event.wait()]))
+
+
+def format_datetime_local(dt):
+    tz = tzlocal.get_localzone()
+    if dt is None:
+        return '-', tz
+    return dt.astimezone(tz).replace(
+        tzinfo=None).strftime('%Y-%m-%d %H:%M:%S'), tz

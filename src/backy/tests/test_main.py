@@ -96,10 +96,6 @@ def test_call_init(capsys, caplog, backup, argv, monkeypatch):
 {'source': 'test/test04', 'type': 'ceph-rbd'}
 """) == out
     assert err == ""
-    assert Ellipsis("""\
-DEBUG    backy.main:main.py:... backup.init(\
-**{'source': 'test/test04', 'type': 'ceph-rbd'})
-""") == caplog.text
 
 
 def test_call_backup(tmpdir, capsys, caplog, argv, monkeypatch):

@@ -250,38 +250,38 @@ async def test_task_generator_backoff(caplog, daemon, clock, tmpdir,
 
     await wait_for_job_finished()
     assert Ellipsis("""\
-INFO     backy.scheduler:scheduler.py:... test01: started backup loop
-INFO     backy.scheduler:scheduler.py:... test01: 2015-09-02 07:32:51, {'daily'}
-ERROR    backy.scheduler:scheduler.py:...
+INFO     ... test01: started backup loop
+INFO     ... test01: 2015-09-02 07:32:51, {'daily'}
+ERROR    ...
 Traceback (most recent call last):
   File "/.../src/backy/scheduler.py", line ..., in run_forever
     await self.run_backup(next_tags)
   File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
     raise Exception()
 Exception
-WARNING  backy.scheduler:scheduler.py:... test01: retrying in 120 seconds
-INFO     backy.scheduler:scheduler.py:... test01: 2015-09-01 09:08:47, {'daily'}
-ERROR    backy.scheduler:scheduler.py:...
+WARNING  ... test01: retrying in 120 seconds
+INFO     ... test01: 2015-09-01 09:08:47, {'daily'}
+ERROR    ...
 Traceback (most recent call last):
   File "/.../src/backy/scheduler.py", line ..., in run_forever
     await self.run_backup(next_tags)
   File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
     raise Exception()
 Exception
-WARNING  backy.scheduler:scheduler.py:... test01: retrying in 240 seconds
-INFO     backy.scheduler:scheduler.py:... test01: 2015-09-01 09:10:47, {'daily'}
-ERROR    backy.scheduler:scheduler.py:...
+WARNING  ... test01: retrying in 240 seconds
+INFO     ... test01: 2015-09-01 09:10:47, {'daily'}
+ERROR    ...
 Traceback (most recent call last):
   File "/.../src/backy/scheduler.py", line ..., in run_forever
     await self.run_backup(next_tags)
   File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
     raise Exception()
 Exception
-WARNING  backy.scheduler:scheduler.py:... test01: retrying in 480 seconds
-INFO     backy.scheduler:scheduler.py:... test01: 2015-09-01 09:14:47, {'daily'}
-INFO     backy.scheduler:scheduler.py:... test01: finished
-INFO     backy.scheduler:scheduler.py:... test01: shutting down
-INFO     backy.scheduler:scheduler.py:... test01: 2015-09-02 07:32:51, {'daily'}
+WARNING  ... test01: retrying in 480 seconds
+INFO     ... test01: 2015-09-01 09:14:47, {'daily'}
+INFO     ... test01: finished
+INFO     ... test01: shutting down
+INFO     ... test01: 2015-09-02 07:32:51, {'daily'}
 """) == caplog.text
 
     assert job.errors == 0

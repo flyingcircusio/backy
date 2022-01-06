@@ -12,8 +12,8 @@ import sys
 import tempfile
 import time
 
+from backports.zoneinfo import ZoneInfo
 import humanize
-import pytz
 import tzlocal
 
 from .ext_deps import CP
@@ -414,11 +414,11 @@ def now():
 
     Also, ensure that we'll always use timezone-aware objects.
     """
-    return datetime.datetime.now(pytz.UTC)
+    return datetime.datetime.now(ZoneInfo('UTC'))
 
 
 def min_date():
-    return pytz.UTC.localize(datetime.datetime.min)
+    return datetime.datetime.min.replace(tzinfo=ZoneInfo('UTC'))
 
 
 def has_recent_changes(entry, reference_time):

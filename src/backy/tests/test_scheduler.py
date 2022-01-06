@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 from unittest import mock
 
@@ -29,10 +28,10 @@ async def test_wait_for_deadline():
 
 
 @pytest.mark.asyncio
-async def test_wait_for_deadline():
+async def test_wait_for_deadline_1000():
     daemon = mock.Mock()
     job = Job(daemon, 'dummy')
-
+    # Large deadline
     now = backy.utils.now()
     job.next_time = now + datetime.timedelta(seconds=1000)
     job.run_immediately.set()

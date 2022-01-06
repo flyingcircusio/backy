@@ -1,11 +1,12 @@
 import os.path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 import backy.utils
-import pytz
 from backy.revision import Revision
 from backy.schedule import Schedule, next_in_interval, parse_duration
+
+UTC = timezone.utc
 
 
 def test_parse_duration():
@@ -29,27 +30,25 @@ def test_first_backup_catches_up_all_tags_immediately_in_next_interval(
         'test': {
             'interval': '7d',
             'keep': 7}})
-    assert ((datetime(2015, 9, 2, 0, 0, 1, tzinfo=pytz.UTC),
-             {'daily', 'test'}) == schedule.next(backy.utils.now(), 1, backup))
+    assert ((datetime(2015, 9, 2, 0, 0, 1, tzinfo=UTC), {'daily', 'test'}) ==
+            schedule.next(backy.utils.now(), 1, backup))
 
 
 def test_tag_first_interval_after_now(schedule, backup, clock):
-    assert ((datetime(2015, 9, 2, 0, 0, 1, tzinfo=pytz.UTC),
-             {'daily'}) == schedule._next_ideal(backy.utils.now(), 1))
+    assert ((datetime(2015, 9, 2, 0, 0, 1, tzinfo=UTC), {'daily'}) ==
+            schedule._next_ideal(backy.utils.now(), 1))
 
 
 def test_tag_second_interval_after_now(schedule, backup, clock):
-    assert ((datetime(2015, 9, 3, 0, 0, 5,
-                      tzinfo=pytz.UTC), {'daily'}) == schedule._next_ideal(
-                          backy.utils.now() + timedelta(seconds=24 * 60 * 60),
-                          5))
+    assert ((datetime(2015, 9, 3, 0, 0, 5, tzinfo=UTC), {'daily'}) ==
+            schedule._next_ideal(backy.utils.now() +
+            timedelta(seconds=24 * 60 * 60), 5))
 
 
 def test_tag_second_interval_with_different_spread(schedule, backup, clock):
-    assert ((datetime(2015, 9, 3, 0, 0, 5,
-                      tzinfo=pytz.UTC), {'daily'}) == schedule._next_ideal(
-                          backy.utils.now() + timedelta(seconds=25 * 60 * 60),
-                          5))
+    assert ((datetime(2015, 9, 3, 0, 0, 5, tzinfo=UTC), {'daily'}) ==
+            schedule._next_ideal(backy.utils.now() +
+            timedelta(seconds=25 * 60 * 60), 5))
 
 
 def test_tag_catchup_not_needed_for_recent(schedule, backup, clock):
@@ -62,7 +61,7 @@ def test_tag_catchup_not_needed_for_recent(schedule, backup, clock):
     assert set() == schedule._missed(backup)
     # This in turn causes the main next() function to return the regular next
     # interval.
-    assert ((datetime(2015, 9, 2, 0, 0, 1, tzinfo=pytz.UTC),
+    assert ((datetime(2015, 9, 2, 0, 0, 1, tzinfo=UTC),
              {'daily'}) == schedule.next(clock.now(), 1, backup))
 
 
@@ -89,18 +88,18 @@ def test_tag_catchup_until_5_minutes_before_next(schedule, backup, clock):
     assert set({'daily'}) == schedule._missed(backup)
     # This in turn causes the main next() function to return the regular next
     # interval.
-    assert ((datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC),
+    assert ((datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC),
              {'daily'}) == schedule.next(clock.now(), 1, backup))
     # As we approach the 5 minute mark before the next regular interval,
     # we then flip towards the ideal time.
-    clock.now.return_value = datetime(2015, 9, 1, 23, 55, 0, tzinfo=pytz.UTC)
+    clock.now.return_value = datetime(2015, 9, 1, 23, 55, 0, tzinfo=UTC)
     assert ((clock.now(), {'daily'}) == schedule.next(
-        datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC), 1, backup))
+        datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC), 1, backup))
 
-    clock.now.return_value = datetime(2015, 9, 1, 23, 55, 1, tzinfo=pytz.UTC)
+    clock.now.return_value = datetime(2015, 9, 1, 23, 55, 1, tzinfo=UTC)
     assert ((datetime(2015, 9, 2, 0, 0, 1,
-                      tzinfo=pytz.UTC), {'daily'}) == schedule.next(
-                          datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC), 1,
+                      tzinfo=UTC), {'daily'}) == schedule.next(
+                          datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC), 1,
                           backup))
 
 
@@ -131,7 +130,7 @@ def test_tag_catchup_needed_for_recently_missed(backup, clock):
     assert {'daily', 'weekly', 'hourly'} == schedule._missed(backup)
     # This in turn causes the main next() function to also
     # return this date.
-    assert ((datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC),
+    assert ((datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC),
              {'daily', 'weekly',
               'hourly'}) == schedule.next(clock.now(), 1, backup))
 
@@ -148,17 +147,17 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
         backup.history.sort(key=lambda x: x.timestamp)
         return revision
 
-    clock.now.return_value = datetime(2014, 5, 10, 10, 0, tzinfo=pytz.UTC)
-    add_revision(datetime(2014, 5, 10, 10, 0, tzinfo=pytz.UTC))
+    clock.now.return_value = datetime(2014, 5, 10, 10, 0, tzinfo=UTC)
+    add_revision(datetime(2014, 5, 10, 10, 0, tzinfo=UTC))
     assert [] == schedule.expire(backup)
     backup.scan()
     assert len(backup.history) == 1
     assert backup.history[0].tags == {'daily'}
 
-    add_revision(datetime(2014, 5, 9, 10, 0, tzinfo=pytz.UTC))
-    add_revision(datetime(2014, 5, 8, 10, 0, tzinfo=pytz.UTC))
-    add_revision(datetime(2014, 5, 7, 10, 0, tzinfo=pytz.UTC))
-    add_revision(datetime(2014, 5, 6, 10, 0, tzinfo=pytz.UTC))
+    add_revision(datetime(2014, 5, 9, 10, 0, tzinfo=UTC))
+    add_revision(datetime(2014, 5, 8, 10, 0, tzinfo=UTC))
+    add_revision(datetime(2014, 5, 7, 10, 0, tzinfo=UTC))
+    add_revision(datetime(2014, 5, 6, 10, 0, tzinfo=UTC))
     assert [] == schedule.expire(backup)
     backup.scan()
     assert len(backup.history) == 5
@@ -166,13 +165,13 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
 
     # This is the one revision more than the basic 'keep' parameter
     # but its still within the keep*interval frame so we keep it.
-    add_revision(datetime(2014, 5, 6, 11, 0, tzinfo=pytz.UTC))
+    add_revision(datetime(2014, 5, 6, 11, 0, tzinfo=UTC))
     assert [] == schedule.expire(backup)
     assert [{'daily'}] * 6 == [r.tags for r in backup.history]
 
     # This revision is more than keep and also outside the interval.
     # It gets its tag removed and disappears.
-    r = add_revision(datetime(2014, 5, 4, 11, 0, tzinfo=pytz.UTC))
+    r = add_revision(datetime(2014, 5, 4, 11, 0, tzinfo=UTC))
     assert os.path.exists(r.filename + '.rev')
     removed = [x for x in schedule.expire(backup)]
     assert [r.uuid] == [x.uuid for x in removed]
@@ -183,7 +182,7 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
     # If we have unknown tags, then those do not expire. However, the
     # known tag disappears but then the file remains because there's still
     # a tag left.
-    r = add_revision(datetime(2014, 5, 4, 11, 0, tzinfo=pytz.UTC))
+    r = add_revision(datetime(2014, 5, 4, 11, 0, tzinfo=UTC))
     r.tags = {'daily', 'test'}
     r.write_info()
     assert os.path.exists(r.filename + '.rev')
@@ -197,29 +196,29 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
 def test_next_in_interval(clock):
     now = backy.utils.now()
     interval = timedelta(days=1)
-    assert datetime(2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC) == now
-    assert (datetime(2015, 9, 2, 0, 1, 40,
-                     tzinfo=pytz.UTC) == next_in_interval(now, interval, 100))
+    assert datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC) == now
+    assert (datetime(2015, 9, 2, 0, 1, 40, tzinfo=UTC) ==
+            next_in_interval(now, interval, 100))
 
     # t+30 minutes -> same interval
     now = now + timedelta(seconds=60 * 30)
-    assert (datetime(2015, 9, 2, 0, 1, 40,
-                     tzinfo=pytz.UTC) == next_in_interval(now, interval, 100))
+    assert (datetime(2015, 9, 2, 0, 1, 40, tzinfo=UTC) ==
+            next_in_interval(now, interval, 100))
 
     # t+60 minutes -> same interval
     now = now + timedelta(seconds=60 * 30)
-    assert (datetime(2015, 9, 2, 0, 1, 40,
-                     tzinfo=pytz.UTC) == next_in_interval(now, interval, 100))
+    assert (datetime(2015, 9, 2, 0, 1, 40, tzinfo=UTC) ==
+            next_in_interval(now, interval, 100))
 
     # t2 - a few seconds -> same interval
-    now = datetime(2015, 9, 2, 0, 1, 20, tzinfo=pytz.UTC)
-    assert (datetime(2015, 9, 2, 0, 1, 40,
-                     tzinfo=pytz.UTC) == next_in_interval(now, interval, 100))
+    now = datetime(2015, 9, 2, 0, 1, 20, tzinfo=UTC)
+    assert (datetime(2015, 9, 2, 0, 1, 40, tzinfo=UTC) ==
+            next_in_interval(now, interval, 100))
 
     # t2 + 1 second -> next interval
-    now = datetime(2015, 9, 2, 0, 1, 41, tzinfo=pytz.UTC)
-    assert (datetime(2015, 9, 3, 0, 1, 40,
-                     tzinfo=pytz.UTC) == next_in_interval(now, interval, 100))
+    now = datetime(2015, 9, 2, 0, 1, 41, tzinfo=UTC)
+    assert (datetime(2015, 9, 3, 0, 1, 40, tzinfo=UTC) ==
+            next_in_interval(now, interval, 100))
 
 
 def test_sorted_tags():
@@ -233,6 +232,7 @@ def test_sorted_tags():
             'keep': 4},
         'monthly': {
             'interval': '4w',
-            'keep': 3},})
+            'keep': 3},
+    })
     assert ['daily', 'weekly',
             'monthly'] == list(s.sorted_tags(s.schedule.keys()))

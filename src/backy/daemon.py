@@ -1,17 +1,13 @@
 import asyncio
-import collections
 import fcntl
 import logging
 import os
 import os.path as p
-import queue
 import re
 import shutil
 import signal
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
-from contextlib import suppress
 
 import humanize
 import pkg_resources
@@ -301,7 +297,7 @@ async def telnet_server_shell(reader, writer):
     toggling of the connected client session.
     This function is a :func:`~asyncio.coroutine`.
     """
-    from telnetlib3.server_shell import CR, LF, NUL, readline, get_slcdata
+    from telnetlib3.server_shell import CR, LF, readline
 
     writer.write('backy {}'.format(pkg_resources.require("backy")[0].version) +
                  CR + LF)

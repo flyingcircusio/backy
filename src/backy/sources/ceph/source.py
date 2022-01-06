@@ -163,6 +163,6 @@ class CephRBD(object):
                 logger.info('Removing old snapshot %s', snapshot['name'])
                 try:
                     self.rbd.snap_rm(self._image_name + '@' + snapshot['name'])
-                except Exception as e:
+                except Exception:
                     logger.exception('Could not delete snapshot ' +
                                      snapshot['name'])

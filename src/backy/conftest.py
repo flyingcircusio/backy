@@ -1,3 +1,4 @@
+from backports.zoneinfo import ZoneInfo
 import datetime
 import os
 import shutil
@@ -7,7 +8,6 @@ import backy.backup
 import backy.main
 import backy.schedule
 import pytest
-import pytz
 import structlog
 
 fixtures = os.path.dirname(__file__) + '/tests/samples'
@@ -57,7 +57,7 @@ def clock(monkeypatch):
     clock = Clock()
     # 2015-09-01 ~09:15
     clock.now.return_value = datetime.datetime(
-        2015, 9, 1, 7, 6, 47, tzinfo=pytz.UTC)
+        2015, 9, 1, 7, 6, 47, tzinfo=ZoneInfo('UTC'))
     monkeypatch.setattr(backy.utils, 'now', clock.now)
     return clock
 

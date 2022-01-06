@@ -23,14 +23,6 @@ _MISSING = (
 _EVENT_WIDTH = 30  # pad the event name to so many characters
 
 
-def _pad(s, l):
-    """
-    Pads *s* to length *l*.
-    """
-    missing = l - len(s)
-    return s + " " * (missing if missing > 0 else 0)
-
-
 if sys.stdout.isatty() and colorama:
     RESET_ALL = colorama.Style.RESET_ALL
     BRIGHT = colorama.Style.BRIGHT
@@ -122,7 +114,7 @@ class ConsoleRenderer(object):
 
         event = event_dict.pop("event")
         write(BRIGHT +
-              _pad(event, self._pad_event) +
+              event.ljust(self._pad_event) +
               RESET_ALL + " ")
 
         logger_name = event_dict.pop("logger", None)
@@ -157,8 +149,8 @@ class ConsoleRenderer(object):
             write("\n" + exc)
 
         # Log everything to the persistent log.
-        with open('/var/log/fc-qemu.log', 'a') as l:
-            l.write(logio.getvalue() + '\n')
+        with open('/var/log/fc-qemu.log', 'a') as lf:
+            lf.write(logio.getvalue() + '\n')
 
         # Filter according to the -v switch when outputting to the
         # console.

@@ -1,12 +1,12 @@
 from backy.revision import Revision
 import backy
+
 import datetime
 from unittest import mock
 import os.path as p
-import pytz
 import yaml
 
-
+UTC = datetime.timezone.utc
 SAMPLE_DIR = p.join(p.dirname(__file__), 'samples')
 
 
@@ -38,7 +38,7 @@ def test_revision_create_child(backup):
 def test_load_sample1(backup):
     r = Revision.load(SAMPLE_DIR + '/sample1.rev', backup)
     assert r.uuid == 'asdf'
-    assert r.timestamp == datetime.datetime(2015, 8, 1, 20, 0, tzinfo=pytz.UTC)
+    assert r.timestamp == datetime.datetime(2015, 8, 1, 20, 0, tzinfo=UTC)
     assert r.parent is None
     assert r.backup is backup
 
@@ -46,7 +46,7 @@ def test_load_sample1(backup):
 def test_load_sample2(backup):
     r = Revision.load(SAMPLE_DIR + '/sample2.rev', backup)
     assert r.uuid == 'asdf2'
-    assert r.timestamp == datetime.datetime(2015, 8, 1, 21, 0, tzinfo=pytz.UTC)
+    assert r.timestamp == datetime.datetime(2015, 8, 1, 21, 0, tzinfo=UTC)
     assert r.parent == 'asdf'
     assert r.backup is backup
 
@@ -72,8 +72,7 @@ def test_store_revision_data(backup, clock):
             "stats": {"bytes_written": 0},
             "tags": [],
             "trust": "trusted",
-            "timestamp": datetime.datetime(
-                2015, 9, 1, 7, 6, 47, tzinfo=datetime.timezone.utc)}
+            "timestamp": datetime.datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC)}
 
 
 def test_delete_revision(backup):

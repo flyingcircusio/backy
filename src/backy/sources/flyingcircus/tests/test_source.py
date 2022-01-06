@@ -1,7 +1,6 @@
 from backy.sources import select_source
 from backy.sources.flyingcircus.source import FlyingCircusRootDisk
 from unittest import mock
-import backy.timeout
 import consulate
 import json
 import pytest

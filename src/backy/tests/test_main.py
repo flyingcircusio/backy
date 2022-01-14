@@ -1,13 +1,13 @@
 import os
 import pprint
-import sys
-
-import backy.backup
-import backy.main
 import pytest
+import sys
 import yaml
+
 from backy.revision import Revision
 from backy.tests import Ellipsis
+import backy.backup
+import backy.main
 
 
 @pytest.yield_fixture
@@ -126,7 +126,7 @@ DEBUG    backy.backup:backup.py:... Backup(".../test_call_backup0/backy")
     assert exit.value.code == 0
 
 
-def test_call_find(capsys, caplog, backup, argv, monkeypatch):
+def test_call_find(capsys, caplog, backup, argv, monkeypatch, tz_berlin):
     monkeypatch.setattr(backy.main.Command, 'find', print_args)
     argv.extend(['-v', '-b', backup.path, 'find', '-r', '1'])
     with pytest.raises(SystemExit) as exit:
@@ -227,7 +227,7 @@ def test_commands_wrapper_init(commands, tmpdir):
         assert config == {'filename': str(tmpdir) + '/source', 'type': 'file'}
 
 
-def test_commands_wrapper_status(commands, tmpdir, capsys, clock):
+def test_commands_wrapper_status(commands, tmpdir, capsys, clock, tz_berlin):
     b = backy.backup.Backup(str(tmpdir))
     revision = Revision(b, 1)
     revision.timestamp = backy.utils.now()

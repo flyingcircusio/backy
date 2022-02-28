@@ -1,18 +1,18 @@
+from unittest import mock
 import asyncio
 import datetime
 import os
 import os.path as p
+import pytest
 import re
 import time
-from unittest import mock
 
-import backy.utils
-import pytest
 from backy.backends.chunked import ChunkedFileBackend
 from backy.daemon import BackyDaemon
 from backy.revision import Revision
 from backy.scheduler import Job
 from backy.tests import Ellipsis
+import backy.utils
 
 
 @pytest.yield_fixture
@@ -176,7 +176,7 @@ async def cancel_and_wait(job):
 
 
 @pytest.mark.asyncio
-async def test_task_generator(daemon, clock, tmpdir, monkeypatch):
+async def test_task_generator(daemon, clock, tmpdir, monkeypatch, tz_berlin):
     # This is really just a smoke tests, but it covers the task pool,
     # so hey, better than nothing.
 
@@ -207,8 +207,7 @@ async def test_task_generator(daemon, clock, tmpdir, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_task_generator_backoff(caplog, daemon, clock, tmpdir,
-                                      monkeypatch):
-
+                                      monkeypatch, tz_berlin):
     for j in daemon.jobs.values():
         await cancel_and_wait(j)
     job = daemon.jobs['test01']
@@ -250,38 +249,38 @@ async def test_task_generator_backoff(caplog, daemon, clock, tmpdir,
 
     await wait_for_job_finished()
     assert Ellipsis("""\
-INFO     backy.scheduler:scheduler.py:... test01: started backup loop
-INFO     backy.scheduler:scheduler.py:... test01: 2015-09-02 07:32:51, {'daily'}
-ERROR    backy.scheduler:scheduler.py:...
+INFO     ... test01: started backup loop
+INFO     ... test01: 2015-09-02 07:32:51, {'daily'}
+ERROR    ...
 Traceback (most recent call last):
   File "/.../src/backy/scheduler.py", line ..., in run_forever
     await self.run_backup(next_tags)
   File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
     raise Exception()
 Exception
-WARNING  backy.scheduler:scheduler.py:... test01: retrying in 120 seconds
-INFO     backy.scheduler:scheduler.py:... test01: 2015-09-01 09:08:47, {'daily'}
-ERROR    backy.scheduler:scheduler.py:...
+WARNING  ... test01: retrying in 120 seconds
+INFO     ... test01: 2015-09-01 09:08:47, {'daily'}
+ERROR    ...
 Traceback (most recent call last):
   File "/.../src/backy/scheduler.py", line ..., in run_forever
     await self.run_backup(next_tags)
   File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
     raise Exception()
 Exception
-WARNING  backy.scheduler:scheduler.py:... test01: retrying in 240 seconds
-INFO     backy.scheduler:scheduler.py:... test01: 2015-09-01 09:10:47, {'daily'}
-ERROR    backy.scheduler:scheduler.py:...
+WARNING  ... test01: retrying in 240 seconds
+INFO     ... test01: 2015-09-01 09:10:47, {'daily'}
+ERROR    ...
 Traceback (most recent call last):
   File "/.../src/backy/scheduler.py", line ..., in run_forever
     await self.run_backup(next_tags)
   File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
     raise Exception()
 Exception
-WARNING  backy.scheduler:scheduler.py:... test01: retrying in 480 seconds
-INFO     backy.scheduler:scheduler.py:... test01: 2015-09-01 09:14:47, {'daily'}
-INFO     backy.scheduler:scheduler.py:... test01: finished
-INFO     backy.scheduler:scheduler.py:... test01: shutting down
-INFO     backy.scheduler:scheduler.py:... test01: 2015-09-02 07:32:51, {'daily'}
+WARNING  ... test01: retrying in 480 seconds
+INFO     ... test01: 2015-09-01 09:14:47, {'daily'}
+INFO     ... test01: finished
+INFO     ... test01: shutting down
+INFO     ... test01: 2015-09-02 07:32:51, {'daily'}
 """) == caplog.text
 
     assert job.errors == 0

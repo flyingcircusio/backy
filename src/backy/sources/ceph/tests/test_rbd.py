@@ -191,4 +191,5 @@ def test_rbd_export(popen, rbdclient, tmpdir):
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             bufsize=mock.ANY,
-        ),])
+        ),
+    ])

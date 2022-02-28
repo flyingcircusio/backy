@@ -42,6 +42,7 @@ def _make_fallocate():
             raise OSError(errno, 'fallocate: ' + os.strerror(errno))
     return fallocate
 
+
 try:
     fallocate = _make_fallocate()
 except AttributeError:  # pragma: no cover

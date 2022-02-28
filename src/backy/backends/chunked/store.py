@@ -40,8 +40,8 @@ class Store(object):
         if not os.path.exists(os.path.join(self.path, 'store')):
             self.convert_to_v2()
 
-        for chunk in glob.iglob(os.path.join(self.path, '*/*.chunk.lzo')):
-            hash = os.path.basename(chunk).replace('.chunk.lzo', '')
+        for c in glob.iglob(os.path.join(self.path, '*/*.chunk.lzo')):
+            hash = os.path.basename(c).replace('.chunk.lzo', '')
             self.known.add(hash)
         logger.info('Loaded {} known chunks.'.format(len(self.known)))
 
@@ -49,8 +49,8 @@ class Store(object):
         logger.info('Converting chunk store to v2')
         for path in glob.iglob(os.path.join(self.path, '*/*/*.chunk.lzo')):
             new = path.replace(self.path + '/', '', 1)
-            dir, _, chunk = new.split('/')
-            new = os.path.join(self.path, dir, chunk)
+            dir, _, c = new.split('/')
+            new = os.path.join(self.path, dir, c)
             os.rename(path, new)
         for path in glob.iglob(os.path.join(self.path, '*/??')):
             if os.path.isdir(path):

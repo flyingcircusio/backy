@@ -3,9 +3,9 @@
 set -e
 umask 022
 
-HERE=$(cd $(dirname $0); pwd)
 BACKUP=$(mktemp -d -t backy.test.XXXXX)
-BACKY="${HERE}/bin/backy -l ${BACKUP}/backy.log"
+BACKY="$(pwd)/bin/backy -l ${BACKUP}/backy.log"
+export TZ=Europe/Berlin
 
 mkdir ${BACKUP}/backup
 cd ${BACKUP}/backup

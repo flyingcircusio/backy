@@ -44,10 +44,10 @@ setup(
     name='backy',
     version=version(),
     install_requires=[
+        'backports.zoneinfo',
         'consulate',
         'packaging',
         'prettytable',
-        'pytz',
         'tzlocal',
         'PyYaml',
         'setuptools',
@@ -56,7 +56,8 @@ setup(
         'telnetlib3>=1.0',
         'humanize',
         'mmh3',
-        'structlog',],
+        'structlog',
+    ],
     extras_require={
         'test': [
             'pytest',
@@ -64,7 +65,9 @@ setup(
             'pytest-cache',
             'pytest-cov',
             'pytest-flake8',
-            'pytest-timeout',],},
+            'pytest-timeout',
+        ],
+    },
     entry_points="""
         [console_scripts]
             backy = backy.main:main
@@ -91,7 +94,10 @@ License :: OSI Approved :: GNU General Public License v3 (GPLv3)
 Operating System :: POSIX
 Programming Language :: Python
 Programming Language :: Python :: 3
-Programming Language :: Python :: 3.4
+Programming Language :: Python :: 3.6
+Programming Language :: Python :: 3.7
+Programming Language :: Python :: 3.8
+Programming Language :: Python :: 3.9
 Topic :: System :: Archiving :: Backup
 """[:-1].split('\n'),
     description=__doc__.strip(),

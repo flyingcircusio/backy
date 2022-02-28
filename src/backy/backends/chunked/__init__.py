@@ -6,9 +6,7 @@ from backy.revision import TRUST_VERIFIED, TRUST_DISTRUSTED
 import logging
 import os.path
 
-
 logger = logging.getLogger(__name__)
-
 
 
 class ChunkedFileBackend(object):
@@ -25,11 +23,11 @@ class ChunkedFileBackend(object):
         self.revision = revision
         path = self.revision.backup.path + '/chunks'
         if path not in self.STORES:
-            self.STORES[path] = Store(path=self.revision.backup.path + '/chunks')
+            self.STORES[path] = Store(
+                path=self.revision.backup.path + '/chunks')
         self.store = self.STORES[path]
 
     def open(self, mode='rb'):
-
         if 'w' in mode or '+' in mode and self.clone_parent:
             parent = self.revision.get_parent()
             if parent and not os.path.exists(self.revision.filename):
@@ -112,7 +110,7 @@ class ChunkedFileBackend(object):
 
         if errors:
             # Found any issues? Delete this revision as we can't trust it.
-            logger.error('Found problem - removing revision.'.format(errors))
+            logger.error('Found problem - removing revision.')
             self.revision.remove()
         else:
             # No problems found - mark as verified.

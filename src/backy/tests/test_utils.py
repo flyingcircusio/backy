@@ -1,10 +1,10 @@
+from backports.zoneinfo import ZoneInfo
 import datetime
 import os
 import sys
 
 import backy.utils
 import pytest
-import pytz
 from backy.tests import Ellipsis
 from backy.utils import (SafeFile, copy_overwrite, files_are_equal,
                          files_are_roughly_equal)
@@ -310,7 +310,7 @@ def test_copy_overwrite_correctly_makes_sparse_file(tmpdir):
 
 
 def test_unmocked_now_returns_time_time_float():
-    before = datetime.datetime.now(pytz.UTC)
+    before = datetime.datetime.now(ZoneInfo('UTC'))
     now = backy.utils.now()
-    after = datetime.datetime.now(pytz.UTC)
+    after = datetime.datetime.now(ZoneInfo('UTC'))
     assert before <= now <= after

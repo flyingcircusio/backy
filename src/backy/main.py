@@ -1,20 +1,18 @@
 # -*- encoding: utf-8 -*-
 
+from prettytable import PrettyTable
 import argparse
 import datetime
 import errno
-import faulthandler
+import humanize
 import logging
 import logging.handlers
-import signal
 import sys
+import tzlocal
 
 import backy.backup
 import backy.daemon
-import humanize
-import tzlocal
 from backy.utils import format_datetime_local
-from prettytable import PrettyTable
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +56,9 @@ class Command(object):
         b = backy.backup.Backup(self.path)
         total_bytes = 0
 
-        tz = format_datetime_local(None)[1]
+        tz = tzlocal.get_localzone()
         t = PrettyTable([
-            f'Date ({tz.zone})', 'ID', 'Size', 'Duration', 'Tags', 'Trust'])
+            f'Date ({tz})', 'ID', 'Size', 'Duration', 'Tags', 'Trust'])
         t.align = 'l'
         t.align['Size'] = 'r'
         t.align['Durat'] = 'r'

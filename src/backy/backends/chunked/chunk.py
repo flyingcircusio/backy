@@ -119,7 +119,7 @@ class Chunk(object):
         needs_forced_write = (
             self.store.force_writes and
             self.hash not in self.store.seen_forced)
-        if not self.hash in self.store.known or needs_forced_write:
+        if self.hash not in self.store.known or needs_forced_write:
             # Create the tempfile in the right directory to increase locality
             # of our change - avoid renaming between multiple directories to
             # reduce traffic on the directory nodes.

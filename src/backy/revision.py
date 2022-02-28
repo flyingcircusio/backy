@@ -4,7 +4,6 @@ import glob
 import logging
 import os
 import os.path as p
-import pytz
 import shortuuid
 import yaml
 

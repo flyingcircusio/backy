@@ -4,7 +4,6 @@ import logging
 import subprocess
 
 import backy.sources.ceph
-from packaging.version import Version
 
 from ...ext_deps import RBD
 from ...utils import CHUNK_SIZE

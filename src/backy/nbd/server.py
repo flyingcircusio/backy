@@ -31,8 +31,6 @@ import logging
 import signal
 import struct
 
-from backy import utils
-
 
 class AbortedNegotiationError(IOError):
     pass
@@ -114,7 +112,7 @@ class Server(object):
                 header = await reader.readexactly(16)
                 try:
                     (magic, opt, length) = struct.unpack(">QLL", header)
-                except struct.error as ex:
+                except struct.error:
                     raise IOError("Negotiation failed: Invalid request, "
                                   "disconnecting")
 

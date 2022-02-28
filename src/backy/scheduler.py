@@ -148,9 +148,8 @@ class Job(object):
 
             self.next_time = next_time
             self.next_tags = next_tags
-            logger.info(
-                f'{self.name}: {format_datetime_local(self.next_time)[0]}, {next_tags}'
-            )
+            nt = format_datetime_local(self.next_time)[0]
+            logger.info(f'{self.name}: {nt}, {next_tags}')
             await self._wait_for_deadline()
 
             # The UI shouldn't show a next any longer now that we have already
@@ -210,21 +209,21 @@ class Job(object):
                 'backup',
                 ','.join(tags),
                 close_fds=True,
-                start_new_session=True,  # Avoid signal propagation like Ctrl-C.
+                start_new_session=True,  # Avoid signal propagation like Ctrl-C
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=log)
             try:
-                returncode = await proc.wait()
+                rc = await proc.wait()
                 logger.info(
-                    f'{self.name}: finished backup with return code {returncode}'
+                    f'{self.name}: finished backup with return code {rc}'
                 )
-                if returncode:
-                    raise RuntimeError(
-                        f'Backup failed with return code {returncode}')
+                if rc:
+                    raise RuntimeError(f'Backup failed with return code {rc}')
             except asyncio.CancelledError:
                 logger.warning(
-                    f'{self.name}: this job\'s backup loop was cancelled, terminating subprocess'
+                    f"{self.name}: this job's backup loop was cancelled, "
+                    'terminating subprocess'
                 )
                 try:
                     proc.terminate()
@@ -256,7 +255,8 @@ class Job(object):
                 f'{self.name}: finished purging with return code {returncode}')
         except asyncio.CancelledError:
             logger.warning(
-                f'{self.name}: this job\'s backup loop was cancelled, terminating subprocess'
+                    f"{self.name}: this job's backup loop was cancelled, "
+                    'terminating subprocess'
             )
             try:
                 proc.terminate()

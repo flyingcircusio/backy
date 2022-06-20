@@ -15,17 +15,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Set up Python 3.8
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: 3.8
+        cache: 'poetry'
     - name: Install dependencies
       run: |
         sudo apt-get install liblzo2-dev
-        python -m venv .
-        bin/pip install -r requirements.txt
-        bin/pip install -e .
+        poetry install
     - name: Test with pytest
       run: |
-        bin/pytest
+        poetry run pytest

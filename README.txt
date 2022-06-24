@@ -187,6 +187,17 @@ performance. We're currently getting good results setting it to `10`.
 You may also want to increase `vm.min_free_kbytes` to avoid page allocation
 errors on 10 GbE network interfaces.
 
+Development
+===========
+
+Backy has switched to using `poetry` to manage its dependencies. This means
+that you can use `poetry install` to install dependencies from PyPI.
+
+If you don't have `backy` in your PATH when developing, enter the poetry
+virtualenv with `poetry shell` or if you're using nix with `nix-shell`.
+
+You can build backy with `poetry build` making a wheel and a tar archive
+in the `dist` directory, or by running `nix-build`.
 
 Authors
 =======

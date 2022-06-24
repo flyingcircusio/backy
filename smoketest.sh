@@ -1,10 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -e
 umask 022
 
+source `poetry env info --path`/bin/activate
+
 BACKUP=$(mktemp -d -t backy.test.XXXXX)
-BACKY="$(pwd)/bin/backy -l ${BACKUP}/backy.log"
+BACKY="backy -l ${BACKUP}/backy.log"
 export TZ=Europe/Berlin
 
 mkdir ${BACKUP}/backup

@@ -1,0 +1,82 @@
+[tool.poetry]
+name = "backy"
+version = "2.5.0dev"
+description = ""
+authors = [
+    "Christian Theune <ct@flyingcircus.io>",
+    "Christian Kauhaus <kc@flyingcircus.io>",
+    "Daniel Kraft <daniel.kraft@d9t.de>"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: POSIX",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Topic :: System :: Archiving :: Backup"
+]
+packages = [
+    { include = "backy", from = "src" }
+]
+license = "GPLv3"
+
+[tool.poetry.dependencies]
+python = "^3.6"
+PyYAML = "5.3.1"
+apipkg = "1.5"
+attrs = "20.3.0"
+"backports.zoneinfo" = "0.2.1"
+certifi = "2020.11.8"
+chardet = "3.0.4"
+consulate = "0.6.0"
+coverage = "5.5"
+execnet = "1.8.0"
+flake8 = "3.8.4"
+humanize = "3.13.1"
+idna = "2.10"
+iniconfig = "1.1.1"
+mccabe = "0.6.1"
+mmh3 = "2.5.1"
+packaging = "20.4"
+pluggy = "0.13.1"
+prettytable = "1.0.1"
+py = "1.9.0"
+pycodestyle = "2.6.0"
+pyflakes = "2.2.0"
+pyparsing = "2.4.7"
+python-lzo = "1.14"
+requests = "2.24.0"
+shortuuid = "1.0.1"
+six = "1.15.0"
+structlog = "20.1.0"
+telnetlib3 = "1.0.3"
+toml = "0.10.2"
+tzlocal = "4.1"
+urllib3 = "1.25.11"
+wcwidth = "0.2.5"
+
+[tool.poetry.dev-dependencies]
+pytest = "6.1.2"
+pytest-asyncio = "0.15.1"
+pytest-cache = "1.0"
+pytest-cov = "2.11.1"
+pytest-flake8 = "1.0.6"
+pytest-timeout = "1.4.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+backy = "backy.main:main"
+
+[tool.poetry.plugins."backy.sources"]
+ceph-rbd = "backy.sources.ceph.source:CephRBD"
+file = "backy.sources.file:File"
+flyingcircus = "backy.sources.flyingcircus.source:FlyingCircusRootDisk"

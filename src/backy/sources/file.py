@@ -52,8 +52,11 @@ class File(object):
         self.revision.stats['bytes_written'] = bytes
 
     def verify(self, target):
-        logger.info('Performing full verification')
-        s = open(self.filename, 'rb')
-        t = target.open('rb')
-        with s as source, t as target:
-            return files_are_equal(source, target)
+        try:
+            logger.info('Performing full verification')
+            s = open(self.filename, 'rb')
+            t = target.open('rb')
+            with s as source, t as target:
+                return files_are_equal(source, target)
+        except Exception:
+            return False

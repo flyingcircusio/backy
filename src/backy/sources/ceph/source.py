@@ -131,15 +131,18 @@ class CephRBD(object):
         self.revision.stats['chunk_stats'] = chunk_stats
 
     def verify(self, target):
-        s = self.rbd.image_reader('{}/{}@backy-{}'.format(
-            self.pool, self.image, self.revision.uuid))
-        t = target.open('rb')
+        try:
+            s = self.rbd.image_reader('{}/{}@backy-{}'.format(
+                self.pool, self.image, self.revision.uuid))
+            t = target.open('rb')
 
-        self.revision.stats['ceph-verification'] = 'partial'
+            self.revision.stats['ceph-verification'] = 'partial'
 
-        with s as source, t as target:
-            logger.info('Performing partial verification')
-            return backy.utils.files_are_roughly_equal(source, target)
+            with s as source, t as target:
+                logger.info('Performing partial verification')
+                return backy.utils.files_are_roughly_equal(source, target)
+        except Exception:
+            return False
 
     def _delete_old_snapshots(self):
         # Clean up all snapshots except the one for the most recent valid

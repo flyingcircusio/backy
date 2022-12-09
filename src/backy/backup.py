@@ -89,8 +89,11 @@ class Backup(object):
         logger.debug('Backup("{}")'.format(self.path))
 
         # Load config from file
-        with open(p.join(self.path, 'config'), encoding='utf-8') as f:
-            self.config = yaml.safe_load(f)
+        try:
+            with open(p.join(self.path, 'config'), encoding='utf-8') as f:
+                self.config = yaml.safe_load(f)
+        except IOError as e:
+            raise IOError("Could not read config file. Is --backupdir correct?") from e
 
         # Initialize our source
         try:

@@ -51,7 +51,7 @@ class Job(object):
     def spread(self):
         seed = int(hashlib.md5(self.name.encode('utf-8')).hexdigest(), 16)
         limit = max(x['interval'] for x in self.schedule.schedule.values())
-        limit = limit.total_seconds()
+        limit = int(limit.total_seconds())
         generator = random.Random()
         generator.seed(seed)
         return generator.randint(0, limit)

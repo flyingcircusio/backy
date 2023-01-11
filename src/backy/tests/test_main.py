@@ -10,7 +10,7 @@ import backy.backup
 import backy.main
 
 
-@pytest.yield_fixture
+@pytest.fixture
 def argv():
     original = sys.argv
     new = original[:1]

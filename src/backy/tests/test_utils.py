@@ -1,4 +1,4 @@
-from backports.zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo
 import datetime
 import os
 import sys

@@ -44,7 +44,6 @@ setup(
     name='backy',
     version=version(),
     install_requires=[
-        'backports.zoneinfo',
         'consulate',
         'packaging',
         'prettytable',

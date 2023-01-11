@@ -1,4 +1,4 @@
-from backports.zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo
 import datetime
 import os
 import shutil
@@ -41,7 +41,7 @@ def wrap_logging(monkeypatch):
                         lambda backupdir, verbose: None)
 
 
-@pytest.yield_fixture(autouse=True)
+@pytest.fixture(autouse=True)
 def fix_cwd():
     cwd = os.getcwd()
     yield

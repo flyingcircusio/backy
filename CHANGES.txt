@@ -23,6 +23,9 @@ Changelog
 
 - Regularly log overdue jobs.
 
+- Adapt to changed `rbd showmapped` output format in Ceph Nautilus. Breaks
+  compatibility with older Ceph versions!
+
 2.4.3 (2019-04-17)
 ==================
 

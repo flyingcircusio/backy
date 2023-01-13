@@ -348,8 +348,9 @@ def test_verify_fail(check_output, backup, tmpdir, backend_factory):
         # map
         b'{}',
         # showmapped
-        '{{"rbd0": {{"pool": "test", "name": "foo", "snap": "backy-a0", \
-                    "device": "{}"}}}}'.format(rbd_source).encode('ascii'),
+        '[{{"id": "0", "pool": "test", "namespace": "", "name": "foo", \
+                    "snap": "backy-a0", \
+                    "device": "{}"}}]'.format(rbd_source).encode('ascii'),
         # unmap
         b'{}',
         # snap ls
@@ -398,8 +399,9 @@ def test_verify(check_output, backup, tmpdir, backend_factory):
         # map
         b'{}',
         # showmapped
-        '{{"rbd0": {{"pool": "test", "name": "foo", "snap": "backy-a0", \
-                    "device": "{}"}}}}'.format(rbd_source).encode('ascii'),
+        '[{{"id": "0", "pool": "test", "namespace": "", "name": "foo", \
+                    "snap": "backy-a0", \
+                    "device": "{}"}}]'.format(rbd_source).encode('ascii'),
         # unmap
         b'{}',
         # snap ls

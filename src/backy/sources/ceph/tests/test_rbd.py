@@ -52,13 +52,16 @@ def test_rbd_nonexisting_image_turned_to_false(rbdclient):
 
 def test_rbd_map_writable(rbdclient):
     rbdclient._rbd.side_effect = [
-        None, {
-            '1': {
+        None, [
+            {
+                'id': '1',
                 'pool': 'test',
+                'namespace': "",
                 'name': 'test04.root',
-                'snap': 'backup'}}]
+                'snap': 'backup'}]]
     mapped = rbdclient.map('test/test04.root@backup')
-    assert mapped == {'pool': 'test', 'name': 'test04.root', 'snap': 'backup'}
+    assert mapped == {'id': '1', 'pool': 'test', 'namespace': "",
+                      'name': 'test04.root', 'snap': 'backup'}
     rbdclient._rbd.assert_has_calls([
         mock.call(['', 'map', 'test/test04.root@backup']),
         mock.call(['showmapped'], format='json')])
@@ -66,20 +69,23 @@ def test_rbd_map_writable(rbdclient):
 
 def test_rbd_map_readonly(rbdclient):
     rbdclient._rbd.side_effect = [
-        None, {
-            '1': {
+        None, [
+            {
+                'id': '1',
                 'pool': 'test',
+                'namespace': "",
                 'name': 'test04.root',
-                'snap': 'backup'}}]
+                'snap': 'backup'}]]
     mapped = rbdclient.map('test/test04.root@backup', readonly=True)
-    assert mapped == {'pool': 'test', 'name': 'test04.root', 'snap': 'backup'}
+    assert mapped == {'id': '1', 'pool': 'test', 'namespace': "",
+                      'name': 'test04.root', 'snap': 'backup'}
     rbdclient._rbd.assert_has_calls([
         mock.call(['--read-only', 'map', 'test/test04.root@backup']),
         mock.call(['showmapped'], format='json')])
 
 
 def test_rbd_map_writable_missing_map_no_maps(rbdclient):
-    rbdclient._rbd.side_effect = [None, {}]
+    rbdclient._rbd.side_effect = [None, []]
     with pytest.raises(RuntimeError):
         rbdclient.map('test/test04.root@backup', readonly=True)
     rbdclient._rbd.assert_has_calls([
@@ -89,11 +95,13 @@ def test_rbd_map_writable_missing_map_no_maps(rbdclient):
 
 def test_rbd_map_writable_missing_map(rbdclient):
     rbdclient._rbd.side_effect = [
-        None, {
-            'sadf': {
+        None, [
+            {
+                'id': 'sadf',
                 'pool': 'sadf',
+                'namespace': "",
                 'name': 'asdf',
-                'snap': 'asdf'}}]
+                'snap': 'asdf'}]]
     with pytest.raises(RuntimeError):
         rbdclient.map('test/test04.root@backup', readonly=True)
     rbdclient._rbd.assert_has_calls([
@@ -147,12 +155,14 @@ def test_rbd_image_reader(rbdclient, tmpdir):
     device = str(tmpdir / 'device')
     open(device, 'wb').write(b'asdf')
     rbdclient._rbd.side_effect = [
-        None, {
-            '1': {
+        None, [
+            {
+                'id': '1',
                 'device': device,
                 'pool': 'test',
+                'namespace': "",
                 'name': 'test04.root',
-                'snap': 'foo'}}, None]
+                'snap': 'foo'}], None]
     with rbdclient.image_reader('test/test04.root@foo') as f:
         assert f.name == device
     rbdclient._rbd.assert_has_calls([
@@ -165,12 +175,14 @@ def test_rbd_image_reader_explicit_closed(rbdclient, tmpdir):
     device = str(tmpdir / 'device')
     open(device, 'wb').write(b'asdf')
     rbdclient._rbd.side_effect = [
-        None, {
-            '1': {
+        None, [
+            {
+                'id': '1',
                 'device': device,
                 'pool': 'test',
+                'namespace': "",
                 'name': 'test04.root',
-                'snap': 'foo'}}, None]
+                'snap': 'foo'}], None]
     with rbdclient.image_reader('test/test04.root@foo') as f:
         f.close()
     rbdclient._rbd.assert_has_calls([

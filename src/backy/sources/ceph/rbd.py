@@ -42,7 +42,7 @@ class RBDClient(object):
         self._rbd(['--read-only' if readonly else '', 'map', image])
 
         mappings = self._rbd(['showmapped'], format='json')
-        for mapping in mappings.values():
+        for mapping in mappings:
             if image == '{pool}/{name}@{snap}'.format(**mapping):
                 return mapping
         raise RuntimeError('Map not found in mapping list.')

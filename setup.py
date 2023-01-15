@@ -13,8 +13,12 @@ class PyTest(Command):
     """Invoke py.test from `bin/python setup.py test`."""
 
     user_options = []
-    initialize_options = lambda self: None
-    finalize_options = lambda self: None
+
+    def initialize_options(self):
+        return None
+
+    def finalize_options(self):
+        return None
 
     def run(self):
         errno = subprocess.call(

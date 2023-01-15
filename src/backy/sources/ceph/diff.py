@@ -1,8 +1,8 @@
-from backy.fallocate import punch_hole
-from collections import namedtuple
-import struct
 import logging
+import struct
+from collections import namedtuple
 
+from backy.fallocate import punch_hole
 
 log = logging.getLogger(__name__)
 
@@ -13,51 +13,51 @@ def unpack_from(fmt, f):
     return struct.unpack(fmt, b)
 
 
-Zero = namedtuple('Zero', ['start', 'length'])
-Data = namedtuple('Data', ['start', 'length', 'stream'])
-SnapSize = namedtuple('SnapSize', ['size'])
-FromSnap = namedtuple('FromSnap', ['snapshot'])
-ToSnap = namedtuple('ToSnap', ['snapshot'])
+Zero = namedtuple("Zero", ["start", "length"])
+Data = namedtuple("Data", ["start", "length", "stream"])
+SnapSize = namedtuple("SnapSize", ["size"])
+FromSnap = namedtuple("FromSnap", ["snapshot"])
+ToSnap = namedtuple("ToSnap", ["snapshot"])
 
 
 class RBDDiffV1(object):
+    phase = None  # header, metadata, data
 
-    phase = None    # header, metadata, data
-
-    header = b'rbd diff v1\n'
+    header = b"rbd diff v1\n"
 
     def __init__(self, fh):
         # self.filename = filename
         self.f = fh
 
-        self.phase = 'header'
+        self.phase = "header"
         self.read_header()
         self.record_type = None
         self._streaming = False
 
     def read_header(self):
-        assert self.phase == 'header'
+        assert self.phase == "header"
         header = self.f.read(len(self.header))
         if header != self.header:
-            raise ValueError('Unexpected header: {0!r}'.format(header))
-        self.phase = 'metadata'
+            raise ValueError("Unexpected header: {0!r}".format(header))
+        self.phase = "metadata"
 
     def read_record(self):
-        if self.phase == 'end':
+        if self.phase == "end":
             return
         assert not self._streaming, "Unread data from read_w. Consume first."
         self.last_record_type = self.record_type
-        self.record_type = self.f.read(1).decode('ascii')
-        if self.record_type not in ['f', 't', 's', 'w', 'z', 'e']:
+        self.record_type = self.f.read(1).decode("ascii")
+        if self.record_type not in ["f", "t", "s", "w", "z", "e"]:
             raise ValueError(
-                'Got invalid record type "{}". '
-                'Previous record: {}'.format(
-                    self.record_type, self.last_record_type))
-        method = getattr(self, 'read_{}'.format(self.record_type))
+                'Got invalid record type "{}". Previous record: {}'.format(
+                    self.record_type, self.last_record_type
+                )
+            )
+        method = getattr(self, "read_{}".format(self.record_type))
         return method()
 
     def read_fbytes(self, encoding=None):
-        length = unpack_from('<i', self.f)[0]
+        length = unpack_from("<i", self.f)[0]
         data = self.f.read(length)
         if encoding is not None:
             data = data.decode(encoding)
@@ -65,33 +65,33 @@ class RBDDiffV1(object):
 
     def read_f(self):
         "from snap"
-        assert self.phase == 'metadata'
-        return FromSnap(self.read_fbytes('ascii'))
+        assert self.phase == "metadata"
+        return FromSnap(self.read_fbytes("ascii"))
 
     def read_t(self):
         "to snap"
-        assert self.phase == 'metadata'
-        return ToSnap(self.read_fbytes('ascii'))
+        assert self.phase == "metadata"
+        return ToSnap(self.read_fbytes("ascii"))
 
     def read_s(self):
         "size"
-        assert self.phase == 'metadata'
-        return SnapSize(unpack_from('<Q', self.f)[0])
+        assert self.phase == "metadata"
+        return SnapSize(unpack_from("<Q", self.f)[0])
 
     def read_e(self):
-        self.phase = 'end'
+        self.phase = "end"
         return None
 
     def read_w(self):
         "updated data"
-        if self.phase == 'metadata':
-            self.phase = 'data'
-        offset, length = unpack_from('<QQ', self.f)
+        if self.phase == "metadata":
+            self.phase = "data"
+        offset, length = unpack_from("<QQ", self.f)
 
         def stream():
             remaining = length
             while remaining:
-                read = min(4 * 1024 ** 2, remaining)
+                read = min(4 * 1024**2, remaining)
                 chunk = self.f.read(read)
                 remaining = remaining - read
                 yield chunk
@@ -102,15 +102,15 @@ class RBDDiffV1(object):
 
     def read_z(self):
         "zero data"
-        if self.phase == 'metadata':
-            self.phase = 'data'
-        offset, length = unpack_from('<QQ', self.f)
+        if self.phase == "metadata":
+            self.phase = "data"
+        offset, length = unpack_from("<QQ", self.f)
         return Zero(offset, length)
 
     def read_metadata(self):
         while True:
             record = self.read_record()
-            if self.phase != 'metadata':
+            if self.phase != "metadata":
                 self.first_data_record = record
                 return
             yield record

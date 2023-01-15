@@ -1,9 +1,12 @@
-from . import chunk
-from backy.utils import report_status, END
 import glob
 import logging
-import lzo
 import os.path
+
+import lzo
+
+from backy.utils import END, report_status
+
+from . import chunk
 
 logger = logging.getLogger(__name__)
 
@@ -19,45 +22,44 @@ def rreplace(str, old, new):
 
 
 class Store(object):
-
     # Signal that we should always override chunks that we want to write.
     # This can be used in the face of suspected inconsistencies while still
     # wanting to perform new backups.
     force_writes = False
 
-    def __init__(self, path='/tmp/chunks'):
+    def __init__(self, path="/tmp/chunks"):
         self.path = path
         self.users = []
         self.seen_forced = set()
         self.known = set()
         for x in range(256):
-            subdir = os.path.join(self.path, f'{x:02x}')
+            subdir = os.path.join(self.path, f"{x:02x}")
             if not os.path.exists(subdir):
                 try:
                     os.makedirs(subdir)
                 except FileExistsError:
                     pass
-        if not os.path.exists(os.path.join(self.path, 'store')):
+        if not os.path.exists(os.path.join(self.path, "store")):
             self.convert_to_v2()
 
-        for c in glob.iglob(os.path.join(self.path, '*/*.chunk.lzo')):
-            hash = os.path.basename(c).replace('.chunk.lzo', '')
+        for c in glob.iglob(os.path.join(self.path, "*/*.chunk.lzo")):
+            hash = os.path.basename(c).replace(".chunk.lzo", "")
             self.known.add(hash)
-        logger.info('Loaded {} known chunks.'.format(len(self.known)))
+        logger.info("Loaded {} known chunks.".format(len(self.known)))
 
     def convert_to_v2(self):
-        logger.info('Converting chunk store to v2')
-        for path in glob.iglob(os.path.join(self.path, '*/*/*.chunk.lzo')):
-            new = path.replace(self.path + '/', '', 1)
-            dir, _, c = new.split('/')
+        logger.info("Converting chunk store to v2")
+        for path in glob.iglob(os.path.join(self.path, "*/*/*.chunk.lzo")):
+            new = path.replace(self.path + "/", "", 1)
+            dir, _, c = new.split("/")
             new = os.path.join(self.path, dir, c)
             os.rename(path, new)
-        for path in glob.iglob(os.path.join(self.path, '*/??')):
+        for path in glob.iglob(os.path.join(self.path, "*/??")):
             if os.path.isdir(path):
                 os.rmdir(path)
-        with open(os.path.join(self.path, 'store'), 'wb') as f:
-            f.write(b'v2')
-        logger.info('Finished conversion to v2')
+        with open(os.path.join(self.path, "store"), "wb") as f:
+            f.write(b"v2")
+        logger.info("Finished conversion to v2")
 
     @report_status
     def validate_chunks(self):
@@ -74,18 +76,22 @@ class Store(object):
                 hash = chunk.hash(data)
             if file_hash != hash:
                 errors += 1
-                yield ("Content mismatch. Expected {} got {}".format(
-                    file_hash, hash), errors)
+                yield (
+                    "Content mismatch. Expected {} got {}".format(
+                        file_hash, hash
+                    ),
+                    errors,
+                )
             yield
         yield END
         yield errors
 
     def ls(self):
         # XXX this is fucking expensive
-        pattern = os.path.join(self.path, '*/*.chunk.lzo')
+        pattern = os.path.join(self.path, "*/*.chunk.lzo")
         for file in glob.iglob(pattern):
-            hash = rreplace(os.path.split(file)[1], '.chunk.lzo', '')
-            yield file, hash, lambda f: lzo.decompress(open(f, 'rb').read())
+            hash = rreplace(os.path.split(file)[1], ".chunk.lzo", "")
+            yield file, hash, lambda f: lzo.decompress(open(f, "rb").read())
 
     def purge(self):
         # This assumes exclusive lock on the store. This is guaranteed by
@@ -99,5 +105,5 @@ class Store(object):
 
     def chunk_path(self, hash):
         dir1 = hash[:2]
-        extension = '.chunk.lzo'
+        extension = ".chunk.lzo"
         return os.path.join(self.path, dir1, hash + extension)

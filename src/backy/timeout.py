@@ -8,7 +8,6 @@ class TimeOutError(RuntimeError):
 
 
 class TimeOut(object):
-
     def __init__(self, timeout, interval=1, raise_on_timeout=False):
         """Creates a timeout controller.
 

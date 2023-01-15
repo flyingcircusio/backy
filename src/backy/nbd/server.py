@@ -43,7 +43,7 @@ class Server(object):
 
     # NBD's magic
     NBD_HANDSHAKE = 0x49484156454F5054
-    NBD_REPLY = 0x3e889045565a9
+    NBD_REPLY = 0x3E889045565A9
 
     NBD_REQUEST = 0x25609513
     NBD_RESPONSE = 0x67446698
@@ -62,11 +62,11 @@ class Server(object):
     NBD_CMD_FLUSH = 3
 
     # fixed newstyle handshake
-    NBD_HANDSHAKE_FLAGS = (1 << 0)
+    NBD_HANDSHAKE_FLAGS = 1 << 0
 
     # has flags, supports flush
     NBD_EXPORT_FLAGS = (1 << 0) ^ (1 << 2)
-    NBD_RO_FLAG = (1 << 1)
+    NBD_RO_FLAG = 1 << 1
 
     def __init__(self, addr, backup):
         self.log = logging.getLogger(__package__)
@@ -75,7 +75,7 @@ class Server(object):
         self.backup = backup
 
     async def nbd_response(self, writer, handle, error=0, data=None):
-        writer.write(struct.pack('>LLQ', self.NBD_RESPONSE, error, handle))
+        writer.write(struct.pack(">LLQ", self.NBD_RESPONSE, error, handle))
         if data:
             writer.write(data)
         await writer.drain()
@@ -88,8 +88,12 @@ class Server(object):
             self.log.info("Incoming connection from %s:%s" % (host, port))
 
             # initial handshake
-            writer.write(b"NBDMAGIC" + struct.pack(">QH", self.NBD_HANDSHAKE,
-                                                   self.NBD_HANDSHAKE_FLAGS))
+            writer.write(
+                b"NBDMAGIC"
+                + struct.pack(
+                    ">QH", self.NBD_HANDSHAKE, self.NBD_HANDSHAKE_FLAGS
+                )
+            )
             await writer.drain()
 
             data = await reader.readexactly(4)
@@ -113,49 +117,64 @@ class Server(object):
                 try:
                     (magic, opt, length) = struct.unpack(">QLL", header)
                 except struct.error:
-                    raise IOError("Negotiation failed: Invalid request, "
-                                  "disconnecting")
+                    raise IOError(
+                        "Negotiation failed: Invalid request, disconnecting"
+                    )
 
                 if magic != self.NBD_HANDSHAKE:
-                    raise IOError("Negotiation failed: bad magic number: %s" %
-                                  magic)
+                    raise IOError(
+                        "Negotiation failed: bad magic number: %s" % magic
+                    )
 
                 if length:
                     data = await reader.readexactly(length)
-                    if (len(data) != length):
-                        raise IOError("Negotiation failed: %s bytes expected" %
-                                      length)
+                    if len(data) != length:
+                        raise IOError(
+                            "Negotiation failed: %s bytes expected" % length
+                        )
                 else:
                     data = None
 
-                self.log.debug("[%s:%s]: opt=%s, len=%s, data=%s" %
-                               (host, port, opt, length, data))
+                self.log.debug(
+                    "[%s:%s]: opt=%s, len=%s, data=%s"
+                    % (host, port, opt, length, data)
+                )
 
                 if opt == self.NBD_OPT_EXPORTNAME:
                     if not data:
-                        raise IOError("Negotiation failed: no export name was "
-                                      "provided")
+                        raise IOError(
+                            "Negotiation failed: no export name was provided"
+                        )
 
                     try:
                         uuid = data.decode("utf-8")
                         # 'o' is the special "overlay" mode that allows
                         # read/write but does not modify the underlying image
-                        revision = self.backup.find(uuid).open(mode='o')
+                        revision = self.backup.find(uuid).open(mode="o")
                         revision.overlay = True
                         revision.flush_target = 50
                     except Exception as e:
                         if not fixed:
-                            raise IOError("Negotiation failed: unknown export "
-                                          "name {}".format(e))
+                            raise IOError(
+                                "Negotiation failed: unknown export "
+                                "name {}".format(e)
+                            )
 
                         writer.write(
-                            struct.pack(">QLLL", self.NBD_REPLY, opt,
-                                        self.NBD_REP_ERR_UNSUP, 0))
+                            struct.pack(
+                                ">QLLL",
+                                self.NBD_REPLY,
+                                opt,
+                                self.NBD_REP_ERR_UNSUP,
+                                0,
+                            )
+                        )
                         await writer.drain()
                         continue
 
-                    self.log.info("[%s:%s] Negotiated export: %s" %
-                                  (host, port, uuid))
+                    self.log.info(
+                        "[%s:%s] Negotiated export: %s" % (host, port, uuid)
+                    )
 
                     export_flags = self.NBD_EXPORT_FLAGS
                     # export_flags ^= self.NBD_RO_FLAG
@@ -164,7 +183,7 @@ class Server(object):
                     revision.seek(0, 2)
                     size = revision.tell()
                     revision.seek(0)
-                    writer.write(struct.pack('>QH', size, export_flags))
+                    writer.write(struct.pack(">QH", size, export_flags))
                     writer.write(b"\x00" * 124)
                     await writer.drain()
 
@@ -172,27 +191,41 @@ class Server(object):
 
                 elif opt == self.NBD_OPT_LIST:
                     for r in self.backup.history:
-                        uuid = ' '.join([
-                            self.backup.path, r.uuid,
-                            r.timestamp.isoformat(), ','.join(r.tags)])
+                        uuid = " ".join(
+                            [
+                                self.backup.path,
+                                r.uuid,
+                                r.timestamp.isoformat(),
+                                ",".join(r.tags),
+                            ]
+                        )
                         writer.write(
-                            struct.pack(">QLLL", self.NBD_REPLY, opt,
-                                        self.NBD_REP_SERVER,
-                                        len(uuid) + 4))
+                            struct.pack(
+                                ">QLLL",
+                                self.NBD_REPLY,
+                                opt,
+                                self.NBD_REP_SERVER,
+                                len(uuid) + 4,
+                            )
+                        )
                         revision_encoded = uuid.encode("utf-8")
                         writer.write(struct.pack(">L", len(revision_encoded)))
                         writer.write(revision_encoded)
                         await writer.drain()
 
                     writer.write(
-                        struct.pack(">QLLL", self.NBD_REPLY, opt,
-                                    self.NBD_REP_ACK, 0))
+                        struct.pack(
+                            ">QLLL", self.NBD_REPLY, opt, self.NBD_REP_ACK, 0
+                        )
+                    )
                     await writer.drain()
 
                 elif opt == self.NBD_OPT_ABORT:
                     writer.write(
-                        struct.pack(">QLLL", self.NBD_REPLY, opt,
-                                    self.NBD_REP_ACK, 0))
+                        struct.pack(
+                            ">QLLL", self.NBD_REPLY, opt, self.NBD_REP_ACK, 0
+                        )
+                    )
                     await writer.drain()
 
                     raise AbortedNegotiationError()
@@ -202,16 +235,23 @@ class Server(object):
                         raise IOError("Unsupported option")
 
                     writer.write(
-                        struct.pack(">QLLL", self.NBD_REPLY, opt,
-                                    self.NBD_REP_ERR_UNSUP, 0))
+                        struct.pack(
+                            ">QLLL",
+                            self.NBD_REPLY,
+                            opt,
+                            self.NBD_REP_ERR_UNSUP,
+                            0,
+                        )
+                    )
                     await writer.drain()
 
             # operation phase
             while True:
                 header = await reader.readexactly(28)
                 try:
-                    (magic, cmd, handle, offset,
-                     length) = struct.unpack(">LLQQL", header)
+                    (magic, cmd, handle, offset, length) = struct.unpack(
+                        ">LLQQL", header
+                    )
                 except struct.error:
                     raise IOError("Invalid request, disconnecting")
 
@@ -219,8 +259,9 @@ class Server(object):
                     raise IOError("Bad magic number, disconnecting")
 
                 self.log.debug(
-                    "[%s:%s]: cmd=%s, handle=%s, offset=%s, len=%s" %
-                    (host, port, cmd, handle, offset, length))
+                    "[%s:%s]: cmd=%s, handle=%s, offset=%s, len=%s"
+                    % (host, port, cmd, handle, offset, length)
+                )
 
                 if cmd == self.NBD_CMD_DISC:
                     self.log.info("[%s:%s] disconnecting" % (host, port))
@@ -232,9 +273,10 @@ class Server(object):
                     # with the original revision.
 
                     data = await reader.readexactly(length)
-                    if (len(data) != length):
-                        raise IOError("%s bytes expected, disconnecting" %
-                                      length)
+                    if len(data) != length:
+                        raise IOError(
+                            "%s bytes expected, disconnecting" % length
+                        )
 
                     try:
                         revision.seek(offset)
@@ -264,8 +306,10 @@ class Server(object):
                     await self.nbd_response(writer, handle)
 
                 else:
-                    self.log.warning("[%s:%s] Unknown cmd %s, disconnecting" %
-                                     (host, port, cmd))
+                    self.log.warning(
+                        "[%s:%s] Unknown cmd %s, disconnecting"
+                        % (host, port, cmd)
+                    )
                     break
 
         except AbortedNegotiationError:

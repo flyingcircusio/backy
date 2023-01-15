@@ -11,8 +11,8 @@ import subprocess
 import sys
 import tempfile
 import time
-
 from zoneinfo import ZoneInfo
+
 import humanize
 import tzlocal
 
@@ -35,7 +35,6 @@ END = object()
 
 
 def report_status(f):
-
     def wrapped(*args, **kw):
         generator = iter(f(*args, **kw))
         steps = next(generator)
@@ -51,14 +50,21 @@ def report_status(f):
             per_chunk = time_elapsed / step
             remaining = steps - step
             time_remaining = remaining * per_chunk
-            eta = (
-                datetime.datetime.now() +
-                datetime.timedelta(seconds=int(time_remaining)))
+            eta = datetime.datetime.now() + datetime.timedelta(
+                seconds=int(time_remaining)
+            )
             if step == 5 or not step % 100:  # pragma: nocover
-                logger.info("Progress: {} of {} ({:.2f}%) "
-                            "({:.0f}s elapsed, {} remaining, ETA {})".format(
-                                step, steps, step / steps * 100, time_elapsed,
-                                humanize.naturaldelta(time_remaining), eta))
+                logger.info(
+                    "Progress: {} of {} ({:.2f}%) "
+                    "({:.0f}s elapsed, {} remaining, ETA {})".format(
+                        step,
+                        steps,
+                        step / steps * 100,
+                        time_elapsed,
+                        humanize.naturaldelta(time_remaining),
+                        eta,
+                    )
+                )
 
         result = next(generator)
         return result
@@ -124,11 +130,11 @@ class SafeFile(object):
     # Activate the different safety features
 
     def open_new(self, mode):
-        """Open this as a new (temporary) file that will be renamed on close.
-        """
+        """Open this as a new (temporary) file that will be renamed on close."""
         assert not self.f
         self.f = tempfile.NamedTemporaryFile(
-            mode, dir=os.path.dirname(self.filename), delete=False)
+            mode, dir=os.path.dirname(self.filename), delete=False
+        )
         self.rename = True
 
     def open_copy(self, mode):
@@ -136,7 +142,7 @@ class SafeFile(object):
         assert not self.f
 
         if os.path.exists(self.filename):
-            self.open_new('wb')
+            self.open_new("wb")
             cp_reflink(self.filename, self.f.name)
             self.f.close()
 
@@ -205,10 +211,10 @@ def safe_symlink(realfile, link):
     os.symlink(os.path.relpath(realfile, os.path.dirname(link)), link)
 
 
-if hasattr(os, 'posix_fadvise'):
+if hasattr(os, "posix_fadvise"):
     posix_fadvise = os.posix_fadvise
 else:  # pragma: no cover
-    logger.warning('Running without `posix_fadvise`.')
+    logger.warning("Running without `posix_fadvise`.")
     os.POSIX_FADV_RANDOM = None
     os.POSIX_FADV_SEQUENTIAL = None
     os.POSIX_FADV_WILLNEED = None
@@ -218,16 +224,17 @@ else:  # pragma: no cover
         return
 
 
-if sys.platform == 'darwin':  # pragma: no cover
+if sys.platform == "darwin":  # pragma: no cover
 
     @contextlib.contextmanager
     def zeroes(size):
-        yield '\00' * size
+        yield "\00" * size
+
 else:
 
     @contextlib.contextmanager
     def zeroes(size):
-        with open('/dev/zero', 'rb', buffering=0) as f:
+        with open("/dev/zero", "rb", buffering=0) as f:
             z = mmap.mmap(f.fileno(), size, access=mmap.ACCESS_READ)
             yield z[0:size]
             z.close()
@@ -330,10 +337,11 @@ def cp_reflink(source, target):
     # We can't tell if reflink is really supported. It depends on the
     # filesystem.
     try:
-        subprocess.check_call([CP, '--reflink=always', source, target],
-                              stderr=subprocess.PIPE)
+        subprocess.check_call(
+            [CP, "--reflink=always", source, target], stderr=subprocess.PIPE
+        )
     except subprocess.CalledProcessError:
-        logger.warning('Performing non-COW copy: %s -> %s', source, target)
+        logger.warning("Performing non-COW copy: %s -> %s", source, target)
         if os.path.exists(target):
             os.unlink(target)
         subprocess.check_call([CP, source, target])
@@ -351,11 +359,15 @@ def files_are_equal(a, b):
         chunk_a = a.read(CHUNK_SIZE)
         chunk_b = b.read(CHUNK_SIZE)
         if chunk_a != chunk_b:
-            logger.error("Chunk A ({}, {}) != Chunk B ({}, {}) "
-                         "at position {}".format(
-                             repr(chunk_a),
-                             hashlib.md5(chunk_a).hexdigest(), repr(chunk_b),
-                             hashlib.md5(chunk_b).hexdigest(), position))
+            logger.error(
+                "Chunk A ({}, {}) != Chunk B ({}, {}) at position {}".format(
+                    repr(chunk_a),
+                    hashlib.md5(chunk_a).hexdigest(),
+                    repr(chunk_b),
+                    hashlib.md5(chunk_b).hexdigest(),
+                    position,
+                )
+            )
             errors += 1
         if not chunk_a:
             break
@@ -363,11 +375,9 @@ def files_are_equal(a, b):
     return not errors
 
 
-def files_are_roughly_equal(a,
-                            b,
-                            samplesize=0.01,
-                            blocksize=CHUNK_SIZE,
-                            timeout=5 * 60):
+def files_are_roughly_equal(
+    a, b, samplesize=0.01, blocksize=CHUNK_SIZE, timeout=5 * 60
+):
     a.seek(0, os.SEEK_END)
     size = a.tell()
     blocks = size // blocksize
@@ -387,10 +397,10 @@ def files_are_roughly_equal(a,
     max_duration = datetime.timedelta(seconds=timeout)
 
     for block in sample:
-        logger.debug('Verifying chunk @ %d', block * blocksize)
+        logger.debug("Verifying chunk @ %d", block * blocksize)
         duration = now() - started
         if duration > max_duration:
-            logger.info('Stopping verification after %s', duration)
+            logger.info("Stopping verification after %s", duration)
             return True
 
         a.seek(block * blocksize)
@@ -401,7 +411,10 @@ def files_are_roughly_equal(a,
             logger.error(
                 "Chunk A (md5: {}) != Chunk B (md5: {}) at position {}".format(
                     hashlib.md5(chunk_a).hexdigest(),
-                    hashlib.md5(chunk_b).hexdigest(), block * blocksize))
+                    hashlib.md5(chunk_b).hexdigest(),
+                    block * blocksize,
+                )
+            )
             return False
     else:
         return True
@@ -414,11 +427,11 @@ def now():
 
     Also, ensure that we'll always use timezone-aware objects.
     """
-    return datetime.datetime.now(ZoneInfo('UTC'))
+    return datetime.datetime.now(ZoneInfo("UTC"))
 
 
 def min_date():
-    return datetime.datetime.min.replace(tzinfo=ZoneInfo('UTC'))
+    return datetime.datetime.min.replace(tzinfo=ZoneInfo("UTC"))
 
 
 def has_recent_changes(entry, reference_time):
@@ -449,13 +462,15 @@ def has_recent_changes(entry, reference_time):
 async def time_or_event(deadline, event):
     remaining_time = (deadline - now()).total_seconds()
     return await next(
-        asyncio.as_completed([asyncio.sleep(remaining_time),
-                              event.wait()]))
+        asyncio.as_completed([asyncio.sleep(remaining_time), event.wait()])
+    )
 
 
 def format_datetime_local(dt):
     tz = tzlocal.get_localzone()
     if dt is None:
-        return '-', tz
-    return dt.astimezone(tz).replace(
-        tzinfo=None).strftime('%Y-%m-%d %H:%M:%S'), tz
+        return "-", tz
+    return (
+        dt.astimezone(tz).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S"),
+        tz,
+    )

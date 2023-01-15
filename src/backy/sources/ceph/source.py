@@ -15,19 +15,21 @@ class CephRBD(object):
     Manages snapshots corresponding to revisions and provides a verification
     that tries to balance reliability and performance.
     """
+
     def __init__(self, config):
-        self.pool = config['pool']
-        self.image = config['image']
-        self.always_full = config.get('full-always', False)
+        self.pool = config["pool"]
+        self.image = config["image"]
+        self.always_full = config.get("full-always", False)
         self.rbd = RBDClient()
 
     @staticmethod
     def config_from_cli(spec):
-        logger.debug('CephRBD.config_from_cli(%s)', spec)
-        param = spec.split('/')
+        logger.debug("CephRBD.config_from_cli(%s)", spec)
+        param = spec.split("/")
         if len(param) != 2:
-            raise RuntimeError('ceph source must be initialized with '
-                               'POOL/IMAGE')
+            raise RuntimeError(
+                "ceph source must be initialized with POOL/IMAGE"
+            )
         pool, image = param
         return dict(pool=pool, image=image)
 
@@ -49,7 +51,7 @@ class CephRBD(object):
         return self
 
     def __enter__(self):
-        snapname = 'backy-{}'.format(self.revision.uuid)
+        snapname = "backy-{}".format(self.revision.uuid)
         self.create_snapshot(snapname)
         return self
 
@@ -57,35 +59,42 @@ class CephRBD(object):
         """An overridable method to allow different ways of creating the
         snapshot.
         """
-        self.rbd.snap_create(self._image_name + '@' + snapname)
+        self.rbd.snap_create(self._image_name + "@" + snapname)
 
     @property
     def _image_name(self):
-        return '{}/{}'.format(self.pool, self.image)
+        return "{}/{}".format(self.pool, self.image)
 
     def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
         self._delete_old_snapshots()
 
     def backup(self, target):
         if self.always_full:
-            logger.info('Full backup: per configuration')
+            logger.info("Full backup: per configuration")
             self.full(target)
             return
         try:
             revision = self.revision
             while True:
                 if not revision.parent:
-                    raise KeyError('Full backup: no valid parent found')
+                    raise KeyError("Full backup: no valid parent found")
                 parent = self.revision.backup.find(revision.parent)
                 if parent.trust == TRUST_DISTRUSTED:
-                    logger.info('Ignoring distrusted revision {} '.format(
-                        revision.parent))
+                    logger.info(
+                        "Ignoring distrusted revision {} ".format(
+                            revision.parent
+                        )
+                    )
                     revision = parent
                     continue
-                if not self.rbd.exists(self._image_name + '@backy-' +
-                                       parent.uuid):
-                    logger.info('Ignoring revision {} without snapshot'.format(
-                        revision.parent))
+                if not self.rbd.exists(
+                    self._image_name + "@backy-" + parent.uuid
+                ):
+                    logger.info(
+                        "Ignoring revision {} without snapshot".format(
+                            revision.parent
+                        )
+                    )
                     revision = parent
                     continue
                 # Ok, it's trusted and we have a snapshot. Let's do a diff.
@@ -96,26 +105,28 @@ class CephRBD(object):
             self.full(target)
 
     def diff(self, target, parent):
-        logger.info('Performing differential backup')
-        snap_from = 'backy-' + parent.uuid
-        snap_to = 'backy-' + self.revision.uuid
-        s = self.rbd.export_diff(self._image_name + '@' + snap_to, snap_from)
-        t = target.open('r+b')
+        logger.info("Performing differential backup")
+        snap_from = "backy-" + parent.uuid
+        snap_to = "backy-" + self.revision.uuid
+        s = self.rbd.export_diff(self._image_name + "@" + snap_to, snap_from)
+        t = target.open("r+b")
         with s as source, t as target:
             bytes = source.integrate(target, snap_from, snap_to)
-        logger.info('Integration finished.')
+        logger.info("Integration finished.")
 
-        self.revision.stats['bytes_written'] = bytes
+        self.revision.stats["bytes_written"] = bytes
 
         # TMP Gather statistics to see where to optimize
         from backy.backends.chunked.chunk import chunk_stats
-        self.revision.stats['chunk_stats'] = chunk_stats
+
+        self.revision.stats["chunk_stats"] = chunk_stats
 
     def full(self, target):
-        logger.info('Performing full backup')
-        s = self.rbd.export('{}/{}@backy-{}'.format(self.pool, self.image,
-                                                    self.revision.uuid))
-        t = target.open('r+b')
+        logger.info("Performing full backup")
+        s = self.rbd.export(
+            "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
+        )
+        t = target.open("r+b")
         copied = 0
         with s as source, t as target:
             while True:
@@ -124,22 +135,26 @@ class CephRBD(object):
                     break
                 target.write(buf)
                 copied += len(buf)
-        self.revision.stats['bytes_written'] = copied
+        self.revision.stats["bytes_written"] = copied
 
         # TMP Gather statistics to see if we actually are aligned.
         from backy.backends.chunked.chunk import chunk_stats
-        self.revision.stats['chunk_stats'] = chunk_stats
+
+        self.revision.stats["chunk_stats"] = chunk_stats
 
     def verify(self, target):
         try:
-            s = self.rbd.image_reader('{}/{}@backy-{}'.format(
-                self.pool, self.image, self.revision.uuid))
-            t = target.open('rb')
+            s = self.rbd.image_reader(
+                "{}/{}@backy-{}".format(
+                    self.pool, self.image, self.revision.uuid
+                )
+            )
+            t = target.open("rb")
 
-            self.revision.stats['ceph-verification'] = 'partial'
+            self.revision.stats["ceph-verification"] = "partial"
 
             with s as source, t as target:
-                logger.info('Performing partial verification')
+                logger.info("Performing partial verification")
                 return backy.utils.files_are_roughly_equal(source, target)
         except Exception:
             return False
@@ -157,15 +172,16 @@ class CephRBD(object):
         else:
             keep_snapshot_revision = None
         for snapshot in self.rbd.snap_ls(self._image_name):
-            if not snapshot['name'].startswith('backy-'):
+            if not snapshot["name"].startswith("backy-"):
                 # Do not touch non-backy snapshots
                 continue
-            uuid = snapshot['name'].replace('backy-', '')
+            uuid = snapshot["name"].replace("backy-", "")
             if uuid != keep_snapshot_revision:
                 time.sleep(3)  # avoid race condition while unmapping
-                logger.info('Removing old snapshot %s', snapshot['name'])
+                logger.info("Removing old snapshot %s", snapshot["name"])
                 try:
-                    self.rbd.snap_rm(self._image_name + '@' + snapshot['name'])
+                    self.rbd.snap_rm(self._image_name + "@" + snapshot["name"])
                 except Exception:
-                    logger.exception('Could not delete snapshot ' +
-                                     snapshot['name'])
+                    logger.exception(
+                        "Could not delete snapshot " + snapshot["name"]
+                    )

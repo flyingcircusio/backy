@@ -1,14 +1,14 @@
-from backy.utils import copy, copy_overwrite, files_are_equal
 import logging
+
+from backy.utils import copy, copy_overwrite, files_are_equal
 
 logger = logging.getLogger(__name__)
 
 
 class File(object):
-
     def __init__(self, config):
-        self.filename = config['filename']
-        self.cow = config.get('cow', True)
+        self.filename = config["filename"]
+        self.cow = config.get("cow", True)
 
     @staticmethod
     def config_from_cli(spec):
@@ -31,16 +31,16 @@ class File(object):
 
         """
         try:
-            with open(self.filename, 'rb'):
+            with open(self.filename, "rb"):
                 pass
         except Exception:
             return False
         return True
 
     def backup(self, target):
-        logger.info('Performing full backup')
-        s = open(self.filename, 'rb')
-        t = target.open('r+b')
+        logger.info("Performing full backup")
+        s = open(self.filename, "rb")
+        t = target.open("r+b")
         with s as source, t as target:
             if self.cow:
                 logger.info("Using sparse copy")
@@ -49,13 +49,13 @@ class File(object):
                 logger.info("Using full copy")
                 bytes = copy(source, target)
 
-        self.revision.stats['bytes_written'] = bytes
+        self.revision.stats["bytes_written"] = bytes
 
     def verify(self, target):
         try:
-            logger.info('Performing full verification')
-            s = open(self.filename, 'rb')
-            t = target.open('rb')
+            logger.info("Performing full verification")
+            s = open(self.filename, "rb")
+            t = target.open("rb")
             with s as source, t as target:
                 return files_are_equal(source, target)
         except Exception:

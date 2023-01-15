@@ -3,7 +3,6 @@ import re
 
 
 class Report(object):
-
     matches = None
 
     def __init__(self):
@@ -17,19 +16,19 @@ class Report(object):
 
     @property
     def diff(self):
-        result = ['']
+        result = [""]
         d = difflib.Differ()
         for matched, line, pattern in self.lines:
             if matched:
-                result.append('  ' + line)
+                result.append("  " + line)
             else:
                 if pattern is None:
-                    result.append('+ ' + line)
+                    result.append("+ " + line)
                 elif line is None:
-                    result.append('- ' + pattern)
+                    result.append("- " + pattern)
                 else:
                     diffed = d.compare([pattern], [line])
-                    diffed = [x.rstrip('\n') for x in diffed]
+                    diffed = [x.rstrip("\n") for x in diffed]
                     result.extend(diffed)
         result = list(filter(str.strip, result))
         return result
@@ -40,21 +39,20 @@ class Report(object):
 
 
 def match(pattern, line):
-    pattern = pattern.replace('\t', ' '*8)
-    line = line.replace('\t', ' '*8)
+    pattern = pattern.replace("\t", " " * 8)
+    line = line.replace("\t", " " * 8)
     pattern = re.escape(pattern)
-    pattern = pattern.replace(r'\.\.\.', '.+?')
-    pattern = re.compile('^'+pattern+'$')
+    pattern = pattern.replace(r"\.\.\.", ".+?")
+    pattern = re.compile("^" + pattern + "$")
     return pattern.match(line)
 
 
 class Ellipsis(object):
-
     # other = other.replace('\t', ' '*8) oder allgemein white-space unsensibel
     # multi-line support
 
     def __init__(self, ellipsis):
-        self.patterns = ellipsis.split('\n')
+        self.patterns = ellipsis.split("\n")
 
     def compare(self, lines):
         report = Report()
@@ -64,7 +62,7 @@ class Ellipsis(object):
         multiline = False
         pattern = None
 
-        for line in lines.split('\n'):
+        for line in lines.split("\n"):
             # Select next applicable pattern.
             if multiline:
                 report.matched(line)
@@ -73,7 +71,7 @@ class Ellipsis(object):
             else:
                 if patterns:
                     pattern = patterns.pop(0)
-                    if pattern == '...':
+                    if pattern == "...":
                         multiline = True
                         if patterns:
                             pattern = patterns.pop(0)

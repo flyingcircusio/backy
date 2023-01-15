@@ -1,16 +1,16 @@
-from backy.utils import CHUNK_SIZE, cp_reflink
 import os.path
+
+from backy.utils import CHUNK_SIZE, cp_reflink
 
 
 class COWFileBackend(object):
-
     def __init__(self, revision):
         self.revision = revision
 
-    def open(self, mode='rb'):
+    def open(self, mode="rb"):
         if not os.path.exists(self.revision.filename):
             if not self.revision.parent:
-                open(self.revision.filename, 'wb').close()
+                open(self.revision.filename, "wb").close()
             else:
                 parent = self.revision.backup.find(self.revision.parent)
                 cp_reflink(parent.filename, self.revision.filename)

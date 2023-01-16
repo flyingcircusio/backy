@@ -27,7 +27,7 @@ def test_display_usage(capsys, argv):
     assert """\
 usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
               {init,backup,restore,purge,find,status,nbd-server,\
-upgrade,scheduler,check,distrust,verify}
+upgrade,scheduler,check,distrust,verify,forget}
               ...
 """ == out
     assert err == ""
@@ -42,7 +42,7 @@ def test_display_help(capsys, argv):
     assert Ellipsis("""\
 usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
               {init,backup,restore,purge,find,status,nbd-server,\
-upgrade,scheduler,check,distrust,verify}
+upgrade,scheduler,check,distrust,verify,forget}
               ...
 
 Backup and restore for block devices.

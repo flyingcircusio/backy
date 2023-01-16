@@ -103,6 +103,10 @@ class Command(object):
         b = backy.backup.Backup(self.path)
         print(b.find(revision).filename)
 
+    def forget(self, revision):
+        b = backy.backup.Backup(self.path)
+        b.forget_revision(revision)
+
     def scheduler(self, config):
         backy.daemon.main(config)
 
@@ -206,7 +210,7 @@ Print full path to a given revision's image file.
         '--revision',
         metavar='SPEC',
         default='latest',
-        help='use revision SPEC as restore source')
+        help='use revision SPEC to find')
     p.set_defaults(func='find')
 
     # STATUS
@@ -301,6 +305,19 @@ Verify one or all revisions.
         help='use revision SPEC to verify, '
         'verifying all if not given')
     p.set_defaults(func='verify')
+
+    # FORGET
+    p = subparsers.add_parser(
+        'forget', help="""\
+Forget revision.
+""")
+    p.add_argument(
+        '-r',
+        '--revision',
+        metavar='SPEC',
+        required=True,
+        help='use revision SPEC to forget')
+    p.set_defaults(func='forget')
 
     return parser
 

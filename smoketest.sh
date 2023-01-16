@@ -198,6 +198,10 @@ fi
 
 $BACKY status
 
+$BACKY forget -r 2
+
+$BACKY status
+
 # cleanup
 if [ "$1" != "keep" ]; then
     rm -rf "$BACKUP"

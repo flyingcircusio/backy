@@ -171,6 +171,12 @@ class Backup(object):
                 revision.remove()
 
     @locked(target='.backup', mode='exclusive')
+    def forget_revision(self, revision):
+        r = self.find(revision)
+        logger.info('Removing revision {}'.format(r.uuid))
+        r.remove()
+
+    @locked(target='.backup', mode='exclusive')
     @locked(target='.purge', mode='shared')
     def backup(self, tags):
         start = time.time()

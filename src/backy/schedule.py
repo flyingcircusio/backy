@@ -1,7 +1,9 @@
+import copy
 import logging
 from datetime import timedelta
 
 import backy.utils
+from backy.revision import filter_schedule_tags
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +53,11 @@ def next_in_interval(relative, interval, spread):
 class Schedule(object):
     def __init__(self):
         self.schedule = {}
+        self.config = {}
 
     def configure(self, config):
-        self.schedule = config
+        self.config = config
+        self.schedule = copy.deepcopy(config)
         for tag, spec in self.schedule.items():
             self.schedule[tag]["interval"] = parse_duration(spec["interval"])
 
@@ -119,7 +123,16 @@ class Schedule(object):
                 old_revision.tags.remove(tag)
                 old_revision.write_info()
 
-        # Phase 2: delete revisions that have no tags any more.
+        # Phase 2: remove all tags which have been created by a former schedule
+        for revision in backup.history:
+            expired_tags = (
+                filter_schedule_tags(revision.tags) - self.schedule.keys()
+            )
+            if expired_tags:
+                revision.tags -= expired_tags
+                revision.write_info()
+
+        # Phase 3: delete revisions that have no tags any more.
         # We are deleting items of the history while iterating over it.
         # Use a copy of the list!
         for revision in list(backup.history):

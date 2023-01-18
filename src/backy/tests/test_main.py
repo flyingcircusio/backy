@@ -28,7 +28,7 @@ def test_display_usage(capsys, argv):
     assert (
         """\
 usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
-              {init,backup,restore,purge,find,status,nbd-server,\
+              {backup,restore,purge,find,status,nbd-server,\
 upgrade,scheduler,check,distrust,verify,forget}
               ...
 """
@@ -47,7 +47,7 @@ def test_display_help(capsys, argv):
         Ellipsis(
             """\
 usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
-              {init,backup,restore,purge,find,status,nbd-server,\
+              {backup,restore,purge,find,status,nbd-server,\
 upgrade,scheduler,check,distrust,verify,forget}
               ...
 
@@ -103,25 +103,6 @@ DEBUG    backy.main:main.py:... backup.status(**{})
     )
 
 
-def test_call_init(capsys, caplog, backup, argv, monkeypatch):
-    monkeypatch.setattr(backy.main.Command, "init", print_args)
-    argv.extend(["-v", "-b", backup.path, "init", "ceph-rbd", "test/test04"])
-    with pytest.raises(SystemExit) as exit:
-        backy.main.main()
-    assert exit.value.code == 0
-    out, err = capsys.readouterr()
-    assert (
-        Ellipsis(
-            """\
-(<backy.main.Command object at ...>,)
-{'source': 'test/test04', 'type': 'ceph-rbd'}
-"""
-        )
-        == out
-    )
-    assert err == ""
-
-
 def test_call_backup(tmpdir, capsys, caplog, argv, monkeypatch):
     os.makedirs(str(tmpdir / "backy"))
     os.chdir(str(tmpdir / "backy"))
@@ -130,8 +111,13 @@ def test_call_backup(tmpdir, capsys, caplog, argv, monkeypatch):
         f.write(
             """
 ---
-type: file
-filename: {}
+schedule:
+    daily:
+        interval: 1d
+        keep: 7
+source:
+    type: file
+    filename: {}
 """.format(
                 __file__
             ).encode(
@@ -140,7 +126,7 @@ filename: {}
         )
 
     monkeypatch.setattr(backy.backup.Backup, "backup", print_args)
-    argv.extend(["-v", "backup", "test"])
+    argv.extend(["-v", "backup", "manual:test"])
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     out, err = capsys.readouterr()
@@ -148,7 +134,7 @@ filename: {}
     assert (
         Ellipsis(
             """\
-(<backy.backup.Backup object at 0x...>, {'test'})
+(<backy.backup.Backup object at 0x...>, {'manual:test'}, False)
 {}
 """
         )
@@ -157,7 +143,7 @@ filename: {}
     assert (
         Ellipsis(
             """\
-DEBUG    backy.main:main.py:... backup.backup(**{'tags': 'test'})
+DEBUG    backy.main:main.py:... backup.backup(**{'force': False, 'tags': 'manual:test'})
 DEBUG    backy.backup:backup.py:... Backup(".../test_call_backup0/backy")
 """
         )
@@ -287,25 +273,10 @@ INFO     backy.main:main.py:... Backy operation failed.
     )
 
 
-@pytest.fixture
-def commands(tmpdir):
+def test_commands_wrapper_status(backup, tmpdir, capsys, clock, tz_berlin):
     commands = backy.main.Command(str(tmpdir))
-    commands.init("file", str(tmpdir) + "/source")
-    return commands
 
-
-def test_commands_wrapper_init(commands, tmpdir):
-    with pytest.raises(RuntimeError):
-        # Already initialized by fixture. Doing again causes exception.
-        commands.init("file", str(tmpdir) + "/source")
-    with open(str(tmpdir) + "/config") as f:
-        config = yaml.safe_load(f)
-        assert config == {"filename": str(tmpdir) + "/source", "type": "file"}
-
-
-def test_commands_wrapper_status(commands, tmpdir, capsys, clock, tz_berlin):
-    b = backy.backup.Backup(str(tmpdir))
-    revision = Revision(b, 1)
+    revision = Revision(backup, 1)
     revision.timestamp = backy.utils.now()
     revision.materialize()
 

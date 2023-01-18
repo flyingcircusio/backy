@@ -52,9 +52,6 @@ class Command(object):
     def __init__(self, path):
         self.path = path
 
-    def init(self, type, source):
-        backy.backup.Backup.init(self.path, type, source)
-
     def status(self):
         b = backy.backup.Backup(self.path)
         total_bytes = 0
@@ -96,12 +93,12 @@ class Command(object):
             )
         )
 
-    def backup(self, tags):
+    def backup(self, tags, force):
         b = backy.backup.Backup(self.path)
         b._clean()
         try:
             tags = set(t.strip() for t in tags.split(","))
-            b.backup(tags)
+            b.backup(tags, force)
         except IOError as e:
             if e.errno not in [errno.EDEADLK, errno.EAGAIN]:
                 raise
@@ -177,23 +174,15 @@ def setup_argparser():
 
     subparsers = parser.add_subparsers()
 
-    # INIT
-    p = subparsers.add_parser(
-        "init",
-        help="""\
-Initialize backup for a <source> in the backup directory.
-""",
-    )
-    p.set_defaults(func="init")
-    p.add_argument("type")
-    p.add_argument("source")
-
     # BACKUP
     p = subparsers.add_parser(
         "backup",
         help="""\
 Perform a backup.
 """,
+    )
+    p.add_argument(
+        "-f", "--force", action="store_true", help="Do not validate tags"
     )
     p.add_argument("tags", help="Tags to apply to the backup.")
     p.set_defaults(func="backup")

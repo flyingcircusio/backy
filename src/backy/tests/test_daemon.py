@@ -15,7 +15,7 @@ from backy.tests import Ellipsis
 import backy.utils
 
 
-@pytest.yield_fixture
+@pytest.fixture
 async def daemon(tmpdir, event_loop):
     daemon = BackyDaemon(str(tmpdir / 'config'))
     base_dir = str(tmpdir)

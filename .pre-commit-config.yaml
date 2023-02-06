@@ -1,29 +1,28 @@
-# See https://pre-commit.com for more information
-# See https://pre-commit.com/hooks.html for more hooks
+exclude: ^secrets/|^appenv$
 repos:
-  -   repo: https://github.com/pre-commit/pre-commit-hooks
-      rev: v4.3.0
-      hooks:
-        -   id: trailing-whitespace
-        -   id: end-of-file-fixer
-        -   id: check-yaml
-        -   id: check-added-large-files
-        -   id: check-json
-        -   id: check-toml
-        -   id: detect-private-key
-
-  -   repo: https://github.com/pycqa/isort
-      rev: 5.11.4
-      hooks:
-        - id: isort
-          name: isort (python)
-
-  -   repo: https://github.com/psf/black
-      rev: 22.12.0
-      hooks:
-        -   id: black
-
-  -   repo: https://github.com/PyCQA/flake8
-      rev: 6.0.0
-      hooks:
-        - id: flake8
+- hooks:
+  - exclude: "(?x)^(\n  secrets/|environments/.*/secret.*|\n  .*\\.patch\n)$\n"
+    id: trailing-whitespace
+  - exclude: "(?x)^(\n  environments/.*/secret.*|\n  .*\\.patch\n)$\n"
+    id: end-of-file-fixer
+  - id: check-yaml
+  - id: check-added-large-files
+  - id: check-json
+  - id: check-xml
+  - id: check-toml
+  - id: detect-private-key
+  repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v3.2.0
+- hooks:
+  - args:
+    - --profile
+    - black
+    - --filter-files
+    id: isort
+    name: isort (python)
+  repo: https://github.com/pycqa/isort
+  rev: 5.12.0
+- hooks:
+  - id: black
+  repo: https://github.com/psf/black
+  rev: 22.12.0

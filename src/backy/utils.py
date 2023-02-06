@@ -12,7 +12,7 @@ import sys
 import tempfile
 import time
 
-from backports.zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo
 import humanize
 import tzlocal
 

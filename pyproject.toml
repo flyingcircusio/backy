@@ -36,7 +36,7 @@ license = "GPLv3"
 [tool.poetry.dependencies]
 python = "~3.10"
 PyYAML = "^5.3.1"
-consulate = "^0.6.0"
+consulate-fc-nix-test = "1.1.0a1"
 humanize = "^4.4.0"
 mmh3 = "^3.0"
 packaging = "^22.0"

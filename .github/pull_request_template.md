@@ -1,5 +1,12 @@
-## Release process
+Related issue(s): PL-XXXX, ...
 
-Impact:
+* [ ] Change is documented in changelog
 
-Changelog:
+# Security implications
+
+* Security requirement 1
+  * [ ] tested this way
+  * [ ] tested that way
+* Security requirement 2
+  * [ ] tested this way
+  * [ ] tested that way

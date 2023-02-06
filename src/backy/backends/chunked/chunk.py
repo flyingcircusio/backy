@@ -1,16 +1,17 @@
-from backy.utils import posix_fadvise
 import binascii
 import io
-import lzo
-import mmh3
 import os
 import tempfile
 import time
 
+import lzo
+import mmh3
+
+from backy.utils import posix_fadvise
 
 chunk_stats = {
-    'write_full': 0,
-    'write_partial': 0,
+    "write_full": 0,
+    "write_partial": 0,
 }
 
 
@@ -52,10 +53,10 @@ class Chunk(object):
             return
         # Prepare working with the chunk. We keep the data in RAM for
         # easier random access combined with transparent compression.
-        data = b''
+        data = b""
         if self.hash:
             chunk_file = self.store.chunk_path(self.hash)
-            with open(chunk_file, 'rb') as f:
+            with open(chunk_file, "rb") as f:
                 posix_fadvise(f.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
                 data = f.read()
                 data = lzo.decompress(data)
@@ -63,8 +64,11 @@ class Chunk(object):
             # This is a safety belt. Hashing is sufficiently fast to avoid
             # us accidentally reading garbage.
             if disk_hash != self.hash:
-                raise ValueError("Expected hash {} but data has {}".format(
-                    self.hash, disk_hash))
+                raise ValueError(
+                    "Expected hash {} but data has {}".format(
+                        self.hash, disk_hash
+                    )
+                )
         self._init_data(data)
 
     def _init_data(self, data):
@@ -94,18 +98,18 @@ class Chunk(object):
         """
         self._touch()
 
-        remaining_data = data[self.CHUNK_SIZE - offset:]
-        data = data[:self.CHUNK_SIZE - offset]
+        remaining_data = data[self.CHUNK_SIZE - offset :]
+        data = data[: self.CHUNK_SIZE - offset]
 
         if offset == 0 and len(data) == self.CHUNK_SIZE:
             # Special case: overwrite the entire chunk.
             self._init_data(data)
-            chunk_stats['write_full'] += 1
+            chunk_stats["write_full"] += 1
         else:
             self._read_existing()
             self.data.seek(offset)
             self.data.write(data)
-            chunk_stats['write_partial'] += 1
+            chunk_stats["write_partial"] += 1
         self.clean = False
 
         return len(data), remaining_data
@@ -117,15 +121,15 @@ class Chunk(object):
         self._update_hash()
         target = self.store.chunk_path(self.hash)
         needs_forced_write = (
-            self.store.force_writes and
-            self.hash not in self.store.seen_forced)
+            self.store.force_writes and self.hash not in self.store.seen_forced
+        )
         if self.hash not in self.store.known or needs_forced_write:
             # Create the tempfile in the right directory to increase locality
             # of our change - avoid renaming between multiple directories to
             # reduce traffic on the directory nodes.
             fd, tmpfile_name = tempfile.mkstemp(dir=os.path.dirname(target))
             posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
-            with os.fdopen(fd, mode='wb') as f:
+            with os.fdopen(fd, mode="wb") as f:
                 data = lzo.compress(self.data.getvalue())
                 f.write(data)
             # Micro-optimization: chmod before rename to help against
@@ -145,4 +149,4 @@ class Chunk(object):
 
 
 def hash(data):
-    return binascii.hexlify(mmh3.hash_bytes(data)).decode('ascii')
+    return binascii.hexlify(mmh3.hash_bytes(data)).decode("ascii")

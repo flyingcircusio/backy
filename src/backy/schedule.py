@@ -12,20 +12,20 @@ WEEK = 7 * DAY
 
 
 def parse_duration(duration):
-    if duration.endswith('w'):
-        duration = duration.replace('w', '')
+    if duration.endswith("w"):
+        duration = duration.replace("w", "")
         duration = int(duration) * WEEK
-    elif duration.endswith('d'):
-        duration = duration.replace('d', '')
+    elif duration.endswith("d"):
+        duration = duration.replace("d", "")
         duration = int(duration) * DAY
-    elif duration.endswith('h'):
-        duration = duration.replace('h', '')
+    elif duration.endswith("h"):
+        duration = duration.replace("h", "")
         duration = int(duration) * HOUR
-    elif duration.endswith('m'):
-        duration = duration.replace('m', '')
+    elif duration.endswith("m"):
+        duration = duration.replace("m", "")
         duration = int(duration) * MINUTE
-    elif duration.endswith('s'):
-        duration = duration.replace('s', '')
+    elif duration.endswith("s"):
+        duration = duration.replace("s", "")
         duration = int(duration)
     else:
         duration = int(duration)
@@ -49,18 +49,16 @@ def next_in_interval(relative, interval, spread):
 
 
 class Schedule(object):
-
     def __init__(self):
         self.schedule = {}
 
     def configure(self, config):
         self.schedule = config
         for tag, spec in self.schedule.items():
-            self.schedule[tag]['interval'] = parse_duration(spec['interval'])
+            self.schedule[tag]["interval"] = parse_duration(spec["interval"])
 
     def next(self, relative, spread, archive):
-        time, tags = ideal_time, ideal_tags = self._next_ideal(
-            relative, spread)
+        time, tags = ideal_time, ideal_tags = self._next_ideal(relative, spread)
         missed_tags = self._missed(archive)
         # The next run will include all missed tags
         tags.update(missed_tags)
@@ -78,8 +76,8 @@ class Schedule(object):
         next_times = {}
         for tag, settings in self.schedule.items():
             t = next_times.setdefault(
-                next_in_interval(relative, settings['interval'], spread),
-                set())
+                next_in_interval(relative, settings["interval"], spread), set()
+            )
             t.add(tag)
         next_time = min(next_times.keys())
         next_tags = next_times[next_time]
@@ -93,7 +91,7 @@ class Schedule(object):
             if tag not in self.schedule:
                 # Ignore ad-hoc tags for catching up.
                 continue
-            if last > now - self.schedule[tag]['interval']:
+            if last > now - self.schedule[tag]["interval"]:
                 # We had a valid backup within the interval
                 missing_tags.remove(tag)
         return missing_tags
@@ -110,11 +108,11 @@ class Schedule(object):
         # than keep * interval for this tag.
         # Phase 1: remove tags that are expired
         for tag, args in self.schedule.items():
-            revisions = backup.find_revisions('tag:' + tag)
-            keep = args['keep']
+            revisions = backup.find_revisions("tag:" + tag)
+            keep = args["keep"]
             if len(revisions) < keep:
                 continue
-            keep_threshold = backy.utils.now() - keep * args['interval']
+            keep_threshold = backy.utils.now() - keep * args["interval"]
             for old_revision in revisions[:-keep]:
                 if old_revision.timestamp >= keep_threshold:
                     continue
@@ -136,7 +134,8 @@ class Schedule(object):
         """Return a list of tags, sorted by their interval. Smallest first."""
         t = {}
         for tag in tags:
-            t[tag] = self.schedule.get(tag,
-                                       {'interval': timedelta(0)})['interval']
+            t[tag] = self.schedule.get(tag, {"interval": timedelta(0)})[
+                "interval"
+            ]
         vals = t.items()
         return (x[0] for x in sorted(vals, key=lambda x: x[1]))

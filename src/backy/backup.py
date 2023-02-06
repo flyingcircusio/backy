@@ -6,6 +6,7 @@ import os.path as p
 import time
 
 import yaml
+
 from backy.utils import min_date
 
 from .backends.chunked import ChunkedFileBackend
@@ -32,27 +33,29 @@ logger = logging.getLogger(__name__)
 
 
 def locked(target=None, mode=None):
-    if mode == 'shared':
+    if mode == "shared":
         mode = fcntl.LOCK_SH
-    elif mode == 'exclusive':
+    elif mode == "exclusive":
         mode = fcntl.LOCK_EX | fcntl.LOCK_NB
     else:
         raise ValueError("Unknown lock mode '{}'".format(mode))
 
     def wrap(f):
-
         def locked_function(self, *args, **kw):
             if target in self._lock_fds:
-                raise RuntimeError('Bug: Locking is not re-entrant.')
+                raise RuntimeError("Bug: Locking is not re-entrant.")
             target_path = p.join(self.path, target)
             if not os.path.exists(target_path):
-                open(target_path, 'wb').close()
+                open(target_path, "wb").close()
             self._lock_fds[target] = os.open(target_path, os.O_RDONLY)
             try:
                 fcntl.flock(self._lock_fds[target], mode)
             except BlockingIOError:
-                print("Failed to get exclusive lock for '{}'. Continuing.".
-                      format(f.__name__))
+                print(
+                    "Failed to get exclusive lock for '{}'. Continuing.".format(
+                        f.__name__
+                    )
+                )
                 return
             else:
                 try:
@@ -62,7 +65,7 @@ def locked(target=None, mode=None):
             finally:
                 del self._lock_fds[target]
 
-        locked_function.__name__ = 'locked({}, {})'.format(f.__name__, target)
+        locked_function.__name__ = "locked({}, {})".format(f.__name__, target)
         return locked_function
 
     return wrap
@@ -90,51 +93,54 @@ class Backup(object):
 
         # Load config from file
         try:
-            with open(p.join(self.path, 'config'), encoding='utf-8') as f:
+            with open(p.join(self.path, "config"), encoding="utf-8") as f:
                 self.config = yaml.safe_load(f)
         except IOError as e:
-            raise IOError("Could not read config file. Is --backupdir correct?") from e
+            raise IOError(
+                "Could not read config file. Is --backupdir correct?"
+            ) from e
 
         # Initialize our source
         try:
-            source_factory = select_source(self.config['type'])
+            source_factory = select_source(self.config["type"])
         except IndexError:
-            logger.error("No source type named `{}` exists.".format(
-                self.config['type']))
+            logger.error(
+                "No source type named `{}` exists.".format(self.config["type"])
+            )
             raise
         self.source = source_factory(self.config)
 
         # Initialize our backend
-        self.backend_type = self.config.get('backend', None)
+        self.backend_type = self.config.get("backend", None)
         if self.backend_type is None:
             if not self.history:
                 # Start fresh backups with our new default.
-                self.backend_type = 'chunked'
+                self.backend_type = "chunked"
             else:
                 # Choose to continue existing backups with whatever format
                 # they are in.
                 self.backend_type = self.history[-1].backend_type
 
-        if self.backend_type == 'cowfile':
+        if self.backend_type == "cowfile":
             self.backend_factory = COWFileBackend
-        elif self.backend_type == 'chunked':
+        elif self.backend_type == "chunked":
             self.backend_factory = ChunkedFileBackend
 
     @classmethod
     def init(cls, path, type, source):
-        config_path = p.join(path, 'config')
+        config_path = p.join(path, "config")
         if p.exists(config_path):
-            raise RuntimeError('Refusing to initialize with existing config.')
+            raise RuntimeError("Refusing to initialize with existing config.")
 
         if not p.exists(path):
             os.makedirs(path)
 
         source_factory = select_source(type)
         source_config = source_factory.config_from_cli(source)
-        source_config['type'] = type
+        source_config["type"] = type
 
-        with SafeFile(config_path, encoding='utf-8') as f:
-            f.open_new('wb')
+        with SafeFile(config_path, encoding="utf-8") as f:
+            f.open_new("wb")
             yaml.safe_dump(source_config, f)
 
         return Backup(path)
@@ -142,7 +148,7 @@ class Backup(object):
     def scan(self):
         self.history = []
         self._by_uuid = {}
-        for f in glob.glob(p.join(self.path, '*.rev')):
+        for f in glob.glob(p.join(self.path, "*.rev")):
             if os.path.islink(f):
                 # Ignore links that are used to create readable pointers
                 continue
@@ -156,52 +162,59 @@ class Backup(object):
     @property
     def clean_history(self):
         """History without incomplete revisions."""
-        return [rev for rev in self.history if 'duration' in rev.stats]
+        return [rev for rev in self.history if "duration" in rev.stats]
 
     #################
     # Making backups
 
-    @locked(target='.backup', mode='exclusive')
+    @locked(target=".backup", mode="exclusive")
     def _clean(self):
         """Clean-up incomplete revisions."""
         for revision in self.history:
-            if 'duration' not in revision.stats:
-                logger.warning('Removing incomplete revision {}'.format(
-                    revision.uuid))
+            if "duration" not in revision.stats:
+                logger.warning(
+                    "Removing incomplete revision {}".format(revision.uuid)
+                )
                 revision.remove()
 
-    @locked(target='.backup', mode='exclusive')
+    @locked(target=".backup", mode="exclusive")
     def forget_revision(self, revision):
         r = self.find(revision)
-        logger.info('Removing revision {}'.format(r.uuid))
+        logger.info("Removing revision {}".format(r.uuid))
         r.remove()
 
-    @locked(target='.backup', mode='exclusive')
-    @locked(target='.purge', mode='shared')
+    @locked(target=".backup", mode="exclusive")
+    @locked(target=".purge", mode="shared")
     def backup(self, tags):
         start = time.time()
 
         if not self.source.ready():
             raise RuntimeError(
-                "Source is not ready (does it exist? can you access it?)")
+                "Source is not ready (does it exist? can you access it?)"
+            )
 
         new_revision = Revision.create(self, tags)
         new_revision.materialize()
-        logger.info('New revision {} [{}]'.format(new_revision.uuid,
-                                                  ','.join(new_revision.tags)))
+        logger.info(
+            "New revision {} [{}]".format(
+                new_revision.uuid, ",".join(new_revision.tags)
+            )
+        )
 
         backend = self.backend_factory(new_revision)
         with self.source(new_revision) as source:
             source.backup(backend)
             if not source.verify(backend):
-                logger.error('New revision does not match source '
-                             '- removing it.')
+                logger.error(
+                    "New revision does not match source - removing it."
+                )
                 new_revision.remove()
             else:
-                logger.info('Revision {} verification OK.'.format(
-                    new_revision.uuid))
-                new_revision.set_link('last')
-                new_revision.stats['duration'] = time.time() - start
+                logger.info(
+                    "Revision {} verification OK.".format(new_revision.uuid)
+                )
+                new_revision.set_link("last")
+                new_revision.stats["duration"] = time.time() - start
                 new_revision.write_info()
                 new_revision.readonly()
                 self.scan()
@@ -216,8 +229,10 @@ class Backup(object):
         self.scan()
         for revision in reversed(self.clean_history):
             if revision.trust == TRUST_DISTRUSTED:
-                logger.warning('Found inconsistent revision(s). '
-                               'Performing single verification.')
+                logger.warning(
+                    "Found inconsistent revision(s). "
+                    "Performing single verification."
+                )
                 backend = self.backend_factory(revision)
                 backend.verify()
                 break
@@ -236,7 +251,7 @@ class Backup(object):
                 r.distrust()
                 r.write_info()
 
-    @locked(target='.purge', mode='shared')
+    @locked(target=".purge", mode="shared")
     def verify(self, revision=None):
         if revision:
             r = self.find(revision)
@@ -249,7 +264,7 @@ class Backup(object):
                 backend = self.backend_factory(r)
                 backend.verify()
 
-    @locked(target='.purge', mode='exclusive')
+    @locked(target=".purge", mode="exclusive")
     def purge(self):
         backend = self.backend_factory(self.history[0])
         backend.purge()
@@ -262,28 +277,31 @@ class Backup(object):
     def restore(self, revision, target):
         r = self.find(revision)
         backend = self.backend_factory(r)
-        s = backend.open('rb')
+        s = backend.open("rb")
         with s as source:
-            if target != '-':
-                logger.info('Restoring revision @ %s [%s]', r.timestamp,
-                            ','.join(r.tags))
+            if target != "-":
+                logger.info(
+                    "Restoring revision @ %s [%s]",
+                    r.timestamp,
+                    ",".join(r.tags),
+                )
                 self.restore_file(source, target)
             else:
                 self.restore_stdout(source)
 
-    @locked(target='.purge', mode='shared')
+    @locked(target=".purge", mode="shared")
     def restore_file(self, source, target):
         """Bulk-copy from open revision `source` to target file."""
         logger.debug('Copying from "%s" to "%s"...', source.name, target)
-        open(target, 'ab').close()  # touch into existence
-        with open(target, 'r+b', buffering=CHUNK_SIZE) as target:
+        open(target, "ab").close()  # touch into existence
+        with open(target, "r+b", buffering=CHUNK_SIZE) as target:
             try:
                 posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
             except Exception:
                 pass
             copy(source, target)
 
-    @locked(target='.purge', mode='shared')
+    @locked(target=".purge", mode="shared")
     def restore_stdout(self, source):
         """Emit restore data to stdout (for pipe processing)."""
         logger.debug('Dumping from "%s" to stdout...', source.name)
@@ -291,19 +309,19 @@ class Backup(object):
             posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
         except Exception:
             pass
-        with os.fdopen(os.dup(1), 'wb') as target:
+        with os.fdopen(os.dup(1), "wb") as target:
             while True:
                 chunk = source.read(CHUNK_SIZE)
                 if not chunk:
                     break
                 target.write(chunk)
 
-    @locked(target='.purge', mode='shared')
+    @locked(target=".purge", mode="shared")
     def nbd_server(self, host, port):
         server = Server((host, port), self)
         server.serve_forever()
 
-    @locked(target='.purge', mode='shared')
+    @locked(target=".purge", mode="shared")
     def upgrade(self):
         """Upgrade this backup's store from cowfile to chunked.
 
@@ -322,7 +340,8 @@ class Backup(object):
         while True:
             self.scan()
             to_upgrade = [
-                r for r in self.clean_history if r.backend_type == 'cowfile']
+                r for r in self.clean_history if r.backend_type == "cowfile"
+            ]
             if not to_upgrade:
                 break
             if to_upgrade == last_worklist:
@@ -339,9 +358,12 @@ class Backup(object):
             # have to re-upgrade it again.
             try:
                 revision = to_upgrade[-1]
-                print("Converting {} from {}".format(revision.uuid,
-                                                     revision.timestamp))
-                original_file = revision.filename + '.old'
+                print(
+                    "Converting {} from {}".format(
+                        revision.uuid, revision.timestamp
+                    )
+                )
+                original_file = revision.filename + ".old"
                 if not os.path.exists(original_file):
                     # We may be resuming a partial upgrade. Only move the file
                     # if our .old doesn't exist.
@@ -354,18 +376,19 @@ class Backup(object):
                 chunked = ChunkedFileBackend(revision)
                 chunked.clone_parent = False
                 cowfile = File(dict(filename=original_file, cow=False))(
-                    revision)
+                    revision
+                )
                 # Keep a copy of the statistics as it will get replaced when
                 # running the full copy.
                 original_stats = revision.stats.copy()
                 cowfile.backup(chunked)
                 revision.stats = original_stats
-                revision.backend_type = 'chunked'
+                revision.backend_type = "chunked"
                 revision.write_info()
                 revision.readonly()
                 os.unlink(original_file)
             except Exception:
-                logger.exception('Error upgrading revision')
+                logger.exception("Error upgrading revision")
                 # We may be seeing revisions getting removed, try again.
                 return
 
@@ -394,10 +417,10 @@ class Backup(object):
         """Get a sorted list of revisions, oldest first, that match the given
         specification.
         """
-        if isinstance(spec, str) and spec.startswith('tag:'):
-            tag = spec.replace('tag:', '')
+        if isinstance(spec, str) and spec.startswith("tag:"):
+            tag = spec.replace("tag:", "")
             result = [r for r in self.history if tag in r.tags]
-        elif spec == 'all':
+        elif spec == "all":
             result = self.history[:]
         else:
             result = [self.find(spec)]
@@ -415,7 +438,7 @@ class Backup(object):
         """
         spec = int(spec)
         if spec < 0:
-            raise KeyError('Integer revisions must be positive')
+            raise KeyError("Integer revisions must be positive")
         return self.history[-spec - 1]
 
     def find_by_tag(self, spec):
@@ -423,7 +446,7 @@ class Backup(object):
 
         Raises IndexError or ValueError if no revision is found.
         """
-        if spec in ['last', 'latest']:
+        if spec in ["last", "latest"]:
             return self.history[-1]
         matching = [r for r in self.history if spec in r.tags]
         return max((r.timestamp, r) for r in matching)[1]
@@ -444,7 +467,7 @@ class Backup(object):
         Locates a revision by relative number, by tag, or by uuid.
 
         """
-        if spec is None or spec == '' or not self.history:
+        if spec is None or spec == "" or not self.history:
             raise KeyError(spec)
 
         for find in (self.find_by_number, self.find_by_uuid, self.find_by_tag):

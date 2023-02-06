@@ -1,8 +1,9 @@
-from .chunk import Chunk
 import io
 import json
 import os
 import os.path
+
+from .chunk import Chunk
 
 
 class File(object):
@@ -25,7 +26,7 @@ class File(object):
 
     flush_target = 10
 
-    def __init__(self, name, store, mode='rw', overlay=False):
+    def __init__(self, name, store, mode="rw", overlay=False):
         self.name = name
         self.store = store
         self.closed = False
@@ -38,14 +39,14 @@ class File(object):
 
         self.mode = mode
 
-        if '+' in self.mode:
-            self.mode += 'w'
-        if 'a' in self.mode:
-            self.mode += 'w'
-        self.mode = ''.join(set(self.mode))
+        if "+" in self.mode:
+            self.mode += "w"
+        if "a" in self.mode:
+            self.mode += "w"
+        self.mode = "".join(set(self.mode))
 
-        if not os.path.exists(name) and 'w' not in self.mode:
-            raise FileNotFoundError('File not found: {}'.format(self.name))
+        if not os.path.exists(name) and "w" not in self.mode:
+            raise FileNotFoundError("File not found: {}".format(self.name))
 
         if not os.path.exists(name):
             self._mapping = {}
@@ -54,25 +55,27 @@ class File(object):
             # The mapping stores its chunk IDs as strings, because JSON can't
             # have ints as keys. We convert them explicitly back to integers
             # because we keep computing with them.
-            with open(self.name, 'r') as f:
+            with open(self.name, "r") as f:
                 # Safeguard: Make sure the file looks like json.
                 if f.read(2) != '{"':
                     raise ValueError(
-                        "Revision does not look like it's chunked.")
+                        "Revision does not look like it's chunked."
+                    )
                 f.seek(0)
                 meta = json.load(f)
-                self._mapping = {int(k): v for k, v in meta['mapping'].items()}
-                self.size = meta['size']
+                self._mapping = {int(k): v for k, v in meta["mapping"].items()}
+                self.size = meta["size"]
 
-        if 'a' in self.mode:
+        if "a" in self.mode:
             self._position = self.size
 
         # Chunks that we are working on.
         self._chunks = {}
 
     def fileno(self):
-        raise OSError('ChunkedFile does not support use through a file '
-                      'descriptor.')
+        raise OSError(
+            "ChunkedFile does not support use through a file descriptor."
+        )
 
     def _flush_chunks(self, target=None):
         # Support an override to the general flush/cache mechanism to
@@ -97,20 +100,19 @@ class File(object):
         self._chunks = {c.id: c for c in keep_chunks}
 
     def flush(self):
-        assert 'w' in self.mode and not self.closed
+        assert "w" in self.mode and not self.closed
 
         self._flush_chunks(0)
 
         if not self.overlay:
-            with open(self.name, 'w') as f:
-                json.dump({'mapping': self._mapping,
-                           'size': self.size}, f)
+            with open(self.name, "w") as f:
+                json.dump({"mapping": self._mapping, "size": self.size}, f)
                 f.flush()
                 os.fsync(f)
 
     def close(self):
         assert not self.closed
-        if 'w' in self.mode:
+        if "w" in self.mode:
             self.flush()
         self.closed = True
 
@@ -118,7 +120,7 @@ class File(object):
         return False
 
     def readable(self):
-        return 'r' in self.mode and not self.closed
+        return "r" in self.mode and not self.closed
 
     # def readline(size=-1)
     # def readlines(hint=-1)
@@ -141,11 +143,10 @@ class File(object):
         elif whence == io.SEEK_CUR:
             position = position + offset
         else:
-            raise ValueError(
-                '`whence` does not support mode {}'.format(whence))
+            raise ValueError("`whence` does not support mode {}".format(whence))
 
         if position < 0:
-            raise ValueError('Can not seek before the beginning of a file.')
+            raise ValueError("Can not seek before the beginning of a file.")
         if position > self.size:
             # Fill up the missing parts with zeroes.
             target = position
@@ -156,7 +157,7 @@ class File(object):
             # just inject the well-known "zero chunk" into the map.
             filler = position - self.size
             while filler > 0:
-                chunk = min(filler, 4 * 1024 * 1024) * b'\00'
+                chunk = min(filler, 4 * 1024 * 1024) * b"\00"
                 filler = filler - len(chunk)
                 self.write(chunk)
 
@@ -169,20 +170,21 @@ class File(object):
         return position
 
     def truncate(self, size=None):
-        assert 'w' in self.mode and not self.closed
+        assert "w" in self.mode and not self.closed
         if size is None:
             size = self._position
         # Update content hash
         self.size = size
         # Remove chunks past the size
         to_remove = set(
-            key for key in self._mapping if key * Chunk.CHUNK_SIZE > size)
+            key for key in self._mapping if key * Chunk.CHUNK_SIZE > size
+        )
         for key in to_remove:
             del self._mapping[key]
         self.flush()
 
     def read(self, size=-1):
-        assert 'r' in self.mode and not self.closed
+        assert "r" in self.mode and not self.closed
         result = io.BytesIO()
         max_size = self.size - self._position
         if size == -1:
@@ -195,16 +197,18 @@ class File(object):
             if not data:
                 raise ValueError(
                     "Under-run: chunk {} seems to be missing data".format(
-                        chunk.id))
+                        chunk.id
+                    )
+                )
             self._position += len(data)
             result.write(data)
         return result.getvalue()
 
     def writable(self):
-        return 'w' in self.mode and not self.closed
+        return "w" in self.mode and not self.closed
 
     def write(self, data):
-        assert 'w' in self.mode and not self.closed
+        assert "w" in self.mode and not self.closed
         while data:
             chunk, offset = self._current_chunk()
             written, data = chunk.write(offset, data)
@@ -218,7 +222,8 @@ class File(object):
         if chunk_id not in self._chunks:
             self._flush_chunks()
             self._chunks[chunk_id] = Chunk(
-                self, chunk_id, self.store, self._mapping.get(chunk_id))
+                self, chunk_id, self.store, self._mapping.get(chunk_id)
+            )
         return self._chunks[chunk_id], offset
 
     def __enter__(self):

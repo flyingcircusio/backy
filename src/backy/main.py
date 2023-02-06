@@ -1,14 +1,15 @@
 # -*- encoding: utf-8 -*-
 
-from prettytable import PrettyTable
 import argparse
 import datetime
 import errno
-import humanize
 import logging
 import logging.handlers
 import sys
+
+import humanize
 import tzlocal
+from prettytable import PrettyTable
 
 import backy.backup
 import backy.daemon
@@ -22,15 +23,17 @@ def init_logging(logfile, verbose):  # pragma: no cover
         handler = logging.handlers.WatchedFileHandler(logfile, delay=True)
         handler.setFormatter(
             logging.Formatter(
-                '%(asctime)s [%(process)d] %(levelname)s %(message)s',
-                '%Y-%m-%d %H:%M:%S'))
+                "%(asctime)s [%(process)d] %(levelname)s %(message)s",
+                "%Y-%m-%d %H:%M:%S",
+            )
+        )
     else:
         handler = logging.StreamHandler(sys.stdout)
-    toplevel = logging.getLogger('backy')
+    toplevel = logging.getLogger("backy")
     toplevel.setLevel(logging.DEBUG if verbose else logging.INFO)
     toplevel.addHandler(handler)
     if logfile:
-        logger.info('$ %s', ' '.join(sys.argv))
+        logger.info("$ %s", " ".join(sys.argv))
 
 
 def valid_date(s):
@@ -57,41 +60,52 @@ class Command(object):
         total_bytes = 0
 
         tz = tzlocal.get_localzone()
-        t = PrettyTable([
-            f'Date ({tz})', 'ID', 'Size', 'Duration', 'Tags', 'Trust'])
-        t.align = 'l'
-        t.align['Size'] = 'r'
-        t.align['Durat'] = 'r'
+        t = PrettyTable(
+            [f"Date ({tz})", "ID", "Size", "Duration", "Tags", "Trust"]
+        )
+        t.align = "l"
+        t.align["Size"] = "r"
+        t.align["Durat"] = "r"
 
         for r in b.history:
-            total_bytes += r.stats.get('bytes_written', 0)
-            duration = r.stats.get('duration')
+            total_bytes += r.stats.get("bytes_written", 0)
+            duration = r.stats.get("duration")
             if duration:
                 duration = humanize.naturaldelta(duration)
             else:
-                duration = '-'
+                duration = "-"
 
-            t.add_row([
-                format_datetime_local(r.timestamp)[0], r.uuid,
-                humanize.naturalsize(
-                    r.stats.get('bytes_written', 0), binary=True), duration,
-                ','.join(r.tags), r.trust])
+            t.add_row(
+                [
+                    format_datetime_local(r.timestamp)[0],
+                    r.uuid,
+                    humanize.naturalsize(
+                        r.stats.get("bytes_written", 0), binary=True
+                    ),
+                    duration,
+                    ",".join(r.tags),
+                    r.trust,
+                ]
+            )
 
         print(t)
 
-        print('{} revisions containing {} data (estimated)'.format(
-            len(b.history), humanize.naturalsize(total_bytes, binary=True)))
+        print(
+            "{} revisions containing {} data (estimated)".format(
+                len(b.history), humanize.naturalsize(total_bytes, binary=True)
+            )
+        )
 
     def backup(self, tags):
         b = backy.backup.Backup(self.path)
         b._clean()
         try:
-            tags = set(t.strip() for t in tags.split(','))
+            tags = set(t.strip() for t in tags.split(","))
             b.backup(tags)
         except IOError as e:
             if e.errno not in [errno.EDEADLK, errno.EAGAIN]:
                 raise
-            logger.info('Backup already in progress.')
+            logger.info("Backup already in progress.")
         finally:
             b._clean()
 
@@ -118,206 +132,243 @@ class Command(object):
         b.purge()
 
     def nbd(self, host, port):
-        b = backy.backup.Backup('.')
+        b = backy.backup.Backup(".")
         b.nbd_server(host, port)
 
     def upgrade(self):
-        b = backy.backup.Backup('.')
+        b = backy.backup.Backup(".")
         b.upgrade()
 
     def distrust(self, revision, from_, until):
-        b = backy.backup.Backup('.')
+        b = backy.backup.Backup(".")
         b.distrust(revision, from_, until)
 
     def verify(self, revision):
-        b = backy.backup.Backup('.')
+        b = backy.backup.Backup(".")
         b.verify(revision)
 
 
 def setup_argparser():
     parser = argparse.ArgumentParser(
-        description='Backup and restore for block devices.',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        description="Backup and restore for block devices.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
 
     parser.add_argument(
-        '-v', '--verbose', action='store_true', help='verbose output')
+        "-v", "--verbose", action="store_true", help="verbose output"
+    )
     parser.add_argument(
-        '-l',
-        '--logfile',
-        help='file name to write log output in. '
-        'If no file name is specified, log to stdout.')
+        "-l",
+        "--logfile",
+        help=(
+            "file name to write log output in. "
+            "If no file name is specified, log to stdout."
+        ),
+    )
     parser.add_argument(
-        '-b',
-        '--backupdir',
-        default='.',
-        help='directory where backups and logs are written to '
-        '(default: %(default)s)')
+        "-b",
+        "--backupdir",
+        default=".",
+        help=(
+            "directory where backups and logs are written to "
+            "(default: %(default)s)"
+        ),
+    )
 
     subparsers = parser.add_subparsers()
 
     # INIT
     p = subparsers.add_parser(
-        'init',
+        "init",
         help="""\
 Initialize backup for a <source> in the backup directory.
-""")
-    p.set_defaults(func='init')
-    p.add_argument('type')
-    p.add_argument('source')
+""",
+    )
+    p.set_defaults(func="init")
+    p.add_argument("type")
+    p.add_argument("source")
 
     # BACKUP
-    p = subparsers.add_parser('backup', help="""\
+    p = subparsers.add_parser(
+        "backup",
+        help="""\
 Perform a backup.
-""")
-    p.add_argument('tags', help='Tags to apply to the backup.')
-    p.set_defaults(func='backup')
+""",
+    )
+    p.add_argument("tags", help="Tags to apply to the backup.")
+    p.set_defaults(func="backup")
 
     # RESTORE
     p = subparsers.add_parser(
-        'restore', help="""\
+        "restore",
+        help="""\
 Restore (a given revision) to a given target.
-""")
+""",
+    )
     p.add_argument(
-        '-r',
-        '--revision',
-        metavar='SPEC',
-        default='latest',
-        help='use revision SPEC as restore source')
+        "-r",
+        "--revision",
+        metavar="SPEC",
+        default="latest",
+        help="use revision SPEC as restore source",
+    )
     p.add_argument(
-        'target',
-        metavar='TARGET',
+        "target",
+        metavar="TARGET",
         help="""\
 Copy backed up revision to TARGET. Use stdout if TARGET is "-".
-""")
-    p.set_defaults(func='restore')
+""",
+    )
+    p.set_defaults(func="restore")
 
     # BACKUP
     p = subparsers.add_parser(
-        'purge',
+        "purge",
         help="""\
 Purge the backup store (i.e. chunked) from unused data.
-""")
-    p.set_defaults(func='purge')
+""",
+    )
+    p.set_defaults(func="purge")
 
     # FIND
     p = subparsers.add_parser(
-        'find',
+        "find",
         help="""\
 Print full path to a given revision's image file.
-""")
+""",
+    )
     p.add_argument(
-        '-r',
-        '--revision',
-        metavar='SPEC',
-        default='latest',
-        help='use revision SPEC to find')
-    p.set_defaults(func='find')
+        "-r",
+        "--revision",
+        metavar="SPEC",
+        default="latest",
+        help="use revision SPEC to find",
+    )
+    p.set_defaults(func="find")
 
     # STATUS
     p = subparsers.add_parser(
-        'status',
+        "status",
         help="""\
 Show backup status. Show inventory and summary information.
-""")
-    p.set_defaults(func='status')
+""",
+    )
+    p.set_defaults(func="status")
 
     # NBD
     p = subparsers.add_parser(
-        'nbd-server',
+        "nbd-server",
         help="""\
 Serve the revisions of this backup through an NBD server.
-""")
+""",
+    )
     p.add_argument(
-        '-H',
-        '--host',
-        default='127.0.0.1',
-        help='which IP address to listen on (default: 127.0.0.1)')
+        "-H",
+        "--host",
+        default="127.0.0.1",
+        help="which IP address to listen on (default: 127.0.0.1)",
+    )
     p.add_argument(
-        '-p',
-        '--port',
-        default='9000',
+        "-p",
+        "--port",
+        default="9000",
         type=int,
-        help='which port to listen on (default: 9000)')
+        help="which port to listen on (default: 9000)",
+    )
 
-    p.set_defaults(func='nbd')
+    p.set_defaults(func="nbd")
 
     # upgrade
     p = subparsers.add_parser(
-        'upgrade',
+        "upgrade",
         help="""\
 Upgrade this backup (incl. its data) to the newest supported version.
-""")
-    p.set_defaults(func='upgrade')
+""",
+    )
+    p.set_defaults(func="upgrade")
 
     # SCHEDULER DAEMON
-    p = subparsers.add_parser('scheduler', help="""\
+    p = subparsers.add_parser(
+        "scheduler",
+        help="""\
 Run the scheduler.
-""")
-    p.set_defaults(func='scheduler')
-    p.add_argument('-c', '--config', default='/etc/backy.conf')
+""",
+    )
+    p.set_defaults(func="scheduler")
+    p.add_argument("-c", "--config", default="/etc/backy.conf")
 
     # SCHEDULE CHECK
     p = subparsers.add_parser(
-        'check',
+        "check",
         help="""\
 Check whether all jobs adhere to their schedules' SLA.
-""")
-    p.set_defaults(func='check')
-    p.add_argument('-c', '--config', default='/etc/backy.conf')
+""",
+    )
+    p.set_defaults(func="check")
+    p.add_argument("-c", "--config", default="/etc/backy.conf")
 
     # DISTRUST
     p = subparsers.add_parser(
-        'distrust', help="""\
+        "distrust",
+        help="""\
 Distrust one or all revisions.
-""")
+""",
+    )
     p.add_argument(
-        '-r',
-        '--revision',
-        metavar='SPEC',
-        default='',
-        help='use revision SPEC to distrust, '
-        'distrusting all if not given')
+        "-r",
+        "--revision",
+        metavar="SPEC",
+        default="",
+        help="use revision SPEC to distrust, distrusting all if not given",
+    )
     p.add_argument(
-        '-f',
-        '--from',
-        metavar='DATE',
+        "-f",
+        "--from",
+        metavar="DATE",
         type=valid_date,
-        help='Mark revisions on or after this date as distrusted',
-        dest='from_')
+        help="Mark revisions on or after this date as distrusted",
+        dest="from_",
+    )
     p.add_argument(
-        '-u',
-        '--until',
-        metavar='DATE',
+        "-u",
+        "--until",
+        metavar="DATE",
         type=valid_date,
-        help='Mark revisions on or before this date as distrusted')
-    p.set_defaults(func='distrust')
+        help="Mark revisions on or before this date as distrusted",
+    )
+    p.set_defaults(func="distrust")
 
     # VERIFY
     p = subparsers.add_parser(
-        'verify', help="""\
+        "verify",
+        help="""\
 Verify one or all revisions.
-""")
+""",
+    )
     p.add_argument(
-        '-r',
-        '--revision',
-        metavar='SPEC',
-        default='',
-        help='use revision SPEC to verify, '
-        'verifying all if not given')
-    p.set_defaults(func='verify')
+        "-r",
+        "--revision",
+        metavar="SPEC",
+        default="",
+        help="use revision SPEC to verify, verifying all if not given",
+    )
+    p.set_defaults(func="verify")
 
     # FORGET
     p = subparsers.add_parser(
-        'forget', help="""\
+        "forget",
+        help="""\
 Forget revision.
-""")
+""",
+    )
     p.add_argument(
-        '-r',
-        '--revision',
-        metavar='SPEC',
+        "-r",
+        "--revision",
+        metavar="SPEC",
         required=True,
-        help='use revision SPEC to forget')
-    p.set_defaults(func='forget')
+        help="use revision SPEC to forget",
+    )
+    p.set_defaults(func="forget")
 
     return parser
 
@@ -326,12 +377,12 @@ def main():
     parser = setup_argparser()
     args = parser.parse_args()
 
-    if not hasattr(args, 'func'):
+    if not hasattr(args, "func"):
         parser.print_usage()
         sys.exit(0)
 
     # Logging
-    if args.func != 'check':
+    if args.func != "check":
         init_logging(args.logfile, args.verbose)
 
     command = Command(args.backupdir)
@@ -339,19 +390,19 @@ def main():
 
     # Pass over to function
     func_args = dict(args._get_kwargs())
-    del func_args['func']
-    del func_args['verbose']
-    del func_args['backupdir']
-    del func_args['logfile']
+    del func_args["func"]
+    del func_args["verbose"]
+    del func_args["backupdir"]
+    del func_args["logfile"]
 
     try:
-        logger.debug('backup.{0}(**{1!r})'.format(args.func, func_args))
+        logger.debug("backup.{0}(**{1!r})".format(args.func, func_args))
         func(**func_args)
         if args.logfile:
-            logger.info('Backy operation complete.')
+            logger.info("Backy operation complete.")
         sys.exit(0)
     except Exception as e:
-        print('Error: {}'.format(e), file=sys.stderr)
+        print("Error: {}".format(e), file=sys.stderr)
         logger.exception(e)
-        logger.info('Backy operation failed.')
+        logger.info("Backy operation failed.")
         sys.exit(1)

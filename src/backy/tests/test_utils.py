@@ -1,13 +1,18 @@
-from zoneinfo import ZoneInfo
 import datetime
 import os
 import sys
+from zoneinfo import ZoneInfo
+
+import pytest
 
 import backy.utils
-import pytest
 from backy.tests import Ellipsis
-from backy.utils import (SafeFile, copy_overwrite, files_are_equal,
-                         files_are_roughly_equal)
+from backy.utils import (
+    SafeFile,
+    copy_overwrite,
+    files_are_equal,
+    files_are_roughly_equal,
+)
 
 
 def test_ellipsis():
@@ -15,14 +20,18 @@ def test_ellipsis():
     assert Ellipsis("a...c") == "abc"
     assert Ellipsis("a...d") != "abc"
     assert Ellipsis("a...c...g") == "abcdefg"
-    assert (Ellipsis("""\
+    assert (
+        Ellipsis(
+            """\
 ...
 a
 ...
 d...g
 ...
 z
-...""") == """\
+..."""
+        )
+        == """\
 000
 111
 a
@@ -30,38 +39,48 @@ foobar
 drinking
 something
 z
-zoo""")
+zoo"""
+    )
     assert not Ellipsis("") == "asdf"
     with pytest.raises(Exception):
         assert Ellipsis("") == "abcdefg"
 
 
 def test_ellipsis_lines():
-    assert (Ellipsis("""
+    assert (
+        Ellipsis(
+            """
 asdf...bsdf
 csdf
 ...
 dsdf...fooo
-""") == """
+"""
+        )
+        == """
 asdffoobarbsdf
 csdf
 gnar gnarr gnarr
 dsdfblablafooo
-""")
+"""
+    )
 
 
 def test_ellipsis_report():
-    report = Ellipsis("""
+    report = Ellipsis(
+        """
 asdf...bsdf
 csdf
 ...
 dsdf...fooo
-""").compare("""
+"""
+    ).compare(
+        """
 asdffoobarbsdf
 csdf
 gnar gnar gnarr
 dsdfblablafooobar
-""")
+"""
+    )
     assert not report.matches
     assert """\
   asdffoobarbsdf
@@ -70,7 +89,9 @@ dsdfblablafooobar
   dsdfblablafooobar
 - dsdf...fooo
 - \
-""" == "\n".join(report.diff)
+""" == "\n".join(
+        report.diff
+    )
 
 
 def test_ellipsis_escaping():
@@ -248,7 +269,8 @@ def test_roughly_compare_files_same(tmpdir):
 
     for x in range(20):
         assert files_are_roughly_equal(
-            open("a", "rb"), open("b", "rb"), blocksize=10)
+            open("a", "rb"), open("b", "rb"), blocksize=10
+        )
 
 
 def test_roughly_compare_files_1_changed_block(tmpdir):
@@ -263,7 +285,8 @@ def test_roughly_compare_files_1_changed_block(tmpdir):
     detected = 0
     for x in range(20):
         detected += files_are_roughly_equal(
-            open("a", "rb"), open("b", "rb"), blocksize=10)
+            open("a", "rb"), open("b", "rb"), blocksize=10
+        )
 
     assert detected > 0 and detected <= 20
 
@@ -310,7 +333,7 @@ def test_copy_overwrite_correctly_makes_sparse_file(tmpdir):
 
 
 def test_unmocked_now_returns_time_time_float():
-    before = datetime.datetime.now(ZoneInfo('UTC'))
+    before = datetime.datetime.now(ZoneInfo("UTC"))
     now = backy.utils.now()
-    after = datetime.datetime.now(ZoneInfo('UTC'))
+    after = datetime.datetime.now(ZoneInfo("UTC"))
     assert before <= now <= after

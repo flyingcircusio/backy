@@ -15,8 +15,13 @@ cd ${BACKUP}/backup
 # $BACKY init file ../original
 cat > config <<EOF
 ---
-    type: file
-    filename: ../original
+    schedule:
+        daily:
+            interval: 1d
+            keep: 7
+    source:
+        type: file
+        filename: ../original
 EOF
 
 echo "Using ${BACKUP} as workspace."
@@ -31,7 +36,11 @@ echo " Done."
 
 echo -n "Backing up img_state1.img. "
 ln -sf img_state1.img ../original
-$BACKY backup test
+$BACKY backup manual:test
+echo "Done."
+
+echo -n "Backing up img_state1.img with unknown tag. "
+! $BACKY backup unknown
 echo "Done."
 
 echo -n "Restoring img_state1.img from level 0. "
@@ -53,7 +62,7 @@ rm $BACKUP/restore_*
 
 echo -n "Backing up img_state2.img. "
 ln -sf img_state2.img ../original
-$BACKY backup test
+$BACKY backup daily
 echo "Done."
 
 echo -n "Restoring img_state2.img from level 0. "
@@ -89,7 +98,7 @@ rm $BACKUP/restore_*
 
 echo -n "Backing up img_state2.img again. "
 ln -sf img_state2.img ../original
-$BACKY backup test
+$BACKY backup -f test
 echo "Done."
 
 echo -n "Restoring img_state2.img from level 0. "
@@ -139,7 +148,7 @@ rm $BACKUP/restore_*
 
 echo -n "Backing up img_state3.img. "
 ln -sf img_state3.img ../original
-$BACKY backup test
+$BACKY backup manual:test
 echo "Done."
 
 echo -n "Restoring img_state3.img from level 0. "

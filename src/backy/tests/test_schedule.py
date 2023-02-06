@@ -194,17 +194,19 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
     assert [{"daily"}] * 6 == [rev.tags for rev in backup.history]
     assert not os.path.exists(r.filename + ".rev")
 
-    # If we have unknown tags, then those do not expire. However, the
-    # known tag disappears but then the file remains because there's still
-    # a tag left.
+    # If we have manual tags, then those do not expire. However, the
+    # known and unknown tag disappear but then the file remains
+    # because there's still a manual tag left.
     r = add_revision(datetime(2014, 5, 4, 11, 0, tzinfo=UTC))
-    r.tags = {"daily", "test"}
+    r.tags = {"daily", "manual:test", "unknown"}
     r.write_info()
     assert os.path.exists(r.filename + ".rev")
     expired = schedule.expire(backup)
     assert [] == [x.uuid for x in expired]
     backup.scan()
-    assert [{"test"}] + [{"daily"}] * 6 == [rev.tags for rev in backup.history]
+    assert [{"manual:test"}] + [{"daily"}] * 6 == [
+        rev.tags for rev in backup.history
+    ]
     assert os.path.exists(r.filename + ".rev")
 
 

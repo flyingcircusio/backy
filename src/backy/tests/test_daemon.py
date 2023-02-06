@@ -67,22 +67,22 @@ def test_fail_on_nonexistent_config():
 async def test_run_backup(daemon):
     job = daemon.jobs["test01"]
 
-    await job.run_backup(set(["asdf"]))
+    await job.run_backup({"manual:asdf"})
     job.backup.scan()
     assert len(job.backup.history) == 1
     revision = job.backup.history[0]
-    assert revision.tags == set(["asdf"])
+    assert revision.tags == {"manual:asdf"}
     backend = ChunkedFileBackend(revision)
     with backend.open("r") as f:
         assert f.read() == b"I am your father, Luke!"
 
     # Run again. This also covers the code path that works if
     # the target backup directory exists already.
-    await job.run_backup(set(["asdf"]))
+    await job.run_backup({"manual:asdf"})
     job.backup.scan()
     assert len(job.backup.history) == 2
     revision = job.backup.history[1]
-    assert revision.tags == set(["asdf"])
+    assert revision.tags == {"manual:asdf"}
     backend = ChunkedFileBackend(revision)
     with backend.open("r") as f:
         assert f.read() == b"I am your father, Luke!"

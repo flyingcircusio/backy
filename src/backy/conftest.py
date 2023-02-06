@@ -75,7 +75,10 @@ def schedule():
 @pytest.fixture
 def backup(schedule, tmpdir):
     with open(str(tmpdir / "config"), "wb") as f:
-        f.write(b"{'type': 'file', 'filename': 'test'}")
+        f.write(
+            b"{'source': {'type': 'file', 'filename': 'test'},"
+            b"'schedule': {'daily': {'interval': '1d', 'keep': 7}}}"
+        )
     return backy.backup.Backup(str(tmpdir))
 
 

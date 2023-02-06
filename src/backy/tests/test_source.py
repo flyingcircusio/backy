@@ -7,9 +7,14 @@ def test_configure_ceph_source(tmpdir):
         f.write(
             """\
 ---
-    type: ceph-rbd
-    pool: test
-    image: test04
+    schedule:
+        daily:
+            interval: 1d
+            keep: 7
+    source:
+        type: ceph-rbd
+        pool: test
+        image: test04
 """
         )
     backup = Backup(str(tmpdir))

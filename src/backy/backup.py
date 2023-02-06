@@ -12,7 +12,8 @@ from backy.utils import min_date
 from .backends.chunked import ChunkedFileBackend
 from .backends.cowfile import COWFileBackend
 from .nbd.server import Server
-from .revision import TRUST_DISTRUSTED, Revision
+from .revision import TRUST_DISTRUSTED, Revision, filter_schedule_tags
+from .schedule import Schedule
 from .sources import select_source
 from .utils import CHUNK_SIZE, SafeFile, copy, posix_fadvise
 
@@ -81,6 +82,7 @@ class Backup(object):
     """
 
     config = None
+    schedule = None
     backend_type = None
 
     def __init__(self, path):
@@ -102,16 +104,18 @@ class Backup(object):
 
         # Initialize our source
         try:
-            source_factory = select_source(self.config["type"])
+            source_factory = select_source(self.config["source"]["type"])
         except IndexError:
             logger.error(
-                "No source type named `{}` exists.".format(self.config["type"])
+                "No source type named `{}` exists.".format(
+                    self.config["source"]["type"]
+                )
             )
             raise
-        self.source = source_factory(self.config)
+        self.source = source_factory(self.config["source"])
 
         # Initialize our backend
-        self.backend_type = self.config.get("backend", None)
+        self.backend_type = self.config["source"].get("backend", None)
         if self.backend_type is None:
             if not self.history:
                 # Start fresh backups with our new default.
@@ -121,29 +125,13 @@ class Backup(object):
                 # they are in.
                 self.backend_type = self.history[-1].backend_type
 
+        self.schedule = Schedule()
+        self.schedule.configure(self.config["schedule"])
+
         if self.backend_type == "cowfile":
             self.backend_factory = COWFileBackend
         elif self.backend_type == "chunked":
             self.backend_factory = ChunkedFileBackend
-
-    @classmethod
-    def init(cls, path, type, source):
-        config_path = p.join(path, "config")
-        if p.exists(config_path):
-            raise RuntimeError("Refusing to initialize with existing config.")
-
-        if not p.exists(path):
-            os.makedirs(path)
-
-        source_factory = select_source(type)
-        source_config = source_factory.config_from_cli(source)
-        source_config["type"] = type
-
-        with SafeFile(config_path, encoding="utf-8") as f:
-            f.open_new("wb")
-            yaml.safe_dump(source_config, f)
-
-        return Backup(path)
 
     def scan(self):
         self.history = []
@@ -185,7 +173,17 @@ class Backup(object):
 
     @locked(target=".backup", mode="exclusive")
     @locked(target=".purge", mode="shared")
-    def backup(self, tags):
+    def backup(self, tags, force=False):
+        if not force:
+            missing_tags = (
+                filter_schedule_tags(tags) - self.schedule.schedule.keys()
+            )
+            if missing_tags:
+                raise RuntimeError(
+                    f"The following tags are missing from the schedule: {', '.join(missing_tags)}\n"
+                    "Check the config file, add the `manual:` prefix or disable tag validation (-f)"
+                )
+
         start = time.time()
 
         if not self.source.ready():

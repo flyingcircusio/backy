@@ -27,12 +27,20 @@ def test_smoketest_internal(tmpdir):
     source3 = str(tmpdir / "image3.qemu")
     generate_test_data(source3, 2 * 1024**2, b"3")
 
-    backup_dir = str(tmpdir / "image1.backup")
-    os.mkdir(backup_dir)
-    backup = backy.backup.Backup.init(backup_dir, "file", source1)
+    backup_dir = tmpdir / "image1.backup"
+    os.mkdir(str(backup_dir))
+    with open(str(backup_dir / "config"), "wb") as f:
+        f.write(
+            (
+                "{'source': {'type': 'file', 'filename': '%s'},"
+                "'schedule': {'daily': {'interval': '1d', 'keep': 7}}}"
+                % source1
+            ).encode("utf-8")
+        )
+    backup = backy.backup.Backup(str(backup_dir))
 
     # Backup first state
-    backup.backup(tags={"test"})
+    backup.backup({"manual:test"})
 
     # Restore first state form newest revision at position 0
     restore_target = str(tmpdir / "image1.restore")
@@ -45,7 +53,7 @@ def test_smoketest_internal(tmpdir):
 
     # Backup second state
     backup.source.filename = source2
-    backup.backup(tags={"test"})
+    backup.backup({"test"}, force=True)
     assert len(backup.history) == 2
 
     # Restore second state from second backup which is the newest at position 0
@@ -60,7 +68,7 @@ def test_smoketest_internal(tmpdir):
 
     # Backup second state again
     backup.source.filename = source2
-    backup.backup(tags={"test"})
+    backup.backup({"manual:test"})
     assert len(backup.history) == 3
 
     # Restore image2 from its most recent at position 0
@@ -77,7 +85,7 @@ def test_smoketest_internal(tmpdir):
 
     # Backup third state
     backup.source.filename = source3
-    backup.backup(tags={"test"})
+    backup.backup({"test"}, True)
     assert len(backup.history) == 4
 
     # Restore image3 from the most curent state
@@ -108,6 +116,7 @@ def test_smoketest_external():
 Using /... as workspace.
 Generating Test Data.. Done.
 Backing up img_state1.img. Done.
+Backing up img_state1.img with unknown tag. Done.
 Restoring img_state1.img from level 0. Done.
 Diffing restore_state1.img against img_state1.img. Success.
 Backing up img_state2.img. Done.
@@ -131,22 +140,22 @@ Restoring img_state2.img from level 2. Done.
 Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 3. Done.
 Diffing restore_state1.img against img_state1.img. Success.
-+----------------------+------------------------+-----------+----------+------+---------+
-| Date (...) | ID                     |      Size | Duration | Tags | Trust   |
-+----------------------+------------------------+-----------+----------+------+---------+
-| ...  | ... | 512.0 KiB | a moment | test | trusted |
-| ...  | ... | 512.0 KiB | a moment | test | trusted |
-| ...  | ... | 512.0 KiB | a moment | test | trusted |
-| ...  | ... | 512.0 KiB | a moment | test | trusted |
-+----------------------+------------------------+-----------+----------+------+---------+
++----------------------+------------------------+-----------+----------+-------------+---------+
+| Date (...) | ID                     |      Size | Duration | Tags        | Trust   |
++----------------------+------------------------+-----------+----------+-------------+---------+
+| ...  | ... | 512.0 KiB | a moment | manual:test | trusted |
+| ...  | ... | 512.0 KiB | a moment | daily       | trusted |
+| ...  | ... | 512.0 KiB | a moment | test        | trusted |
+| ...  | ... | 512.0 KiB | a moment | manual:test | trusted |
++----------------------+------------------------+-----------+----------+-------------+---------+
 4 revisions containing 2.0 MiB data (estimated)
-+----------------------+------------------------+-----------+----------+------+---------+
-| Date (...) | ID                     |      Size | Duration | Tags | Trust   |
-+----------------------+------------------------+-----------+----------+------+---------+
-| ...  | ... | 512.0 KiB | a moment | test | trusted |
-| ...  | ... | 512.0 KiB | a moment | test | trusted |
-| ...  | ... | 512.0 KiB | a moment | test | trusted |
-+----------------------+------------------------+-----------+----------+------+---------+
++----------------------+------------------------+-----------+----------+-------------+---------+
+| Date (...) | ID                     |      Size | Duration | Tags        | Trust   |
++----------------------+------------------------+-----------+----------+-------------+---------+
+| ...  | ... | 512.0 KiB | a moment | manual:test | trusted |
+| ...  | ... | 512.0 KiB | a moment | test        | trusted |
+| ...  | ... | 512.0 KiB | a moment | manual:test | trusted |
++----------------------+------------------------+-----------+----------+-------------+---------+
 3 revisions containing 1.5 MiB data (estimated)
 """
         )

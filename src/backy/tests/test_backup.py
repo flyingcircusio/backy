@@ -17,39 +17,6 @@ def test_config(simple_file_config, tmpdir):
     assert backup.source.filename == "input-file"
 
 
-def test_init_ceph(tmpdir):
-    Backup.init(str(tmpdir), "ceph-rbd", "test/test04")
-    with open(str(tmpdir / "config")) as f:
-        config = yaml.safe_load(f)
-    assert config == {"type": "ceph-rbd", "image": "test04", "pool": "test"}
-
-
-def test_init_file(tmpdir):
-    Backup.init(str(tmpdir), "file", "/dev/foo")
-    with open(str(tmpdir / "config")) as f:
-        config = yaml.safe_load(f)
-    assert config == {"type": "file", "filename": "/dev/foo"}
-
-
-def test_init_creates_directory(tmpdir):
-    target = str(tmpdir / "asdf")
-    assert not os.path.exists(target)
-    Backup.init(target, "file", "/dev/foo")
-    assert os.path.isdir(target)
-
-
-def test_init_refused_with_existing_config(tmpdir):
-    existing_config = b"""\
-{"source-type": "file", "source": {"filename": "asdf"}, "marker": 1}\
-"""
-    with open(str(tmpdir / "config"), "wb") as f:
-        f.write(existing_config)
-    with pytest.raises(RuntimeError):
-        Backup.init(str(tmpdir), "file", "asdf")
-    with open(str(tmpdir / "config"), "rb") as f:
-        assert f.read() == existing_config
-
-
 def test_find(simple_file_config, tmpdir):
     backup = simple_file_config
     rev = Revision(backup, "123-456", backup)
@@ -75,7 +42,7 @@ def test_restore_target(simple_file_config):
     target = "restore.img"
     with open(source, "wb") as f:
         f.write(b"volume contents\n")
-    backup.backup("daily")
+    backup.backup({"daily"})
     backup.restore(0, target)
     with open(source, "rb") as s, open(target, "rb") as t:
         assert s.read() == t.read()
@@ -86,7 +53,7 @@ def test_restore_stdout(simple_file_config, capfd):
     source = "input-file"
     with open(source, "wb") as f:
         f.write(b"volume contents\n")
-    backup.backup(["daily"])
+    backup.backup({"daily"})
     backup.restore(0, "-")
     assert not os.path.exists("-")
     out, err = capfd.readouterr()

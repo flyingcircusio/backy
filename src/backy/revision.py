@@ -13,8 +13,14 @@ TRUST_TRUSTED = "trusted"
 TRUST_DISTRUSTED = "distrusted"
 TRUST_VERIFIED = "verified"
 
+TAG_MANUAL_PREFIX = "manual:"
+
 
 logger = logging.getLogger(__name__)
+
+
+def filter_schedule_tags(tags):
+    return {t for t in tags if not t.startswith(TAG_MANUAL_PREFIX)}
 
 
 class Revision(object):
@@ -22,7 +28,7 @@ class Revision(object):
     timestamp = None
     parent = None
     stats = None
-    tags = ()
+    tags = None
     trust = TRUST_TRUSTED  # or TRUST_DISTRUSTED, TRUST_VERIFIED
 
     def __init__(self, backup, uuid=None, timestamp=None):
@@ -31,6 +37,7 @@ class Revision(object):
         self.uuid = uuid if uuid else shortuuid.uuid()
         self.timestamp = timestamp if timestamp else now()
         self.stats = {"bytes_written": 0}
+        self.tags = set()
 
     @classmethod
     def create(cls, backup, tags):

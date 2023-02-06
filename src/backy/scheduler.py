@@ -100,7 +100,9 @@ class Job(object):
         config = p.join(self.path, "config")
         with SafeFile(config, encoding="utf-8") as f:
             f.open_new("wb")
-            yaml.safe_dump(self.source, f)
+            yaml.safe_dump(
+                {"source": self.source, "schedule": self.schedule.config}, f
+            )
             if p.exists(config) and filecmp.cmp(config, f.name):
                 raise ValueError("not changed")
 

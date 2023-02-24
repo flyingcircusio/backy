@@ -11,7 +11,7 @@ Changelog
   jobs may delay other long jobs but fast jobs should be able to squeeze
   through quickly.
 
-- Port to Python 3.8+.
+- Port to Python 3.10+.
 
 - Continue deleting snapshots even if some are protected.
 
@@ -22,6 +22,10 @@ Changelog
 - Do not count running jobs as overdue.
 
 - Regularly log overdue jobs.
+
+- Delete Tags from former schedules
+
+- Add forget subcommand
 
 2.4.3 (2019-04-17)
 ==================

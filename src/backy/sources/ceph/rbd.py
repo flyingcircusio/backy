@@ -13,8 +13,13 @@ logger = logging.getLogger(__name__)
 
 
 class RBDClient(object):
-    def _ceph_cli(self, cmdline):
-        return subprocess.check_output(cmdline)
+    def _ceph_cli(self, cmdline, encoding="utf-8") -> str:
+        # This wrapper function for the `rbd` command is only used for
+        # getting and interpreting text messages, making this the correct level for
+        # managing text encoding.
+        # Other use cases where binary data is piped to rbd have their own dedicated
+        # wrappers.
+        return subprocess.check_output(cmdline, encoding=encoding, errors="replace")
 
     def _rbd(self, cmd, format=None):
         cmd = filter(None, cmd)
@@ -29,7 +34,7 @@ class RBDClient(object):
         result = self._ceph_cli(rbd)
 
         if format == "json":
-            result = json.loads(result.decode("utf-8"))
+            result = json.loads(result)
 
         return result
 

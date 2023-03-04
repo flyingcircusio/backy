@@ -15,12 +15,18 @@ def test_rbd_command_wrapper(check_output):
     client = RBDClient()
 
     client._rbd(["foo"])
-    check_output.assert_called_with([RBD, "foo"])
+    check_output.assert_called_with([RBD, "foo"],
+        encoding='utf-8',
+        errors='replace'
+    )
 
     check_output.return_value = b'{"asdf": 1}'
     result = client._rbd(["foo"], format="json")
     assert result == {"asdf": 1}
-    check_output.assert_called_with([RBD, "foo", "--format=json"])
+    check_output.assert_called_with([RBD, "foo", "--format=json"],
+        encoding='utf-8',
+        errors='replace'
+    )
 
 
 def test_rbd_exists(rbdclient):

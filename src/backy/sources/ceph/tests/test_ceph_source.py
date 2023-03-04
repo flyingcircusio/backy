@@ -230,16 +230,23 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep, backend_factory):
                 "snap",
                 "create",
                 "test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802",
-            ]
+            ],
+            encoding='utf-8',
+            errors='replace'
         ),
-        mock.call([RBD, "snap", "ls", "test/foo" , "--format=json"]),
+        mock.call([RBD, "snap", "ls", "test/foo" , "--format=json"],
+            encoding='utf-8',
+            errors='replace'
+        ),
         mock.call(
             [
                 RBD,
                 "snap",
                 "rm",
                 "test/foo@backy-ed968696-5ab0-4fe0-af1c-14cadab44661",
-            ]
+            ],
+            encoding='utf-8',
+            errors='replace',
         ),
     ]
 
@@ -272,8 +279,14 @@ def test_full_backup(check_output, backup, tmpdir, backend_factory):
         export.assert_called_with("test/foo@backy-a0")
 
     assert check_output.call_args_list == [
-        mock.call([RBD, "snap", "create", "test/foo@backy-a0"]),
-        mock.call([RBD, "snap", "ls", "test/foo" , "--format=json"]),
+        mock.call([RBD, "snap", "create", "test/foo@backy-a0"],
+            encoding='utf-8',
+            errors='replace'
+        ),
+        mock.call([RBD, "snap", "ls", "test/foo" , "--format=json"],
+            encoding='utf-8',
+            errors='replace'
+        ),
     ]
 
     with backend.open("rb") as f:

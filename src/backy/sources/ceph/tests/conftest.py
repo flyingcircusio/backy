@@ -56,7 +56,7 @@ class CephCLIBase:
             False  # flag for stopping modifications to images and snaps
         )
 
-    def __call__(self, cmdline):
+    def __call__(self, cmdline) -> str:
         print(cmdline)
         assert cmdline[0] == "rbd"
         cmdline.pop(0)
@@ -86,7 +86,7 @@ class CephCLIBase:
 
     def showmapped(self, format):
         assert format == "json"
-        return json.dumps(self.mapped_images).encode("utf-8")
+        return json.dumps(self.mapped_images)
 
     def info(self, imagespec, format):
         assert format == "json"
@@ -112,7 +112,7 @@ class CephCLIBase:
 
     def snap_ls(self, format, imagespec):
         assert format == "json"
-        return json.dumps(self.snaps[imagespec]).encode("utf-8")
+        return json.dumps(self.snaps[imagespec])
 
     def snap_rm(self, snapspec):
         image, snapname = snapspec.split("@")
@@ -177,7 +177,7 @@ class CephJewelCLI(CephCLIBase):
             with open(image["device"], "a"):
                 pass
             self.mapped_images[str(id)] = image
-        return b""
+        return ""
 
 
 class CephLuminousCLI(CephJewelCLI):
@@ -203,7 +203,7 @@ class CephNautilusCLI(CephCLIBase):
             with open(image["device"], "a"):
                 pass
             self.mapped_images.append(image)
-        return b""
+        return ""
 
     def unmap(self, device):
         if not self._freeze_mapped:

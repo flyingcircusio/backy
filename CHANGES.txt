@@ -27,6 +27,9 @@ Changelog
 
 - Add forget subcommand
 
+- Add compatibility to changed `rbd showmapped` output format in Ceph Nautilus.
+  Ceph Jewel and Luminous clusters remain supported.
+
 2.4.3 (2019-04-17)
 ==================
 

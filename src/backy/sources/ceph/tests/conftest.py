@@ -4,8 +4,8 @@ import subprocess
 
 import pytest
 
-from backy.sources.ceph.rbd import RBDClient
 import backy.sources.ceph
+from backy.sources.ceph.rbd import RBDClient
 
 
 class CephCLIBase:
@@ -108,7 +108,9 @@ class CephCLIBase:
                     }
                 )
             except KeyError:
-                raise subprocess.CalledProcessError(cmd="snap create", returncode=2)
+                raise subprocess.CalledProcessError(
+                    cmd="snap create", returncode=2
+                )
 
     def snap_ls(self, format, imagespec):
         assert format == "json"
@@ -149,6 +151,7 @@ class CephCLIBase:
         imagedata["pool"] = pool
         imagedata["name"] = imagename
         return imagedata
+
 
 class CephJewelCLI(CephCLIBase):
     def __init__(self, tmpdir):

@@ -19,7 +19,9 @@ class RBDClient(object):
         # managing text encoding.
         # Other use cases where binary data is piped to rbd have their own dedicated
         # wrappers.
-        return subprocess.check_output(cmdline, encoding=encoding, errors="replace")
+        return subprocess.check_output(
+            cmdline, encoding=encoding, errors="replace"
+        )
 
     def _rbd(self, cmd, format=None):
         cmd = filter(None, cmd)

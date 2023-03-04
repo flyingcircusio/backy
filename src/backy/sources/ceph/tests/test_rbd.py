@@ -1,13 +1,13 @@
-import subprocess
 import os
+import subprocess
 from unittest import mock
 
 import pytest
 
+import backy.sources.ceph
 from backy.ext_deps import RBD
 from backy.sources.ceph.diff import RBDDiffV1
 from backy.sources.ceph.rbd import RBDClient
-import backy.sources.ceph
 
 
 @mock.patch("subprocess.check_output")
@@ -15,17 +15,15 @@ def test_rbd_command_wrapper(check_output):
     client = RBDClient()
 
     client._rbd(["foo"])
-    check_output.assert_called_with([RBD, "foo"],
-        encoding='utf-8',
-        errors='replace'
+    check_output.assert_called_with(
+        [RBD, "foo"], encoding="utf-8", errors="replace"
     )
 
     check_output.return_value = b'{"asdf": 1}'
     result = client._rbd(["foo"], format="json")
     assert result == {"asdf": 1}
-    check_output.assert_called_with([RBD, "foo", "--format=json"],
-        encoding='utf-8',
-        errors='replace'
+    check_output.assert_called_with(
+        [RBD, "foo", "--format=json"], encoding="utf-8", errors="replace"
     )
 
 

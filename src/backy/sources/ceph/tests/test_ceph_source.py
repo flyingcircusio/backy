@@ -53,7 +53,7 @@ def test_context_manager(backup, rbdclient):
 
     revision = Revision(backup, 1)
     with source(revision):
-        assert rbdclient.snap_ls("test/foo")[0]['name'] == "backy-1"
+        assert rbdclient.snap_ls("test/foo")[0]["name"] == "backy-1"
 
     assert len(rbdclient.snap_ls("test/foo")) == 0
 
@@ -77,16 +77,20 @@ def test_context_manager_cleans_out_snapshots(rbdclient, backup, nosleep):
         backup.scan()
 
     assert rbdclient.snap_ls("test/foo") == [
-        {'id': 86925,
-        'name': 'someother',
-        'protected': 'false',
-        'size': 32212254720,
-        'timestamp': 'Sun Feb 12 18:35:18 2023'},
-        {'id': 86925,
-        'name': 'backy-1',
-        'protected': 'false',
-        'size': 32212254720,
-        'timestamp': 'Sun Feb 12 18:35:18 2023'},
+        {
+            "id": 86925,
+            "name": "someother",
+            "protected": "false",
+            "size": 32212254720,
+            "timestamp": "Sun Feb 12 18:35:18 2023",
+        },
+        {
+            "id": 86925,
+            "name": "backy-1",
+            "protected": "false",
+            "size": 32212254720,
+            "timestamp": "Sun Feb 12 18:35:18 2023",
+        },
     ]
 
 
@@ -231,12 +235,13 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep, backend_factory):
                 "create",
                 "test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802",
             ],
-            encoding='utf-8',
-            errors='replace'
+            encoding="utf-8",
+            errors="replace",
         ),
-        mock.call([RBD, "snap", "ls", "test/foo" , "--format=json"],
-            encoding='utf-8',
-            errors='replace'
+        mock.call(
+            [RBD, "snap", "ls", "test/foo", "--format=json"],
+            encoding="utf-8",
+            errors="replace",
         ),
         mock.call(
             [
@@ -245,8 +250,8 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep, backend_factory):
                 "rm",
                 "test/foo@backy-ed968696-5ab0-4fe0-af1c-14cadab44661",
             ],
-            encoding='utf-8',
-            errors='replace',
+            encoding="utf-8",
+            errors="replace",
         ),
     ]
 
@@ -279,13 +284,15 @@ def test_full_backup(check_output, backup, tmpdir, backend_factory):
         export.assert_called_with("test/foo@backy-a0")
 
     assert check_output.call_args_list == [
-        mock.call([RBD, "snap", "create", "test/foo@backy-a0"],
-            encoding='utf-8',
-            errors='replace'
+        mock.call(
+            [RBD, "snap", "create", "test/foo@backy-a0"],
+            encoding="utf-8",
+            errors="replace",
         ),
-        mock.call([RBD, "snap", "ls", "test/foo" , "--format=json"],
-            encoding='utf-8',
-            errors='replace'
+        mock.call(
+            [RBD, "snap", "ls", "test/foo", "--format=json"],
+            encoding="utf-8",
+            errors="replace",
         ),
     ]
 
@@ -395,13 +402,7 @@ def showmapped_json_current(device):
 @pytest.mark.parametrize(
     "backend_factory", [COWFileBackend, ChunkedFileBackend]
 )
-def test_verify_fail(
-    check_output,
-    backup,
-    tmpdir,
-    backend_factory,
-    rbdclient
-):
+def test_verify_fail(check_output, backup, tmpdir, backend_factory, rbdclient):
     source = CephRBD(dict(pool="test", image="foo"))
     source.rbd = rbdclient
     rbdclient._ceph_cli._register_image_for_snaps("test/foo")

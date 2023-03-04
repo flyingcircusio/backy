@@ -44,30 +44,30 @@ def test_assign_revision():
     assert context_manager.revision is revision
 
 
-def test_context_manager(check_output, backup):
+def test_context_manager(backup, rbdclient):
+
     source = CephRBD(dict(pool="test", image="foo"))
+    # rbdclient mock setup:
+    rbdclient._ceph_cli._register_image_for_snaps("test/foo")
+    source.rbd = rbdclient
 
     revision = Revision(backup, 1)
     with source(revision):
-        pass
+        assert rbdclient.snap_ls("test/foo")[0]['name'] == "backy-1"
 
-    assert check_output.call_args_list == [
-        mock.call([RBD, "snap", "create", "test/foo@backy-1"]),
-        mock.call([RBD, "--format=json", "snap", "ls", "test/foo"]),
-    ]
+    assert len(rbdclient.snap_ls("test/foo")) == 0
 
 
-def test_context_manager_cleans_out_snapshots(check_output, backup, nosleep):
+def test_context_manager_cleans_out_snapshots(rbdclient, backup, nosleep):
     source = CephRBD(dict(pool="test", image="foo"))
+    # rbdclient mock setup:
+    rbdclient._ceph_cli._register_image_for_snaps("test/foo")
+    source.rbd = rbdclient
 
-    check_output.side_effect = [
-        # snap create
-        b"{}",
-        # snap ls
-        b'[{"name": "someother"}, {"name": "backy-1"}, {"name": "backy-2"}]',
-        # snap rm backy-2
-        b"{}",
-    ]
+    # snaps without backy- prefix are left untouched
+    rbdclient.snap_create("test/foo@someother")
+    # unexpected revision snapshots are cleaned
+    rbdclient.snap_create("test/foo@backy-2")
 
     revision = Revision(backup, "1")
     with source(revision):
@@ -76,10 +76,17 @@ def test_context_manager_cleans_out_snapshots(check_output, backup, nosleep):
         revision.write_info()
         backup.scan()
 
-    assert check_output.call_args_list == [
-        mock.call([RBD, "snap", "create", "test/foo@backy-1"]),
-        mock.call([RBD, "--format=json", "snap", "ls", "test/foo"]),
-        mock.call([RBD, "snap", "rm", "test/foo@backy-2"]),
+    assert rbdclient.snap_ls("test/foo") == [
+        {'id': 86925,
+        'name': 'someother',
+        'protected': 'false',
+        'size': 32212254720,
+        'timestamp': 'Sun Feb 12 18:35:18 2023'},
+        {'id': 86925,
+        'name': 'backy-1',
+        'protected': 'false',
+        'size': 32212254720,
+        'timestamp': 'Sun Feb 12 18:35:18 2023'},
     ]
 
 
@@ -195,10 +202,8 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep, backend_factory):
         # snap create
         b"{}",
         # snap ls
-        (
-            b'[{"name": "backy-ed968696-5ab0-4fe0-af1c-14cadab44661"}, '
-            b'{"name": "backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802"}]'
-        ),
+        b'[{"name": "backy-ed968696-5ab0-4fe0-af1c-14cadab44661"}, \
+           {"name": "backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802"}]',
         # snap rm backy-ed96...
         b"{}",
     ]
@@ -227,7 +232,7 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep, backend_factory):
                 "test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802",
             ]
         ),
-        mock.call([RBD, "--format=json", "snap", "ls", "test/foo"]),
+        mock.call([RBD, "snap", "ls", "test/foo" , "--format=json"]),
         mock.call(
             [
                 RBD,
@@ -268,7 +273,7 @@ def test_full_backup(check_output, backup, tmpdir, backend_factory):
 
     assert check_output.call_args_list == [
         mock.call([RBD, "snap", "create", "test/foo@backy-a0"]),
-        mock.call([RBD, "--format=json", "snap", "ls", "test/foo"]),
+        mock.call([RBD, "snap", "ls", "test/foo" , "--format=json"]),
     ]
 
     with backend.open("rb") as f:
@@ -349,11 +354,44 @@ def test_full_backup_integrates_changes(
             assert content == f.read()
 
 
+# --- mock data for tests involving RBD, uses data imported from rbd_testdata ---
+
+
+def showmapped_json_legacy(device):
+    return '{{"rbd0": {{"pool": "test", "name": "foo", "snap": "backy-a0", \
+                    "device": "{}"}}}}'.format(
+        device
+    ).encode(
+        "ascii"
+    )
+
+
+def showmapped_json_current(device):
+    return '[{{"id": "0", "pool": "test", "namespace": "", "name": "foo", \
+                    "snap": "backy-a0", \
+                    "device": "{}"}}]'.format(
+        device
+    ).encode(
+        "ascii"
+    )
+
+
+# ---
+
+
 @pytest.mark.parametrize(
     "backend_factory", [COWFileBackend, ChunkedFileBackend]
 )
-def test_verify_fail(check_output, backup, tmpdir, backend_factory):
+def test_verify_fail(
+    check_output,
+    backup,
+    tmpdir,
+    backend_factory,
+    rbdclient
+):
     source = CephRBD(dict(pool="test", image="foo"))
+    source.rbd = rbdclient
+    rbdclient._ceph_cli._register_image_for_snaps("test/foo")
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
@@ -367,20 +405,6 @@ def test_verify_fail(check_output, backup, tmpdir, backend_factory):
     with open(rbd_source, "w") as f:
         f.write("Han likes Leia.")
 
-    check_output.side_effect = [
-        # snap create
-        b"{}",
-        # map
-        b"{}",
-        # showmapped
-        '{{"rbd0": {{"pool": "test", "name": "foo", "snap": "backy-a0", '
-        '"device": "{}"}}}}'.format(rbd_source).encode("ascii"),
-        # unmap
-        b"{}",
-        # snap ls
-        b'[{"name": "backy-a0"}]',
-    ]
-
     backend = backend_factory(revision)
     with backend.open("wb") as f:
         f.write(b"foobar")
@@ -388,20 +412,19 @@ def test_verify_fail(check_output, backup, tmpdir, backend_factory):
     with source(revision):
         assert not source.verify(backend)
 
-    assert check_output.call_args_list == [
-        mock.call([RBD, "snap", "create", "test/foo@backy-a0"]),
-        mock.call([RBD, "--read-only", "map", "test/foo@backy-a0"]),
-        mock.call([RBD, "--format=json", "showmapped"]),
-        mock.call([RBD, "unmap", rbd_source]),
-        mock.call([RBD, "--format=json", "snap", "ls", "test/foo"]),
-    ]
-
 
 @pytest.mark.parametrize(
     "backend_factory", [COWFileBackend, ChunkedFileBackend]
 )
-def test_verify(check_output, backup, tmpdir, backend_factory):
+def test_verify(
+    rbdclient,
+    backup,
+    tmpdir,
+    backend_factory,
+):
     source = CephRBD(dict(pool="test", image="foo"))
+    source.rbd = rbdclient
+    rbdclient._ceph_cli._register_image_for_snaps("test/foo")
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
@@ -411,38 +434,18 @@ def test_verify(check_output, backup, tmpdir, backend_factory):
 
     backup.scan()
 
-    rbd_source = str(tmpdir / "-dev-rbd0")
+    rbd_source = rbdclient.map("test/foo@backy-a0")["device"]
     with open(rbd_source, "wb") as f:
         f.write(b"Han likes Leia.")
+    rbdclient.unmap(rbd_source)
 
     with backend_factory(revision).open("wb") as f:
         f.write(b"Han likes Leia.")
-
-    check_output.side_effect = [
-        # snap create
-        b"{}",
-        # map
-        b"{}",
-        # showmapped
-        '{{"rbd0": {{"pool": "test", "name": "foo", "snap": "backy-a0", '
-        '"device": "{}"}}}}'.format(rbd_source).encode("ascii"),
-        # unmap
-        b"{}",
-        # snap ls
-        b'[{"name": "backy-a0"}]',
-    ]
+        f.flush()
 
     backend = backend_factory(revision)
     with source(revision):
         assert source.verify(backend)
-
-    assert check_output.call_args_list == [
-        mock.call([RBD, "snap", "create", "test/foo@backy-a0"]),
-        mock.call([RBD, "--read-only", "map", "test/foo@backy-a0"]),
-        mock.call([RBD, "--format=json", "showmapped"]),
-        mock.call([RBD, "unmap", rbd_source]),
-        mock.call([RBD, "--format=json", "snap", "ls", "test/foo"]),
-    ]
 
 
 def test_ceph_config_from_cli():
@@ -456,4 +459,6 @@ def test_ceph_config_from_cli():
 def test_ceph_config_from_cli_invalid():
     with pytest.raises(RuntimeError) as exc:
         CephRBD.config_from_cli("foobar")
-    assert str(exc.value) == "ceph source must be initialized with POOL/IMAGE"
+    assert str(exc.value) == (
+        "ceph source must be initialized with " "POOL/IMAGE"
+    )

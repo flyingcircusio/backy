@@ -13,17 +13,20 @@ logger = logging.getLogger(__name__)
 
 
 class RBDClient(object):
+    def _ceph_cli(self, cmdline):
+        return subprocess.check_output(cmdline)
+
     def _rbd(self, cmd, format=None):
         cmd = filter(None, cmd)
         rbd = [RBD]
 
+        rbd.extend(cmd)
+
         if format == "json":
             rbd.append("--format=json")
 
-        rbd.extend(cmd)
-
         logger.debug(" ".join(rbd))
-        result = subprocess.check_output(rbd)
+        result = self._ceph_cli(rbd)
 
         if format == "json":
             result = json.loads(result.decode("utf-8"))
@@ -55,7 +58,7 @@ class RBDClient(object):
 
         versionstring = self._rbd(["--version"])
 
-        self._rbd(["--read-only" if readonly else "", "map", image])
+        self._rbd(["map", image, "--read-only" if readonly else ""])
 
         mappings_raw = self._rbd(["showmapped"], format="json")
 

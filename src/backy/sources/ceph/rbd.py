@@ -40,9 +40,9 @@ class RBDClient(object):
 
         return result
 
-    def exists(self, image):
+    def exists(self, snapspec):
         try:
-            return self._rbd(["info", image], format="json")
+            return self._rbd(["info", snapspec], format="json")
         except subprocess.CalledProcessError as e:
             if e.returncode == 2:
                 return False

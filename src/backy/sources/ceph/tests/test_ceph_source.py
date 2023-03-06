@@ -29,6 +29,17 @@ def check_output(monkeypatch):
 
 
 @pytest.fixture
+def ceph_rbd_imagesource(rbdclient, nosleep):
+    """Provides a CephRBD object configured for image pool/test, with rbd
+    being mocked away and allowing snapshots on that image."""
+    source = CephRBD(dict(pool="test", image="foo"))
+    # rbdclient mock setup:
+    rbdclient._ceph_cli._register_image_for_snaps("test/foo")
+    source.rbd = rbdclient
+    return source
+
+
+@pytest.fixture
 def nosleep(monkeypatch):
     monkeypatch.setattr(time, "sleep", lambda x: None)
 
@@ -37,37 +48,34 @@ def test_select_ceph_source():
     assert select_source("ceph-rbd") == CephRBD
 
 
-def test_assign_revision():
+def test_assign_revision(nosleep):
     source = CephRBD(dict(pool="test", image="foo"))
     revision = mock.Mock()
     context_manager = source(revision)
     assert context_manager.revision is revision
 
 
-def test_context_manager(backup, rbdclient):
-
-    source = CephRBD(dict(pool="test", image="foo"))
-    # rbdclient mock setup:
-    rbdclient._ceph_cli._register_image_for_snaps("test/foo")
-    source.rbd = rbdclient
+def test_context_manager(backup, ceph_rbd_imagesource):
+    """The imagesource context manager around a backup revision must create a
+    corresponding snapshot at enter, and clean up at exit."""
+    source = ceph_rbd_imagesource
 
     revision = Revision(backup, 1)
     with source(revision):
-        assert rbdclient.snap_ls("test/foo")[0]["name"] == "backy-1"
+        assert source.rbd.snap_ls("test/foo")[0]["name"] == "backy-1"
 
-    assert len(rbdclient.snap_ls("test/foo")) == 0
+    assert len(source.rbd.snap_ls("test/foo")) == 0
 
 
-def test_context_manager_cleans_out_snapshots(rbdclient, backup, nosleep):
-    source = CephRBD(dict(pool="test", image="foo"))
-    # rbdclient mock setup:
-    rbdclient._ceph_cli._register_image_for_snaps("test/foo")
-    source.rbd = rbdclient
+def test_context_manager_cleans_out_snapshots(ceph_rbd_imagesource, backup):
+    """The imagesource context manager cleans up unexpected backy snapshot revisions.
+    Snapshots without the prefix 'backy-' are left untouched."""
+    source = ceph_rbd_imagesource
 
     # snaps without backy- prefix are left untouched
-    rbdclient.snap_create("test/foo@someother")
+    source.rbd.snap_create("test/foo@someother")
     # unexpected revision snapshots are cleaned
-    rbdclient.snap_create("test/foo@backy-2")
+    source.rbd.snap_create("test/foo@backy-2")
 
     revision = Revision(backup, "1")
     with source(revision):
@@ -76,7 +84,7 @@ def test_context_manager_cleans_out_snapshots(rbdclient, backup, nosleep):
         revision.write_info()
         backup.scan()
 
-    assert rbdclient.snap_ls("test/foo") == [
+    assert source.rbd.snap_ls("test/foo") == [
         {
             "id": 86925,
             "name": "someother",
@@ -97,8 +105,12 @@ def test_context_manager_cleans_out_snapshots(rbdclient, backup, nosleep):
 @pytest.mark.parametrize(
     "backend_factory", [COWFileBackend, ChunkedFileBackend]
 )
-def test_choose_full_without_parent(check_output, backup, backend_factory):
-    source = CephRBD(dict(pool="test", image="foo"))
+def test_choose_full_without_parent(
+    ceph_rbd_imagesource, backup, backend_factory
+):
+    """When backing up a revision without a parent, a full backup needs to happen.
+    The diff function must not be called."""
+    source = ceph_rbd_imagesource
 
     source.diff = mock.Mock()
     source.full = mock.Mock()
@@ -116,8 +128,13 @@ def test_choose_full_without_parent(check_output, backup, backend_factory):
 @pytest.mark.parametrize(
     "backend_factory", [COWFileBackend, ChunkedFileBackend]
 )
-def test_choose_full_without_snapshot(check_output, backup, backend_factory):
-    source = CephRBD(dict(pool="test", image="foo"))
+def test_choose_full_without_snapshot(
+    ceph_rbd_imagesource, backup, backend_factory
+):
+    """When backing up a revision with an immediate parent that has no corresponding
+    snapshot, that parent must be ignored and a full backup has to be made.
+    The diff function must not be called."""
+    source = ceph_rbd_imagesource
 
     source.diff = mock.Mock()
     source.full = mock.Mock()
@@ -143,9 +160,11 @@ def test_choose_full_without_snapshot(check_output, backup, backend_factory):
     "backend_factory", [COWFileBackend, ChunkedFileBackend]
 )
 def test_choose_diff_with_snapshot(
-    check_output, backup, nosleep, backend_factory
+    ceph_rbd_imagesource, backup, backend_factory
 ):
-    source = CephRBD(dict(pool="test", image="foo"))
+    """In an environment where a parent revision exists and has a snapshot, both
+    revisions shall be diffed."""
+    source = ceph_rbd_imagesource
 
     source.diff = mock.Mock()
     source.full = mock.Mock()
@@ -154,21 +173,14 @@ def test_choose_diff_with_snapshot(
     revision1.timestamp = backy.utils.now()
     revision1.materialize()
 
+    # part of test setup: we check backy's behavior when a previous version not only
+    # exists, but also has a snapshot
+    source.rbd.snap_create("test/foo@backy-a1")
+
     backup.scan()
 
     revision2 = Revision(backup, "a2")
     revision2.parent = "a1"
-
-    check_output.side_effect = [
-        # snap create
-        b"{}",
-        # snap ls
-        b'[{"name": "backy-a1"}]',
-        # snap ls
-        b'[{"name": "backy-a1"}, {"name": "backy-a2"}]',
-        # snap rm backy-a1
-        b"{}",
-    ]
 
     backend = backend_factory(revision2)
     with source(revision2):
@@ -181,10 +193,13 @@ def test_choose_diff_with_snapshot(
 @pytest.mark.parametrize(
     "backend_factory", [COWFileBackend, ChunkedFileBackend]
 )
-def test_diff_backup(check_output, backup, tmpdir, nosleep, backend_factory):
+def test_diff_backup(ceph_rbd_imagesource, backup, tmpdir, backend_factory):
+    """When doing a diff backup between two revisions with snapshot, the RBDDiff needs
+    to be called properly, a snapshot for the new revision needs to be created and the
+    snapshot of the previous revision needs to be removed after the successfull backup."""
     from backy.sources.ceph.diff import RBDDiffV1
 
-    source = CephRBD(dict(pool="test", image="foo"))
+    source = ceph_rbd_imagesource
 
     parent = Revision(backup, "ed968696-5ab0-4fe0-af1c-14cadab44661")
     parent.timestamp = backy.utils.now()
@@ -202,15 +217,11 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep, backend_factory):
     backup.scan()
     revision.materialize()
 
-    check_output.side_effect = [
-        # snap create
-        b"{}",
-        # snap ls
-        b'[{"name": "backy-ed968696-5ab0-4fe0-af1c-14cadab44661"}, \
-           {"name": "backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802"}]',
-        # snap rm backy-ed96...
-        b"{}",
-    ]
+    # test setup: ensure that previous revision has a snapshot. It needs to be removed
+    # by the backup process
+    source.rbd.snap_create(
+        "test/foo@backy-ed968696-5ab0-4fe0-af1c-14cadab44661"
+    )
 
     with mock.patch("backy.sources.ceph.rbd.RBDClient.export_diff") as export:
         export.return_value = mock.MagicMock()
@@ -227,40 +238,18 @@ def test_diff_backup(check_output, backup, tmpdir, nosleep, backend_factory):
             "backy-ed968696-5ab0-4fe0-af1c-14cadab44661",
         )
 
-    assert check_output.call_args_list == [
-        mock.call(
-            [
-                RBD,
-                "snap",
-                "create",
-                "test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802",
-            ],
-            encoding="utf-8",
-            errors="replace",
-        ),
-        mock.call(
-            [RBD, "snap", "ls", "test/foo", "--format=json"],
-            encoding="utf-8",
-            errors="replace",
-        ),
-        mock.call(
-            [
-                RBD,
-                "snap",
-                "rm",
-                "test/foo@backy-ed968696-5ab0-4fe0-af1c-14cadab44661",
-            ],
-            encoding="utf-8",
-            errors="replace",
-        ),
-    ]
+    current_snaps = source.rbd.snap_ls("test/foo")
+    assert len(current_snaps) == 1
+    assert (
+        current_snaps[0]["name"] == "backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802"
+    )
 
 
 @pytest.mark.parametrize(
     "backend_factory", [COWFileBackend, ChunkedFileBackend]
 )
-def test_full_backup(check_output, backup, tmpdir, backend_factory):
-    source = CephRBD(dict(pool="test", image="foo"))
+def test_full_backup(ceph_rbd_imagesource, backup, tmpdir, backend_factory):
+    source = ceph_rbd_imagesource
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
@@ -269,13 +258,6 @@ def test_full_backup(check_output, backup, tmpdir, backend_factory):
     revision.materialize()
     backup.scan()
 
-    check_output.side_effect = [
-        # snap create
-        b"{}",
-        # snap ls
-        b'[{"name": "backy-a0"}]',
-    ]
-
     with mock.patch("backy.sources.ceph.rbd.RBDClient.export") as export:
         export.return_value = io.BytesIO(b"Han likes Leia.")
         backend = backend_factory(revision)
@@ -283,34 +265,17 @@ def test_full_backup(check_output, backup, tmpdir, backend_factory):
             source.full(backend)
         export.assert_called_with("test/foo@backy-a0")
 
-    assert check_output.call_args_list == [
-        mock.call(
-            [RBD, "snap", "create", "test/foo@backy-a0"],
-            encoding="utf-8",
-            errors="replace",
-        ),
-        mock.call(
-            [RBD, "snap", "ls", "test/foo", "--format=json"],
-            encoding="utf-8",
-            errors="replace",
-        ),
-    ]
+    # the corresponding snapshot for revision a0 is created by the backup process
+    assert source.rbd.snap_ls("test/foo")[0]["name"] == "backy-a0"
 
     with backend.open("rb") as f:
-        f.read() == b"Han likes Leia."
+        assert f.read() == b"Han likes Leia."
 
     # Now make another full backup. This overwrites the first.
     revision2 = Revision(backup, "a1")
     revision2.parent = revision.uuid
     revision2.materialize()
     backup.scan()
-
-    check_output.side_effect = [
-        # snap create
-        b"{}",
-        # snap ls
-        b'[{"name": "backy-a1"}]',
-    ]
 
     with mock.patch("backy.sources.ceph.rbd.RBDClient.export") as export:
         export.return_value = io.BytesIO(b"Han loves Leia.")
@@ -319,20 +284,24 @@ def test_full_backup(check_output, backup, tmpdir, backend_factory):
             source.full(backend)
 
     with backend.open("rb") as f:
-        f.read() == b"Han loves Leia."
+        assert f.read() == b"Han loves Leia."
+
+    current_snaps = source.rbd.snap_ls("test/foo")
+    assert len(current_snaps) == 1
+    assert current_snaps[0]["name"] == "backy-a1"
 
 
 @pytest.mark.parametrize(
     "backend_factory", [COWFileBackend, ChunkedFileBackend]
 )
 def test_full_backup_integrates_changes(
-    check_output, backup, tmpdir, nosleep, backend_factory
+    ceph_rbd_imagesource, backup, tmpdir, backend_factory
 ):
     # The backup source changes between two consecutive full backups. Both
     # backup images should reflect the state of the source at the time the
     # backup was run. This test is here to detect regressions while optimizing
-    # the full backup algorithms (coping and applying deltas).
-    source = CephRBD(dict(pool="test", image="foo"))
+    # the full backup algorithms (copying and applying deltas).
+    source = ceph_rbd_imagesource
     content0 = BLOCK * b"A" + BLOCK * b"B" + BLOCK * b"C" + BLOCK * b"D"
     content1 = BLOCK * b"A" + BLOCK * b"X" + BLOCK * b"\0" + BLOCK * b"D"
 
@@ -344,22 +313,6 @@ def test_full_backup_integrates_changes(
     rev1 = Revision(backup, "a1")
     rev1.parent = "a0"
     rev1.materialize()
-
-    def returnvals(name):
-        return [
-            # snap create
-            b"{}",
-            # snap ls
-            '[{{"name": "backy-{}"}}]'.format(name).encode("ascii"),
-        ]
-
-    check_output.side_effect = (
-        returnvals("a0")
-        + returnvals("a1")
-        +
-        # snap rm
-        [b"{}"]
-    )
 
     # check fidelity
     for content, rev in [(content0, rev0), (content1, rev1)]:
@@ -374,38 +327,11 @@ def test_full_backup_integrates_changes(
             assert content == f.read()
 
 
-# --- mock data for tests involving RBD, uses data imported from rbd_testdata ---
-
-
-def showmapped_json_legacy(device):
-    return '{{"rbd0": {{"pool": "test", "name": "foo", "snap": "backy-a0", \
-                    "device": "{}"}}}}'.format(
-        device
-    ).encode(
-        "ascii"
-    )
-
-
-def showmapped_json_current(device):
-    return '[{{"id": "0", "pool": "test", "namespace": "", "name": "foo", \
-                    "snap": "backy-a0", \
-                    "device": "{}"}}]'.format(
-        device
-    ).encode(
-        "ascii"
-    )
-
-
-# ---
-
-
 @pytest.mark.parametrize(
     "backend_factory", [COWFileBackend, ChunkedFileBackend]
 )
-def test_verify_fail(check_output, backup, tmpdir, backend_factory, rbdclient):
-    source = CephRBD(dict(pool="test", image="foo"))
-    source.rbd = rbdclient
-    rbdclient._ceph_cli._register_image_for_snaps("test/foo")
+def test_verify_fail(backup, tmpdir, backend_factory, ceph_rbd_imagesource):
+    source = ceph_rbd_imagesource
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
@@ -431,14 +357,12 @@ def test_verify_fail(check_output, backup, tmpdir, backend_factory, rbdclient):
     "backend_factory", [COWFileBackend, ChunkedFileBackend]
 )
 def test_verify(
-    rbdclient,
+    ceph_rbd_imagesource,
     backup,
     tmpdir,
     backend_factory,
 ):
-    source = CephRBD(dict(pool="test", image="foo"))
-    source.rbd = rbdclient
-    rbdclient._ceph_cli._register_image_for_snaps("test/foo")
+    source = ceph_rbd_imagesource
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
@@ -448,10 +372,10 @@ def test_verify(
 
     backup.scan()
 
-    rbd_source = rbdclient.map("test/foo@backy-a0")["device"]
+    rbd_source = source.rbd.map("test/foo@backy-a0")["device"]
     with open(rbd_source, "wb") as f:
         f.write(b"Han likes Leia.")
-    rbdclient.unmap(rbd_source)
+    source.rbd.unmap(rbd_source)
 
     with backend_factory(revision).open("wb") as f:
         f.write(b"Han likes Leia.")

@@ -33,7 +33,7 @@ class CephCLIBase:
         showmapped.set_defaults(func="showmapped")
 
         info = subparsers.add_parser("info")
-        info.add_argument("imagespec")
+        info.add_argument("snapspec")
         info.add_argument("--format", choices=["json"])
         info.set_defaults(func="info")
 
@@ -88,20 +88,41 @@ class CephCLIBase:
         assert format == "json"
         return json.dumps(self.mapped_images)
 
-    def info(self, imagespec, format):
+    def info(self, snapspec, format):
+        """Compatibility Note: This mock function is currently slightly broken and
+        deviates from the behaviour of the real `rbd info` command:
+        as `self.images` currently is only populated by mapping an image, this command
+        mock only yields information on images when they're mapped, in addition to
+        snapshots on registered images.
+        In case we ever need an `rbd info` on images just present in the pool, but not
+        mapped, this needs to be reworked."""
         assert format == "json"
-        if imagespec not in self.images:
-            raise subprocess.CalledProcessError(cmd="info", returncode=2)
+        image = self._parse_snapspec(snapspec)
+        try:
+            # snapshot specified, look in our snaps dict
+            if image["snap"]:
+                for snap in self.snaps[f"{image['pool']}/{image['name']}"]:
+                    if snap["name"] == image["snap"]:
+                        # for now, we do not evaluate the provided infos but just use a
+                        # non-error-code as indicator for the images existence
+                        return json.dumps({"name": image["name"]})
+            # just an imagespec, we currently only list it if it is mapped
+            elif f"{image['pool']}/{image['name']}" in self.images:
+                return json.dumps({"name": image["name"]})
+        except KeyError:
+            pass
+        # fallthrough case
+        raise subprocess.CalledProcessError(cmd="info", returncode=2)
 
     def snap_create(self, snapspec):
-        image, snapname = snapspec.split("@")
+        image = self._parse_snapspec(snapspec)
         if not self._freeze_mapped:
             try:
-                self.snaps[image].append(
+                self.snaps[f"{image['pool']}/{image['name']}"].append(
                     {
                         # example snapshot data
                         "id": 86925,
-                        "name": snapname,
+                        "name": image["snap"],
                         "size": 32212254720,
                         "protected": "false",
                         "timestamp": "Sun Feb 12 18:35:18 2023",
@@ -117,12 +138,14 @@ class CephCLIBase:
         return json.dumps(self.snaps[imagespec])
 
     def snap_rm(self, snapspec):
-        image, snapname = snapspec.split("@")
+        image = self._parse_snapspec(snapspec)
         if not self._freeze_mapped:
             try:
-                for candidate in self.snaps[image]:
-                    if candidate["name"] == snapname:
-                        self.snaps[image].remove(candidate)
+                for candidate in self.snaps[f"{image['pool']}/{image['name']}"]:
+                    if candidate["name"] == image["snap"]:
+                        self.snaps[f"{image['pool']}/{image['name']}"].remove(
+                            candidate
+                        )
                         break
                 else:
                     raise subprocess.CalledProcessError(
@@ -150,6 +173,7 @@ class CephCLIBase:
         pool, imagename = imagespec.split("/")
         imagedata["pool"] = pool
         imagedata["name"] = imagename
+        imagedata["snap"] = snapname
         return imagedata
 
 

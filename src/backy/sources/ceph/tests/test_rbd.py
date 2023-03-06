@@ -27,10 +27,6 @@ def test_rbd_command_wrapper(check_output):
     )
 
 
-def test_rbd_exists(rbdclient):
-    assert not rbdclient.exists("asdf")
-
-
 def test_rbd_generic_calledprocesserror_bubbles_up(rbdclient):
     # Generic errors are bubbled up,
     # explicitly check the subprocess backend
@@ -39,11 +35,11 @@ def test_rbd_generic_calledprocesserror_bubbles_up(rbdclient):
         returncode=1, cmd="foo"
     )
     with pytest.raises(subprocess.CalledProcessError):
-        rbdclient.exists("asdf")
+        rbdclient.exists("test/asdf")
 
 
 def test_rbd_nonexisting_image_turned_to_false(rbdclient):
-    assert not rbdclient.exists("foo")
+    assert not rbdclient.exists("test/foo")
 
 
 # uses mock data defined in conftest.py

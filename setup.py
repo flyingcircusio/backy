@@ -12,7 +12,7 @@ from setuptools import Command, find_packages, setup
 class PyTest(Command):
     """Invoke py.test from `bin/python setup.py test`."""
 
-    user_options = []
+    user_options = []  # type: ignore
 
     def initialize_options(self):
         return None

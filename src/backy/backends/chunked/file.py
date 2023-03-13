@@ -2,6 +2,9 @@ import io
 import json
 import os
 import os.path
+from typing import Tuple
+
+import backy.backends.chunked
 
 from .chunk import Chunk
 
@@ -25,6 +28,18 @@ class File(object):
     """
 
     flush_target = 10
+
+    name: str
+    store: "backy.backends.chunked.Store"
+    closed: bool
+    overlay: bool
+    size: int
+    mode: str
+
+    _position: int
+    _access_stats: dict[int, Tuple[int, float]]  # (count, last)
+    _mapping: dict[int, str]
+    _chunks: dict[int, Chunk]
 
     def __init__(self, name, store, mode="rw", overlay=False):
         self.name = name

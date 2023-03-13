@@ -3,10 +3,10 @@ import pprint
 import sys
 
 import pytest
-import yaml
 
 import backy.backup
 import backy.main
+from backy import utils
 from backy.revision import Revision
 from backy.tests import Ellipsis
 
@@ -76,7 +76,7 @@ def print_args(*args, **kw):
     pprint.pprint(kw)
 
 
-def test_call_status(capsys, caplog, backup, argv, monkeypatch):
+def test_call_status(capsys, backup, argv, monkeypatch):
     monkeypatch.setattr(backy.main.Command, "status", print_args)
     argv.extend(["-v", "-b", backup.path, "status"])
     with pytest.raises(SystemExit) as exit:
@@ -92,18 +92,19 @@ def test_call_status(capsys, caplog, backup, argv, monkeypatch):
         )
         == out
     )
-    assert err == ""
     assert (
         Ellipsis(
             """\
-DEBUG    backy.main:main.py:... backup.status(**{})
+... D command/invoked                args='... -v -b ... status'
+... D command/parsed                 func='status' func_args={}
+... D command/successful             \n\
 """
         )
-        == caplog.text
+        == utils.log_data
     )
 
 
-def test_call_backup(tmpdir, capsys, caplog, argv, monkeypatch):
+def test_call_backup(tmpdir, capsys, argv, monkeypatch):
     os.makedirs(str(tmpdir / "backy"))
     os.chdir(str(tmpdir / "backy"))
 
@@ -130,7 +131,6 @@ source:
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     out, err = capsys.readouterr()
-    assert "" == err
     assert (
         Ellipsis(
             """\
@@ -143,16 +143,17 @@ source:
     assert (
         Ellipsis(
             """\
-DEBUG    backy.main:main.py:... backup.backup(**{'force': False, 'tags': 'manual:test'})
-DEBUG    backy.backup:backup.py:... Backup(".../test_call_backup0/backy")
+... D command/invoked                args='... -v backup manual:test'
+... D command/parsed                 func='backup' func_args={'force': False, 'tags': 'manual:test'}
+... D command/successful             \n\
 """
         )
-        == caplog.text
+        == utils.log_data
     )
     assert exit.value.code == 0
 
 
-def test_call_find(capsys, caplog, backup, argv, monkeypatch, tz_berlin):
+def test_call_find(capsys, backup, argv, monkeypatch, tz_berlin):
     monkeypatch.setattr(backy.main.Command, "find", print_args)
     argv.extend(["-v", "-b", backup.path, "find", "-r", "1"])
     with pytest.raises(SystemExit) as exit:
@@ -168,21 +169,24 @@ def test_call_find(capsys, caplog, backup, argv, monkeypatch, tz_berlin):
         )
         == out
     )
-    assert err == ""
     assert (
         Ellipsis(
             """\
-DEBUG    backy.main:main.py:... backup.find(**{'revision': '1'})
+... D command/invoked                args='... -v -b ... find -r 1'
+... D command/parsed                 func='find' func_args={'revision': '1'}
+... D command/successful             \n\
 """
         )
-        == caplog.text
+        == utils.log_data
     )
     assert exit.value.code == 0
 
 
-def test_call_check(capsys, caplog, backup, argv, monkeypatch):
+def test_call_check(capsys, backup, argv, monkeypatch, tmpdir):
     monkeypatch.setattr(backy.main.Command, "check", print_args)
-    argv.extend(["-v", "-b", backup.path, "check"])
+    argv.extend(
+        ["-v", "-b", backup.path, "-l", str(tmpdir / "backy.log"), "check"]
+    )
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
@@ -196,21 +200,24 @@ def test_call_check(capsys, caplog, backup, argv, monkeypatch):
         )
         == out
     )
-    assert err == ""
     assert (
         Ellipsis(
             """\
-DEBUG    backy.main:main.py:... backup.check(**{'config': '/etc/backy.conf'})
+... D command/invoked                args='... -v -b ... check'
+... D command/parsed                 func='check' func_args={'config': '/etc/backy.conf'}
+... D command/successful             \n\
 """
         )
-        == caplog.text
+        == utils.log_data
     )
     assert exit.value.code == 0
 
 
-def test_call_scheduler(capsys, caplog, backup, argv, monkeypatch):
+def test_call_scheduler(capsys, backup, argv, monkeypatch, tmpdir):
     monkeypatch.setattr(backy.main.Command, "scheduler", print_args)
-    argv.extend(["-b", backup.path, "scheduler"])
+    argv.extend(
+        ["-v", "-b", backup.path, "-l", str(tmpdir / "backy.log"), "scheduler"]
+    )
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
@@ -224,20 +231,22 @@ def test_call_scheduler(capsys, caplog, backup, argv, monkeypatch):
         )
         == out
     )
-    assert err == ""
     assert (
         Ellipsis(
             """\
-DEBUG    backy.main:main.py:... backup.scheduler(\
-**{'config': '/etc/backy.conf'})
+... D command/invoked                args='... -v -b ... scheduler'
+... D command/parsed                 func='scheduler' func_args={'config': '/etc/backy.conf'}
+... D command/successful             \n\
 """
         )
-        == caplog.text
+        == utils.log_data
     )
     assert exit.value.code == 0
 
 
-def test_call_unexpected_exception(capsys, backup, caplog, argv, monkeypatch):
+def test_call_unexpected_exception(
+    capsys, backup, argv, monkeypatch, log, tmpdir
+):
     def do_raise(*args, **kw):
         raise RuntimeError("test")
 
@@ -245,38 +254,34 @@ def test_call_unexpected_exception(capsys, backup, caplog, argv, monkeypatch):
     import os
 
     monkeypatch.setattr(os, "_exit", lambda x: None)
-    import logging
 
-    monkeypatch.setattr(logging, "error", print_args)
-    monkeypatch.setattr(logging, "exception", print_args)
-    argv.extend(["-l", "logfile", "-b", backup.path, "status"])
+    argv.extend(["-l", str(tmpdir / "backy.log"), "-b", backup.path, "status"])
     with pytest.raises(SystemExit):
         backy.main.main()
     out, err = capsys.readouterr()
     assert "" == out
-    assert "Error: test\n" == err
     assert (
         Ellipsis(
             """\
-DEBUG    backy.main:main.py:... backup.status(**{})
-ERROR    backy.main:main.py:... test
-Traceback (most recent call last):
-  File ".../main.py", line ..., in main
-    func(**func_args)
-  File ".../src/backy/tests/test_main.py", line ..., in do_raise
-    raise RuntimeError("test")
-RuntimeError: test
-INFO     backy.main:main.py:... Backy operation failed.
+... D command/invoked                args='... -l ... -b ... status'
+... D command/parsed                 func='status' func_args={}
+... E command/failed                 exception_class='builtins.RuntimeError' exception_msg='test'
+exception>\tTraceback (most recent call last):
+exception>\t  File ".../src/backy/main.py", line ..., in main
+exception>\t    func(**func_args)
+exception>\t  File ".../src/backy/tests/test_main.py", line ..., in do_raise
+exception>\t    raise RuntimeError("test")
+exception>\tRuntimeError: test
 """
         )
-        == caplog.text
+        == utils.log_data
     )
 
 
-def test_commands_wrapper_status(backup, tmpdir, capsys, clock, tz_berlin):
-    commands = backy.main.Command(str(tmpdir))
+def test_commands_wrapper_status(backup, tmpdir, capsys, clock, tz_berlin, log):
+    commands = backy.main.Command(str(tmpdir), log)
 
-    revision = Revision(backup, 1)
+    revision = Revision(backup, log, 1)
     revision.timestamp = backy.utils.now()
     revision.materialize()
 

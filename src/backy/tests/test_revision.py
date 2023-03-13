@@ -11,24 +11,24 @@ UTC = datetime.timezone.utc
 SAMPLE_DIR = p.join(p.dirname(__file__), "samples")
 
 
-def test_revision_base(backup):
-    revision = Revision(backup, "uuid")
+def test_revision_base(backup, log):
+    revision = Revision(backup, log, "uuid")
     assert revision.uuid == "uuid"
     assert revision.backup is backup
 
 
-def test_revision_create(backup):
+def test_revision_create(backup, log):
     backup.history = []
-    r = Revision.create(backup, set(["1", "2"]))
+    r = Revision.create(backup, {"1", "2"}, log)
     assert r.uuid is not None
     assert r.tags == set(["1", "2"])
     assert (backy.utils.now() - r.timestamp).total_seconds() < 10
     assert r.backup is backup
 
 
-def test_revision_create_child(backup):
-    backup.history = [Revision(backup, "asdf")]
-    r = Revision.create(backup, tags={"test"})
+def test_revision_create_child(backup, log):
+    backup.history = [Revision(backup, log, "asdf")]
+    r = Revision.create(backup, {"test"}, log)
     assert r.uuid is not None
     assert r.tags == {"test"}
     assert r.parent == "asdf"
@@ -36,32 +36,32 @@ def test_revision_create_child(backup):
     assert r.backup is backup
 
 
-def test_load_sample1(backup):
-    r = Revision.load(SAMPLE_DIR + "/sample1.rev", backup)
+def test_load_sample1(backup, log):
+    r = Revision.load(SAMPLE_DIR + "/sample1.rev", backup, log)
     assert r.uuid == "asdf"
     assert r.timestamp == datetime.datetime(2015, 8, 1, 20, 0, tzinfo=UTC)
     assert r.parent is None
     assert r.backup is backup
 
 
-def test_load_sample2(backup):
-    r = Revision.load(SAMPLE_DIR + "/sample2.rev", backup)
+def test_load_sample2(backup, log):
+    r = Revision.load(SAMPLE_DIR + "/sample2.rev", backup, log)
     assert r.uuid == "asdf2"
     assert r.timestamp == datetime.datetime(2015, 8, 1, 21, 0, tzinfo=UTC)
     assert r.parent == "asdf"
     assert r.backup is backup
 
 
-def test_filenames_based_on_uuid_and_backup_dir():
+def test_filenames_based_on_uuid_and_backup_dir(log):
     backup = mock.Mock()
     backup.path = "/srv/backup/foo"
-    r = Revision(backup, "asdf")
+    r = Revision(backup, log, "asdf")
     assert r.filename == "/srv/backup/foo/asdf"
     assert r.info_filename == "/srv/backup/foo/asdf.rev"
 
 
-def test_store_revision_data(backup, clock):
-    r = Revision(backup, "asdf2", backy.utils.now())
+def test_store_revision_data(backup, clock, log):
+    r = Revision(backup, log, "asdf2", backy.utils.now())
     r.parent = "asdf"
     r.backup = backup
     r.write_info()
@@ -77,8 +77,8 @@ def test_store_revision_data(backup, clock):
         }
 
 
-def test_delete_revision(backup):
-    r = Revision(backup, "123-456", backy.utils.now())
+def test_delete_revision(backup, log):
+    r = Revision(backup, log, "123-456", backy.utils.now())
     r.materialize()
     assert p.exists(backup.path + "/123-456.rev")
     backup.scan()

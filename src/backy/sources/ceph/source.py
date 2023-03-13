@@ -1,39 +1,35 @@
-import logging
 import time
 
-import backy.utils
-from backy.revision import TRUST_DISTRUSTED
+from structlog.stdlib import BoundLogger
 
+import backy.utils
+from backy.revision import Trust
+
+from .. import BackySource, BackySourceContext, BackySourceFactory
 from .rbd import RBDClient
 
-logger = logging.getLogger(__name__)
 
-
-class CephRBD(object):
+class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
     """The Ceph RBD source.
 
     Manages snapshots corresponding to revisions and provides a verification
     that tries to balance reliability and performance.
     """
 
-    def __init__(self, config):
+    pool: str
+    image: str
+    always_full: bool
+    log: BoundLogger
+    rbd: RBDClient
+
+    def __init__(self, config: dict, log: BoundLogger):
         self.pool = config["pool"]
         self.image = config["image"]
         self.always_full = config.get("full-always", False)
-        self.rbd = RBDClient()
+        self.log = log.bind(subsystem="ceph")
+        self.rbd = RBDClient(self.log)
 
-    @staticmethod
-    def config_from_cli(spec):
-        logger.debug("CephRBD.config_from_cli(%s)", spec)
-        param = spec.split("/")
-        if len(param) != 2:
-            raise RuntimeError(
-                "ceph source must be initialized with POOL/IMAGE"
-            )
-        pool, image = param
-        return dict(pool=pool, image=image)
-
-    def ready(self):
+    def ready(self) -> bool:
         """Check whether the source can be backed up.
 
         For RBD sources this means the volume exists and is accessible.
@@ -42,8 +38,8 @@ class CephRBD(object):
         try:
             if self.rbd.exists(self._image_name):
                 return True
-        except Exception as e:
-            logger.exception(e)
+        except Exception:
+            self.log.exception("not-ready")
         return False
 
     def __call__(self, revision):
@@ -70,49 +66,43 @@ class CephRBD(object):
 
     def backup(self, target):
         if self.always_full:
-            logger.info("Full backup: per configuration")
+            self.log.info("backup-always-full")
             self.full(target)
             return
-        try:
-            revision = self.revision
-            while True:
-                if not revision.parent:
-                    raise KeyError("Full backup: no valid parent found")
-                parent = self.revision.backup.find(revision.parent)
-                if parent.trust == TRUST_DISTRUSTED:
-                    logger.info(
-                        "Ignoring distrusted revision {} ".format(
-                            revision.parent
-                        )
-                    )
-                    revision = parent
-                    continue
-                if not self.rbd.exists(
-                    self._image_name + "@backy-" + parent.uuid
-                ):
-                    logger.info(
-                        "Ignoring revision {} without snapshot".format(
-                            revision.parent
-                        )
-                    )
-                    revision = parent
-                    continue
-                # Ok, it's trusted and we have a snapshot. Let's do a diff.
-                break
-            self.diff(target, parent)
-        except KeyError as e:
-            logger.info(e.args[0])
-            self.full(target)
+        revision = self.revision
+        while True:
+            if not revision.parent:
+                self.log.info("backup-no-valid-parent")
+                self.full(target)
+                return
+            parent = self.revision.backup.find(revision.parent)
+            if parent.trust == Trust.DISTRUSTED:
+                self.log.info(
+                    "ignoring-distrusted-rev",
+                    revision_uuid=revision.parent,
+                )
+                revision = parent
+                continue
+            if not self.rbd.exists(self._image_name + "@backy-" + parent.uuid):
+                self.log.info(
+                    "ignoring-rev-without-snapshot",
+                    revision_uuid=revision.parent,
+                )
+                revision = parent
+                continue
+            # Ok, it's trusted and we have a snapshot. Let's do a diff.
+            break
+        self.diff(target, parent)
 
     def diff(self, target, parent):
-        logger.info("Performing differential backup")
+        self.log.info("diff")
         snap_from = "backy-" + parent.uuid
         snap_to = "backy-" + self.revision.uuid
         s = self.rbd.export_diff(self._image_name + "@" + snap_to, snap_from)
         t = target.open("r+b")
         with s as source, t as target:
             bytes = source.integrate(target, snap_from, snap_to)
-        logger.info("Integration finished.")
+        self.log.info("diff-integration-finished")
 
         self.revision.stats["bytes_written"] = bytes
 
@@ -122,7 +112,7 @@ class CephRBD(object):
         self.revision.stats["chunk_stats"] = chunk_stats
 
     def full(self, target):
-        logger.info("Performing full backup")
+        self.log.info("full")
         s = self.rbd.export(
             "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
         )
@@ -154,9 +144,10 @@ class CephRBD(object):
             self.revision.stats["ceph-verification"] = "partial"
 
             with s as source, t as target:
-                logger.info("Performing partial verification")
+                self.log.info("verify")
                 return backy.utils.files_are_roughly_equal(source, target)
         except Exception:
+            self.log.exception("verify-failed")
             return False
 
     def _delete_old_snapshots(self):
@@ -178,10 +169,13 @@ class CephRBD(object):
             uuid = snapshot["name"].replace("backy-", "")
             if uuid != keep_snapshot_revision:
                 time.sleep(3)  # avoid race condition while unmapping
-                logger.info("Removing old snapshot %s", snapshot["name"])
+                self.log.info(
+                    "delete-old-snapshot", snapshot_name=snapshot["name"]
+                )
                 try:
                     self.rbd.snap_rm(self._image_name + "@" + snapshot["name"])
                 except Exception:
-                    logger.exception(
-                        "Could not delete snapshot " + snapshot["name"]
+                    self.log.exception(
+                        "delete-old-snapshot-failed",
+                        snapshot_name=snapshot["name"],
                     )

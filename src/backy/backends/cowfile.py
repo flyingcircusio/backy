@@ -1,10 +1,16 @@
 import os.path
 
+from structlog.stdlib import BoundLogger
+
+import backy.revision
+from backy.backends import BackyBackend
 from backy.utils import CHUNK_SIZE, cp_reflink
 
 
-class COWFileBackend(object):
-    def __init__(self, revision):
+class COWFileBackend(BackyBackend):
+    revision: "backy.revision.Revision"
+
+    def __init__(self, revision, log):
         self.revision = revision
 
     def open(self, mode="rb"):
@@ -16,11 +22,3 @@ class COWFileBackend(object):
                 cp_reflink(parent.filename, self.revision.filename)
             self.revision.writable()
         return open(self.revision.filename, mode, buffering=CHUNK_SIZE)
-
-    def purge(self, backup):
-        # Nothing to do. This is a noop for cowfiles.
-        pass
-
-    def scrub(self, backup, type):
-        # Nothing to do. This is a noop for cowfiles.
-        pass

@@ -243,12 +243,12 @@ class CephNautilusCLI(CephCLIBase):
 
 
 @pytest.fixture(params=[CephJewelCLI, CephLuminousCLI, CephNautilusCLI])
-def rbdclient(request, tmpdir, monkeypatch):
+def rbdclient(request, tmpdir, monkeypatch, log):
     monkeypatch.setattr(
         backy.sources.ceph, "CEPH_RBD_SUPPORTS_WHOLE_OBJECT_DIFF", True
     )
 
-    client = RBDClient()
+    client = RBDClient(log)
     client._ceph_cli = request.param(tmpdir)
 
     return client

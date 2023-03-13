@@ -2,7 +2,6 @@ import asyncio
 import contextlib
 import datetime
 import hashlib
-import logging
 import mmap
 import os
 import os.path
@@ -14,12 +13,15 @@ import time
 from zoneinfo import ZoneInfo
 
 import humanize
+import structlog
 import tzlocal
 
 from .ext_deps import CP
 from .fallocate import punch_hole
 
-logger = logging.getLogger(__name__)
+log = structlog.stdlib.get_logger()
+
+log_data: str  # for pytest
 
 Bytes = 1
 kiB = Bytes * 1024
@@ -54,16 +56,14 @@ def report_status(f):
                 seconds=int(time_remaining)
             )
             if step == 5 or not step % 100:  # pragma: nocover
-                logger.info(
-                    "Progress: {} of {} ({:.2f}%) "
-                    "({:.0f}s elapsed, {} remaining, ETA {})".format(
-                        step,
-                        steps,
-                        step / steps * 100,
-                        time_elapsed,
-                        humanize.naturaldelta(time_remaining),
-                        eta,
-                    )
+                log.info(
+                    "progress-report",
+                    step=step,
+                    steps=steps,
+                    percent=round(step / steps * 100, 2),
+                    elapsed=round(time_elapsed),
+                    remaining=humanize.naturaldelta(time_remaining),
+                    eta=str(eta),
                 )
 
         result = next(generator)
@@ -214,11 +214,11 @@ def safe_symlink(realfile, link):
 if hasattr(os, "posix_fadvise"):
     posix_fadvise = os.posix_fadvise
 else:  # pragma: no cover
-    logger.warning("Running without `posix_fadvise`.")
-    os.POSIX_FADV_RANDOM = None
-    os.POSIX_FADV_SEQUENTIAL = None
-    os.POSIX_FADV_WILLNEED = None
-    os.POSIX_FADV_DONTNEED = None
+    log.warning("safe-symlink-no-posix_fadivse")
+    os.POSIX_FADV_RANDOM = None  # type: ignore
+    os.POSIX_FADV_SEQUENTIAL = None  # type: ignore
+    os.POSIX_FADV_WILLNEED = None  # type: ignore
+    os.POSIX_FADV_DONTNEED = None  # type: ignore
 
     def posix_fadvise(*args, **kw):
         return
@@ -341,7 +341,7 @@ def cp_reflink(source, target):
             [CP, "--reflink=always", source, target], stderr=subprocess.PIPE
         )
     except subprocess.CalledProcessError:
-        logger.warning("Performing non-COW copy: %s -> %s", source, target)
+        log.warning("cp_reflink-no-cow", source=source, target=target)
         if os.path.exists(target):
             os.unlink(target)
         subprocess.check_call([CP, source, target])
@@ -359,14 +359,11 @@ def files_are_equal(a, b):
         chunk_a = a.read(CHUNK_SIZE)
         chunk_b = b.read(CHUNK_SIZE)
         if chunk_a != chunk_b:
-            logger.error(
-                "Chunk A ({}, {}) != Chunk B ({}, {}) at position {}".format(
-                    repr(chunk_a),
-                    hashlib.md5(chunk_a).hexdigest(),
-                    repr(chunk_b),
-                    hashlib.md5(chunk_b).hexdigest(),
-                    position,
-                )
+            log.error(
+                "files-not-equal",
+                hash_a=hashlib.md5(chunk_a).hexdigest(),
+                hash_b=hashlib.md5(chunk_b).hexdigest(),
+                pos=position,
             )
             errors += 1
         if not chunk_a:
@@ -397,10 +394,10 @@ def files_are_roughly_equal(
     max_duration = datetime.timedelta(seconds=timeout)
 
     for block in sample:
-        logger.debug("Verifying chunk @ %d", block * blocksize)
+        log.debug("files-roughly-equal-verifying", offset=block * blocksize)
         duration = now() - started
         if duration > max_duration:
-            logger.info("Stopping verification after %s", duration)
+            log.info("files-roughly-equal-stopped", duration=duration)
             return True
 
         a.seek(block * blocksize)
@@ -408,12 +405,11 @@ def files_are_roughly_equal(
         chunk_a = a.read(blocksize)
         chunk_b = b.read(blocksize)
         if chunk_a != chunk_b:
-            logger.error(
-                "Chunk A (md5: {}) != Chunk B (md5: {}) at position {}".format(
-                    hashlib.md5(chunk_a).hexdigest(),
-                    hashlib.md5(chunk_b).hexdigest(),
-                    block * blocksize,
-                )
+            log.error(
+                "files-not-roughly-equal",
+                hash_a=hashlib.md5(chunk_a).hexdigest(),
+                hash_b=hashlib.md5(chunk_b).hexdigest(),
+                pos=block * blocksize,
             )
             return False
     else:

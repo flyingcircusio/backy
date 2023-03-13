@@ -145,7 +145,7 @@ files = [
 name = "colorama"
 version = "0.4.6"
 description = "Cross-platform colored terminal text."
-category = "dev"
+category = "main"
 optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7"
 files = [
@@ -877,11 +877,10 @@ category = "main"
 optional = false
 python-versions = "*"
 files = [
-    {file = "wcwidth-0.2.6-py2.py3-none-any.whl", hash = "sha256:795b138f6875577cd91bba52baf9e445cd5118fd32723b460e30a0af30ea230e"},
     {file = "wcwidth-0.2.6.tar.gz", hash = "sha256:a5220780a404dbe3353789870978e472cfe477761f06ee55077256e509b156d0"},
 ]
 
 [metadata]
 lock-version = "2.0"
 python-versions = "~3.10"
-content-hash = "258730660ea45e1b32accd01061ed9fb34636e98a777581e6eacc9df96c55fd0"
+content-hash = "d2f9975e38378375313a0d393ac888880d8e807fa6e2ecba033107fabec236a8"

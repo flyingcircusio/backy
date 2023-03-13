@@ -3,37 +3,20 @@
 import argparse
 import datetime
 import errno
-import logging
-import logging.handlers
 import sys
+from pathlib import Path
 
 import humanize
+import structlog
 import tzlocal
 from prettytable import PrettyTable
+from structlog.stdlib import BoundLogger
 
 import backy.backup
 import backy.daemon
 from backy.utils import format_datetime_local
 
-logger = logging.getLogger(__name__)
-
-
-def init_logging(logfile, verbose):  # pragma: no cover
-    if logfile:
-        handler = logging.handlers.WatchedFileHandler(logfile, delay=True)
-        handler.setFormatter(
-            logging.Formatter(
-                "%(asctime)s [%(process)d] %(levelname)s %(message)s",
-                "%Y-%m-%d %H:%M:%S",
-            )
-        )
-    else:
-        handler = logging.StreamHandler(sys.stdout)
-    toplevel = logging.getLogger("backy")
-    toplevel.setLevel(logging.DEBUG if verbose else logging.INFO)
-    toplevel.addHandler(handler)
-    if logfile:
-        logger.info("$ %s", " ".join(sys.argv))
+from . import logging
 
 
 def valid_date(s):
@@ -49,11 +32,15 @@ def valid_date(s):
 class Command(object):
     """Proxy between CLI calls and actual backup code."""
 
-    def __init__(self, path):
+    path: str
+    log: BoundLogger
+
+    def __init__(self, path, log):
         self.path = path
+        self.log = log
 
     def status(self):
-        b = backy.backup.Backup(self.path)
+        b = backy.backup.Backup(self.path, self.log)
         total_bytes = 0
 
         tz = tzlocal.get_localzone()
@@ -81,7 +68,7 @@ class Command(object):
                     ),
                     duration,
                     ",".join(r.tags),
-                    r.trust,
+                    r.trust.value,
                 ]
             )
 
@@ -94,7 +81,7 @@ class Command(object):
         )
 
     def backup(self, tags, force):
-        b = backy.backup.Backup(self.path)
+        b = backy.backup.Backup(self.path, self.log)
         b._clean()
         try:
             tags = set(t.strip() for t in tags.split(","))
@@ -102,46 +89,46 @@ class Command(object):
         except IOError as e:
             if e.errno not in [errno.EDEADLK, errno.EAGAIN]:
                 raise
-            logger.info("Backup already in progress.")
+            self.log.info("backup-already-running")
         finally:
             b._clean()
 
     def restore(self, revision, target):
-        b = backy.backup.Backup(self.path)
+        b = backy.backup.Backup(self.path, self.log)
         b.restore(revision, target)
 
     def find(self, revision):
-        b = backy.backup.Backup(self.path)
+        b = backy.backup.Backup(self.path, self.log)
         print(b.find(revision).filename)
 
     def forget(self, revision):
-        b = backy.backup.Backup(self.path)
+        b = backy.backup.Backup(self.path, self.log)
         b.forget_revision(revision)
 
     def scheduler(self, config):
-        backy.daemon.main(config)
+        backy.daemon.main(config, self.log)
 
     def check(self, config):
-        backy.daemon.check(config)
+        backy.daemon.check(config, self.log)
 
     def purge(self):
-        b = backy.backup.Backup(self.path)
+        b = backy.backup.Backup(self.path, self.log)
         b.purge()
 
     def nbd(self, host, port):
-        b = backy.backup.Backup(".")
+        b = backy.backup.Backup(self.path, self.log)
         b.nbd_server(host, port)
 
     def upgrade(self):
-        b = backy.backup.Backup(".")
+        b = backy.backup.Backup(self.path, self.log)
         b.upgrade()
 
     def distrust(self, revision, from_, until):
-        b = backy.backup.Backup(".")
+        b = backy.backup.Backup(self.path, self.log)
         b.distrust(revision, from_, until)
 
     def verify(self, revision):
-        b = backy.backup.Backup(".")
+        b = backy.backup.Backup(self.path, self.log)
         b.verify(revision)
 
 
@@ -157,15 +144,19 @@ def setup_argparser():
     parser.add_argument(
         "-l",
         "--logfile",
+        type=Path,
+        default=argparse.SUPPRESS,
         help=(
             "file name to write log output in. "
-            "If no file name is specified, log to stdout."
+            "(default: /var/log/backy.log for `scheduler` and `check`, "
+            "$backupdir/backy.log otherwise)"
         ),
     )
     parser.add_argument(
         "-b",
         "--backupdir",
         default=".",
+        type=Path,
         help=(
             "directory where backups and logs are written to "
             "(default: %(default)s)"
@@ -370,11 +361,26 @@ def main():
         parser.print_usage()
         sys.exit(0)
 
-    # Logging
-    if args.func != "check":
-        init_logging(args.logfile, args.verbose)
+    if not hasattr(args, "logfile"):
+        args.logfile = None
 
-    command = Command(args.backupdir)
+    is_daemon = args.func == "scheduler" or args.func == "check"
+    default_logfile = (
+        Path("/var/log/backy.log")
+        if is_daemon
+        else args.backupdir / "backy.log"
+    )
+
+    # Logging
+    logging.init_logging(
+        args.verbose,
+        args.logfile or default_logfile,
+        default_job_name="-" if is_daemon else "",
+    )
+    log = structlog.stdlib.get_logger(subsystem="command")
+    log.debug("invoked", args=" ".join(sys.argv))
+
+    command = Command(args.backupdir, log)
     func = getattr(command, args.func)
 
     # Pass over to function
@@ -385,13 +391,10 @@ def main():
     del func_args["logfile"]
 
     try:
-        logger.debug("backup.{0}(**{1!r})".format(args.func, func_args))
+        log.debug("parsed", func=args.func, func_args=func_args)
         func(**func_args)
-        if args.logfile:
-            logger.info("Backy operation complete.")
+        log.debug("successful")
         sys.exit(0)
-    except Exception as e:
-        print("Error: {}".format(e), file=sys.stderr)
-        logger.exception(e)
-        logger.info("Backy operation failed.")
+    except Exception:
+        log.exception("failed")
         sys.exit(1)

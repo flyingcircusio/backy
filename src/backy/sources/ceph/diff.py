@@ -1,10 +1,8 @@
-import logging
 import struct
 from collections import namedtuple
+from typing import IO, Optional
 
 from backy.fallocate import punch_hole
-
-log = logging.getLogger(__name__)
 
 
 def unpack_from(fmt, f):
@@ -21,7 +19,10 @@ ToSnap = namedtuple("ToSnap", ["snapshot"])
 
 
 class RBDDiffV1(object):
-    phase = None  # header, metadata, data
+    f: IO
+    phase: str  # header, metadata, data
+    record_type: Optional[str]
+    _streaming: bool
 
     header = b"rbd diff v1\n"
 
@@ -45,12 +46,12 @@ class RBDDiffV1(object):
         if self.phase == "end":
             return
         assert not self._streaming, "Unread data from read_w. Consume first."
-        self.last_record_type = self.record_type
+        last_record_type = self.record_type
         self.record_type = self.f.read(1).decode("ascii")
         if self.record_type not in ["f", "t", "s", "w", "z", "e"]:
             raise ValueError(
                 'Got invalid record type "{}". Previous record: {}'.format(
-                    self.record_type, self.last_record_type
+                    self.record_type, last_record_type
                 )
             )
         method = getattr(self, "read_{}".format(self.record_type))

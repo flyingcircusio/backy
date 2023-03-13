@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-import backy.utils
+from backy import utils
 from backy.backends.chunked import ChunkedFileBackend
 from backy.daemon import BackyDaemon
 from backy.revision import Revision
@@ -17,8 +17,8 @@ from backy.tests import Ellipsis
 
 
 @pytest.fixture
-async def daemon(tmpdir, event_loop):
-    daemon = BackyDaemon(str(tmpdir / "config"))
+async def daemon(tmpdir, event_loop, log):
+    daemon = BackyDaemon(str(tmpdir / "config"), log)
     base_dir = str(tmpdir)
     source = str(tmpdir / "test01.source")
     with open(str(tmpdir / "config"), "w") as f:
@@ -57,14 +57,14 @@ jobs:
     daemon.terminate()
 
 
-def test_fail_on_nonexistent_config():
-    daemon = BackyDaemon("/no/such/config")
-    with pytest.raises(SystemExit):
+def test_fail_on_nonexistent_config(log):
+    daemon = BackyDaemon("/no/such/config", log)
+    with pytest.raises(RuntimeError):
         daemon._read_config()
 
 
 @pytest.mark.asyncio
-async def test_run_backup(daemon):
+async def test_run_backup(daemon, log):
     job = daemon.jobs["test01"]
 
     await job.run_backup({"manual:asdf"})
@@ -72,7 +72,7 @@ async def test_run_backup(daemon):
     assert len(job.backup.history) == 1
     revision = job.backup.history[0]
     assert revision.tags == {"manual:asdf"}
-    backend = ChunkedFileBackend(revision)
+    backend = ChunkedFileBackend(revision, log)
     with backend.open("r") as f:
         assert f.read() == b"I am your father, Luke!"
 
@@ -83,7 +83,7 @@ async def test_run_backup(daemon):
     assert len(job.backup.history) == 2
     revision = job.backup.history[1]
     assert revision.tags == {"manual:asdf"}
-    backend = ChunkedFileBackend(revision)
+    backend = ChunkedFileBackend(revision, log)
     with backend.open("r") as f:
         assert f.read() == b"I am your father, Luke!"
 
@@ -109,15 +109,15 @@ def test_sla_before_first_backup(daemon):
     assert job.sla is True
 
 
-def test_sla_over_time(daemon, clock, tmpdir):
+def test_sla_over_time(daemon, clock, tmpdir, log):
     job = daemon.jobs["test01"]
     # No previous backups - we consider this to be OK initially.
     # I agree that this gives us a blind spot in the beginning. I'll
     # think of something when this happens. Maybe keeping a log of errors
     # or so to notice that we tried previously.
-    revision = Revision(job.backup, "1")
+    revision = Revision(job.backup, log, "1")
     # We're on a 24h cycle. 6 hours old backup is fine.
-    revision.timestamp = backy.utils.now() - datetime.timedelta(hours=6)
+    revision.timestamp = utils.now() - datetime.timedelta(hours=6)
     revision.stats["duration"] = 60.0
     revision.materialize()
     job.backup.scan()
@@ -125,26 +125,26 @@ def test_sla_over_time(daemon, clock, tmpdir):
     assert job.sla is True
 
     # 24 hours is also fine.
-    revision.timestamp = backy.utils.now() - datetime.timedelta(hours=24)
+    revision.timestamp = utils.now() - datetime.timedelta(hours=24)
     revision.write_info()
     job.backup.scan()
     assert job.sla is True
 
     # 32 hours is also fine.
-    revision.timestamp = backy.utils.now() - datetime.timedelta(hours=32)
+    revision.timestamp = utils.now() - datetime.timedelta(hours=32)
     revision.write_info()
     job.backup.scan()
     assert job.sla is True
 
     # 24*1.5 hours is the last time that is OK.
-    revision.timestamp = backy.utils.now() - datetime.timedelta(hours=24 * 1.5)
+    revision.timestamp = utils.now() - datetime.timedelta(hours=24 * 1.5)
     revision.write_info()
     job.backup.scan()
     assert job.sla is True
 
     # 1 second later we consider this not to be good any longer.
     revision.timestamp = (
-        backy.utils.now()
+        utils.now()
         - datetime.timedelta(hours=24 * 1.5)
         - datetime.timedelta(seconds=1)
     )
@@ -153,14 +153,14 @@ def test_sla_over_time(daemon, clock, tmpdir):
     assert job.sla is False
 
 
-def test_incomplete_revs_dont_count_for_sla(daemon, clock, tmpdir):
+def test_incomplete_revs_dont_count_for_sla(daemon, clock, tmpdir, log):
     job = daemon.jobs["test01"]
-    r1 = Revision(job.backup, "1")
-    r1.timestamp = backy.utils.now() - datetime.timedelta(hours=48)
+    r1 = Revision(job.backup, log, "1")
+    r1.timestamp = utils.now() - datetime.timedelta(hours=48)
     r1.stats["duration"] = 60.0
     r1.materialize()
-    r2 = Revision(job.backup, "2")
-    r2.timestamp = backy.utils.now() - datetime.timedelta(hours=1)
+    r2 = Revision(job.backup, log, "2")
+    r2.timestamp = utils.now() - datetime.timedelta(hours=1)
     r2.materialize()
     job.backup.scan()
     assert False is job.sla
@@ -170,8 +170,8 @@ def test_status_should_default_to_basedir(daemon, tmpdir):
     assert str(tmpdir / "status") == daemon.status_file
 
 
-def test_update_status():
-    job = Job(mock.Mock(), "asdf")
+def test_update_status(log):
+    job = Job(mock.Mock(), "asdf", log)
     assert job.status == ""
     job.update_status("asdf")
     assert job.status == "asdf"
@@ -215,7 +215,7 @@ async def test_task_generator(daemon, clock, tmpdir, monkeypatch, tz_berlin):
 
 @pytest.mark.asyncio
 async def test_task_generator_backoff(
-    caplog, daemon, clock, tmpdir, monkeypatch, tz_berlin
+    daemon, clock, tmpdir, monkeypatch, tz_berlin
 ):
     for j in daemon.jobs.values():
         await cancel_and_wait(j)
@@ -252,49 +252,49 @@ async def test_task_generator_backoff(
         while job._task is not None:
             await asyncio.sleep(0.1)
 
-    caplog.clear()
+    utils.log_data = ""
 
     job.start()
 
     await wait_for_job_finished()
+
     assert (
         Ellipsis(
             """\
-INFO     ... test01: started backup loop
-INFO     ... test01: 2015-09-02 07:32:51, {'daily'}
-ERROR    ...
-Traceback (most recent call last):
-  File "/.../src/backy/scheduler.py", line ..., in run_forever
-    await self.run_backup(next_tags)
-  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
-    raise Exception()
-Exception
-WARNING  ... test01: retrying in 120 seconds
-INFO     ... test01: 2015-09-01 09:08:47, {'daily'}
-ERROR    ...
-Traceback (most recent call last):
-  File "/.../src/backy/scheduler.py", line ..., in run_forever
-    await self.run_backup(next_tags)
-  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
-    raise Exception()
-Exception
-WARNING  ... test01: retrying in 240 seconds
-INFO     ... test01: 2015-09-01 09:10:47, {'daily'}
-ERROR    ...
-Traceback (most recent call last):
-  File "/.../src/backy/scheduler.py", line ..., in run_forever
-    await self.run_backup(next_tags)
-  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
-    raise Exception()
-Exception
-WARNING  ... test01: retrying in 480 seconds
-INFO     ... test01: 2015-09-01 09:14:47, {'daily'}
-INFO     ... test01: finished
-INFO     ... test01: shutting down
-INFO     ... test01: 2015-09-02 07:32:51, {'daily'}
+... D test01               job/loop-started               \n\
+... I test01               job/waiting                    next_tags='daily' next_time='2015-09-02 07:32:51'
+... E test01               job/exception                  exception_class='builtins.Exception' exception_msg=''
+exception>\tTraceback (most recent call last):
+exception>\t  File "/.../src/backy/scheduler.py", line ..., in run_forever
+exception>\t    await self.run_backup(next_tags)
+exception>\t  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
+exception>\t    raise Exception()
+exception>\tException
+... W test01               job/backoff                    backoff=120
+... I test01               job/waiting                    next_tags='daily' next_time='2015-09-01 09:08:47'
+... E test01               job/exception                  exception_class='builtins.Exception' exception_msg=''
+exception>\tTraceback (most recent call last):
+exception>\t  File "/.../src/backy/scheduler.py", line ..., in run_forever
+exception>\t    await self.run_backup(next_tags)
+exception>\t  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
+exception>\t    raise Exception()
+exception>\tException
+... W test01               job/backoff                    backoff=240
+... I test01               job/waiting                    next_tags='daily' next_time='2015-09-01 09:10:47'
+... E test01               job/exception                  exception_class='builtins.Exception' exception_msg=''
+exception>\tTraceback (most recent call last):
+exception>\t  File "/.../src/backy/scheduler.py", line ..., in run_forever
+exception>\t    await self.run_backup(next_tags)
+exception>\t  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
+exception>\t    raise Exception()
+exception>\tException
+... W test01               job/backoff                    backoff=480
+... I test01               job/waiting                    next_tags='daily' next_time='2015-09-01 09:14:47'
+... I test01               job/stop                       \n\
+... I test01               job/waiting                    next_tags='daily' next_time='2015-09-02 07:32:51'
 """
         )
-        == caplog.text
+        == utils.log_data
     )
 
     assert job.errors == 0
@@ -319,53 +319,88 @@ def test_daemon_status_filter_re(daemon):
     assert {"foo00"} == set([s["job"] for s in daemon.status(r)])
 
 
-def test_check_ok(daemon, capsys):
+def test_check_ok(daemon, setup_structlog):
+    setup_structlog.default_job_name = "-"
     daemon._write_status_file()
+
+    utils.log_data = ""
     try:
         daemon.check()
     except SystemExit as exit:
         assert exit.code == 0
-    out, err = capsys.readouterr()
-    assert "OK: 2 jobs within SLA\n" == out
+    assert (
+        Ellipsis(
+            """\
+... I -                    daemon/read-config             ...
+... I -                    daemon/check-within-sla        num=2
+"""
+        )
+        == utils.log_data
+    )
 
 
-def test_check_too_old(daemon, tmpdir, clock, capsys):
+def test_check_too_old(daemon, tmpdir, clock, log, setup_structlog):
+    setup_structlog.default_job_name = "-"
     job = daemon.jobs["test01"]
-    revision = Revision(job.backup, "1")
-    revision.timestamp = backy.utils.now() - datetime.timedelta(hours=48)
+    revision = Revision(job.backup, log, "1")
+    revision.timestamp = utils.now() - datetime.timedelta(hours=48)
     revision.stats["duration"] = 60.0
     revision.materialize()
     daemon._write_status_file()
+
+    utils.log_data = ""
     try:
         daemon.check()
     except SystemExit as exit:
         assert exit.code == 2
-    out, err = capsys.readouterr()
     assert (
-        out
-        == """\
-CRITICAL: 1 jobs not within SLA
-test01 (last time: 2015-08-30 07:06:47+00:00, overdue: 172800.0)
+        Ellipsis(
+            """\
+... I -                    daemon/read-config             ...
+... C test01               daemon/check-sla-violation     last_time='2015-08-30 07:06:47+00:00' sla_overdue=172800.0
+... D -                    daemon/check-jobs-failed       failed_jobs=1
 """
+        )
+        == utils.log_data
     )
 
 
-def test_check_no_status_file(daemon, capsys):
+def test_check_no_status_file(daemon, setup_structlog):
+    setup_structlog.default_job_name = "-"
     os.unlink(daemon.status_file)
+
+    utils.log_data = ""
     try:
         daemon.check()
     except SystemExit as exit:
         assert exit.code == 3
-    out, err = capsys.readouterr()
-    assert out.startswith("UNKNOWN: No status file found at")
+    assert (
+        Ellipsis(
+            """\
+... I -                    daemon/read-config             ...
+... E -                    daemon/check-no-status-file    status_file='...'
+"""
+        )
+        == utils.log_data
+    )
 
 
-def test_check_stale_status_file(daemon, capsys):
+def test_check_stale_status_file(daemon, setup_structlog):
+    setup_structlog.default_job_name = "-"
     open(daemon.status_file, "a").close()
     os.utime(daemon.status_file, (time.time() - 301, time.time() - 301))
+
+    utils.log_data = ""
     try:
         daemon.check()
     except SystemExit as exit:
         assert exit.code == 2
-    out, err = capsys.readouterr()
-    assert out == "CRITICAL: Status file is older than 5 minutes\n"
+    assert (
+        Ellipsis(
+            """\
+... I -                    daemon/read-config             ...
+... C -                    daemon/check-old-status-file   age=...
+"""
+        )
+        == utils.log_data
+    )

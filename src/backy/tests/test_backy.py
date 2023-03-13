@@ -17,7 +17,7 @@ def generate_test_data(target, size, marker):
     f.close()
 
 
-def test_smoketest_internal(tmpdir):
+def test_smoketest_internal(tmpdir, log):
     # These copies of data are intended to be different versions of the same
     # file.
     source1 = str(tmpdir / "image1.qemu")
@@ -37,7 +37,7 @@ def test_smoketest_internal(tmpdir):
                 % source1
             ).encode("utf-8")
         )
-    backup = backy.backup.Backup(str(backup_dir))
+    backup = backy.backup.Backup(str(backup_dir), log)
 
     # Backup first state
     backup.backup({"manual:test"})

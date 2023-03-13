@@ -1,6 +1,5 @@
 import asyncio
 import fcntl
-import logging
 import os
 import os.path as p
 import re
@@ -8,34 +7,44 @@ import shutil
 import signal
 import sys
 import time
+from typing import IO, Optional
 
 import humanize
 import pkg_resources
 import prettytable
 import telnetlib3
 import yaml
+from structlog.stdlib import BoundLogger
 
 from .schedule import Schedule
 from .scheduler import Job
 from .utils import SafeFile, format_datetime_local, has_recent_changes
 
-logger = logging.getLogger(__name__)
-daemon = None
+daemon: "BackyDaemon"
 
 
 class BackyDaemon(object):
     # config defaults, will be overriden from config file
-    worker_limit = 1
-    base_dir = None
-    status_file = None
-    status_interval = 30
-    telnet_addrs = "::1, 127.0.0.1"
-    telnet_port = 6023
+    worker_limit: int = 1
+    base_dir: Optional[str] = None
+    status_file: Optional[str] = None
+    status_interval: int = 30
+    telnet_addrs: str = "::1, 127.0.0.1"
+    telnet_port: int = 6023
+    config_file: str
+    config: Optional[dict]
+    schedules: dict[str, Schedule]
+    jobs: dict[str, Job]
 
-    loop = None
+    backup_semaphores: dict[str, asyncio.BoundedSemaphore]
+    log: BoundLogger
+    _lock: Optional[IO] = None
 
-    def __init__(self, config_file):
+    loop: Optional[asyncio.AbstractEventLoop] = None
+
+    def __init__(self, config_file, log):
         self.config_file = config_file
+        self.log = log.bind(subsystem="daemon")
         self.config = None
         self.schedules = {}
         self.backup_semaphores = {}
@@ -44,11 +53,8 @@ class BackyDaemon(object):
 
     def _read_config(self):
         if not p.exists(self.config_file):
-            logger.error(
-                "Could not load configuration. `%s` does not exist.",
-                self.config_file,
-            )
-            raise SystemExit(1)
+            self.log.error("no-config-file", config_file=self.config_file)
+            raise RuntimeError("Could not find config file.")
         with open(self.config_file, encoding="utf-8") as f:
             fcntl.flock(f, fcntl.LOCK_SH)
             self.config = yaml.safe_load(f)
@@ -74,21 +80,24 @@ class BackyDaemon(object):
             new[name].configure(config)
         self.schedules = new
 
-        logger.info("status interval: %s", self.status_interval)
-        logger.info("status location: %s", self.status_file)
-        logger.info("worker limit: %s", self.worker_limit)
-        logger.info("backup location: %s", self.base_dir)
-        logger.info("available schedules: %s", ", ".join(self.schedules))
+        self.log.info(
+            "read-config",
+            status_interval=self.status_interval,
+            status_file=self.status_file,
+            worker_limit=self.worker_limit,
+            base_dir=self.base_dir,
+            schedules=", ".join(self.schedules),
+        )
 
     def _apply_config(self):
         # Add new jobs and update existing jobs
         for name, config in self.config["jobs"].items():
             if name not in self.jobs:
-                self.jobs[name] = job = Job(self, name)
-                logger.info(f"{name}: added new job")
+                self.jobs[name] = Job(self, name, self.log)
+                self.log.debug("added-job", job_name=name)
             job = self.jobs[name]
             if config != job.last_config:
-                logger.info(f"{name}: applying (changed) config")
+                self.log.info("changed-job", job_name=name)
                 job.configure(config)
                 job.stop()
                 job.start()
@@ -97,7 +106,7 @@ class BackyDaemon(object):
             if name not in self.config["jobs"]:
                 job.stop()
                 del self.jobs[name]
-                logger.info(f"{name}: stopped and deleted job")
+                self.log.info("deleted-job", job_name=name)
 
         if (
             not self.backup_semaphores
@@ -124,8 +133,8 @@ class BackyDaemon(object):
         self._lock = open(lockfile, "a+b")
         try:
             fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except EnvironmentError as e:
-            logger.critical("failed to acquire lock %s: %s", lockfile, e)
+        except EnvironmentError:
+            self.log.critical("lock-failed", lockfile=lockfile, exc_info=True)
             sys.exit(69)
 
     def start(self, loop):
@@ -145,7 +154,7 @@ class BackyDaemon(object):
         loop.create_task(self.shutdown_loop(), name="shutdown-cleanup")
 
         def handle_signals(signum, _traceback):
-            logger.info("Received signal %s", signum)
+            self.log.info("signal-received", signum=signum)
 
             if signum in [signal.SIGINT, signal.SIGQUIT, signal.SIGTERM]:
                 self.terminate()
@@ -160,18 +169,26 @@ class BackyDaemon(object):
         ):
             signal.signal(sig, handle_signals)
 
+    def run_forever(self):
+        self.log.info("starting-loop")
+        self.loop.run_forever()
+        self.loop.close()
+
     def reload(self):
-        logger.info("Triggering reload")
-        self._read_config()
-        self._apply_config()
+        self.log.info("reloading")
+        try:
+            self._read_config()
+        except RuntimeError:
+            self.log.exception("error-reading-config")
+        else:
+            self._apply_config()
+            self.log.info("reloading-finished")
 
     def telnet_server(self):
         """Starts to listen on all configured telnet addresses."""
         assert self.loop, "cannot start telnet server without event loop"
         for addr in (a.strip() for a in self.telnet_addrs.split(",")):
-            logger.info(
-                "starting telnet server on %s:%i", addr, self.telnet_port
-            )
+            self.log.info("telnet-starting", addr=addr, port=self.telnet_port)
             server = telnetlib3.create_server(
                 host=addr, port=self.telnet_port, shell=telnet_server_shell
             )
@@ -180,7 +197,7 @@ class BackyDaemon(object):
             )
 
     def terminate(self):
-        logger.info("Terminating all tasks")
+        self.log.info("terminating")
         for task in asyncio.all_tasks():
             if task.get_coro().__name__ == "async_finalizer":
                 # Support pytest-asyncio integration.
@@ -188,17 +205,21 @@ class BackyDaemon(object):
             if task.get_coro().__name__.startswith("test_"):
                 # Support pytest-asyncio integration.
                 continue
-            print(f"Cancelling: {task.get_name()}, {task.get_coro().__name__}")
+            self.log.debug(
+                "cancelling-task",
+                name=task.get_name(),
+                coro_name=task.get_coro().__name__,
+            )
             task.cancel()
 
     async def shutdown_loop(self):
-        logger.info("Waiting for shutdown")
+        self.log.debug("waiting-shutdown")
         while True:
             try:
                 await asyncio.sleep(0.25)
             except asyncio.CancelledError:
                 break
-        logger.info("Stopping loop")
+        self.log.info("stopping-loop")
         self.loop.stop()
 
     def status(self, filter_re=None):
@@ -247,14 +268,16 @@ class BackyDaemon(object):
             if not job["sla_overdue"]:
                 continue
             overdue = humanize.naturaldelta(job["sla_overdue"])
-            logger.warning(f'SLA violation: {job["job"]} - {overdue} overdue')
+            self.log.warning(
+                "sla-violation", job_name=job["job"], overdue=overdue
+            )
 
     async def save_status_file(self):
         while True:
             try:
                 self._write_status_file()
-            except Exception as e:  # pragma: no cover
-                logger.exception(e)
+            except Exception:  # pragma: no cover
+                self.log.exception("save-status-exception")
             await asyncio.sleep(self.status_interval)
 
     async def purge_old_files(self):
@@ -262,31 +285,34 @@ class BackyDaemon(object):
         # properly async, we might want to spawn those off into a separate
         # thread.
         while True:
-            logger.info("Scanning old directories to purge")
+            self.log.info("purge-scanning")
             for candidate in os.scandir(self.base_dir):
                 if not candidate.is_dir(follow_symlinks=False):
                     continue
-                print(candidate)
+                self.log.debug("purge-candidate", candidate=candidate.path)
                 reference_time = time.time() - 3 * 31 * 24 * 60 * 60
                 if not has_recent_changes(candidate, reference_time):
-                    logger.info(f"Purging {candidate.path}")
+                    self.log.info("purging", candidate=candidate.path)
                     shutil.rmtree(candidate)
-            logger.info("Finished scanning old directories to purge")
+            self.log.info("purge-finished")
             await asyncio.sleep(24 * 60 * 60)
 
     def check(self):
-        self._read_config()
+        try:
+            self._read_config()
+        except RuntimeError:
+            sys.exit(1)
 
         if not p.exists(self.status_file):
-            print(
-                "UNKNOWN: No status file found at {}".format(self.status_file)
-            )
+            self.log.error("check-no-status-file", status_file=self.status_file)
             sys.exit(3)
 
         # The output should be relatively new. Let's say 5 min max.
         s = os.stat(self.status_file)
         if time.time() - s.st_mtime > 5 * 60:
-            print("CRITICAL: Status file is older than 5 minutes")
+            self.log.critical(
+                "check-old-status-file", age=time.time() - s.st_mtime
+            )
             sys.exit(2)
 
         failed_jobs = []
@@ -299,21 +325,17 @@ class BackyDaemon(object):
                 failed_jobs.append(job)
 
         if failed_jobs:
-            print(
-                "CRITICAL: {} jobs not within SLA\n{}".format(
-                    len(failed_jobs),
-                    "\n".join(
-                        "{} (last time: {}, overdue: {})".format(
-                            f["job"], f["last_time"], f["sla_overdue"]
-                        )
-                        for f in failed_jobs
-                    ),
+            for f in failed_jobs:
+                self.log.critical(
+                    "check-sla-violation",
+                    job_name=f["job"],
+                    last_time=str(f["last_time"]),
+                    sla_overdue=f["sla_overdue"],
                 )
-            )
-            logging.debug("failed jobs: %r", failed_jobs)
+            self.log.debug("check-jobs-failed", failed_jobs=len(failed_jobs))
             sys.exit(2)
 
-        print("OK: {} jobs within SLA".format(len(status)))
+        self.log.info("check-within-sla", num=len(status))
         sys.exit(0)
 
 
@@ -470,12 +492,12 @@ class SchedulerShell(object):
     def runall(self):
         """Show job status overview"""
         for job in daemon.jobs.values():
-            if not hasattr(job, "task"):
+            if not hasattr(job, "_task"):
                 self.writer.write(
                     "{} not ready. Try again later.".format(job.name)
                 )
                 continue
-            job.task.run_immediately.set()
+            job.run_immediately.set()
             self.writer.write("Triggered immediate run for {}".format(job.name))
 
     def reload(self):
@@ -485,19 +507,16 @@ class SchedulerShell(object):
         self.writer.write("Daemon configuration reloaded.\r\n")
 
 
-def check(config_file):  # pragma: no cover
-    daemon = BackyDaemon(config_file)
+def check(config_file, log: BoundLogger):  # pragma: no cover
+    daemon = BackyDaemon(config_file, log)
     daemon.check()
 
 
-def main(config_file):  # pragma: no cover
+def main(config_file, log: BoundLogger):  # pragma: no cover
     global daemon
 
     loop = asyncio.get_event_loop()
-    daemon = BackyDaemon(config_file)
+    daemon = BackyDaemon(config_file, log)
     daemon.start(loop)
     daemon.telnet_server()
-
-    logger.info("Starting async loop.")
-    loop.run_forever()
-    loop.close()
+    daemon.run_forever()

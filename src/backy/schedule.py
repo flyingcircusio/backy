@@ -1,11 +1,8 @@
 import copy
-import logging
 from datetime import timedelta
 
 import backy.utils
 from backy.revision import filter_schedule_tags
-
-logger = logging.getLogger(__name__)
 
 MINUTE = 60
 HOUR = 60 * MINUTE
@@ -51,6 +48,9 @@ def next_in_interval(relative, interval, spread):
 
 
 class Schedule(object):
+    schedule: dict
+    config: dict
+
     def __init__(self):
         self.schedule = {}
         self.config = {}

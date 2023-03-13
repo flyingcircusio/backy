@@ -1,22 +1,25 @@
 import datetime
 import glob
-import logging
 import os
 import os.path as p
+from enum import Enum
+from typing import Optional
 
 import shortuuid
 import yaml
+from structlog.stdlib import BoundLogger
+
+import backy.backup
 
 from .utils import SafeFile, now, safe_symlink
-
-TRUST_TRUSTED = "trusted"
-TRUST_DISTRUSTED = "distrusted"
-TRUST_VERIFIED = "verified"
 
 TAG_MANUAL_PREFIX = "manual:"
 
 
-logger = logging.getLogger(__name__)
+class Trust(Enum):
+    TRUSTED = "trusted"
+    DISTRUSTED = "distrusted"
+    VERIFIED = "verified"
 
 
 def filter_schedule_tags(tags):
@@ -24,49 +27,53 @@ def filter_schedule_tags(tags):
 
 
 class Revision(object):
-    uuid = None
-    timestamp = None
-    parent = None
-    stats = None
-    tags = None
-    trust = TRUST_TRUSTED  # or TRUST_DISTRUSTED, TRUST_VERIFIED
+    backup: "backy.backup.Backup"
+    uuid: str
+    timestamp: datetime.datetime
+    parent: Optional[str] = None
+    stats: dict
+    tags: set[str]
+    trust: Trust = Trust.TRUSTED
+    backend_type: str = "chunked"
+    log: BoundLogger
 
-    def __init__(self, backup, uuid=None, timestamp=None):
+    def __init__(self, backup, log, uuid=None, timestamp=None):
         self.backup = backup
-        self.backend_type = backup.backend_type
         self.uuid = uuid if uuid else shortuuid.uuid()
         self.timestamp = timestamp if timestamp else now()
         self.stats = {"bytes_written": 0}
         self.tags = set()
+        self.log = log.bind(revision_uuid=self.uuid, subsystem="revision")
 
     @classmethod
-    def create(cls, backup, tags):
-        r = Revision(backup)
+    def create(cls, backup, tags, log):
+        r = Revision(backup, log)
         r.tags = tags
         if backup.history:
             r.parent = backup.history[-1].uuid
+        r.backend_type = backup.backend_type
         return r
 
     @property
     def backend(self):
-        return self.backup.backend_factory(self)
+        return self.backup.backend_factory(self, self.log)
 
     def open(self, mode="rb"):
         return self.backend.open(mode)
 
     @classmethod
-    def load(cls, filename, backup):
+    def load(cls, filename, backup, log):
         with open(filename, encoding="utf-8") as f:
             metadata = yaml.safe_load(f)
         assert metadata["timestamp"].tzinfo == datetime.timezone.utc
         r = Revision(
-            backup, uuid=metadata["uuid"], timestamp=metadata["timestamp"]
+            backup, log, uuid=metadata["uuid"], timestamp=metadata["timestamp"]
         )
         r.parent = metadata["parent"]
         r.stats = metadata.get("stats", {})
         r.tags = set(metadata.get("tags", []))
         # Assume trusted by default to support migration
-        r.trust = metadata.get("trust", TRUST_TRUSTED)
+        r.trust = Trust(metadata.get("trust", Trust.TRUSTED.value))
         # If the metadata does not show the backend type, then it's cowfile.
         r.backend_type = metadata.get("backend_type", "cowfile")
         return r
@@ -86,13 +93,14 @@ class Revision(object):
         self.writable()
 
     def write_info(self):
+        self.log.debug("writing-info", tags=", ".join(self.tags))
         metadata = {
             "uuid": self.uuid,
             "backend_type": self.backend_type,
             "timestamp": self.timestamp,
             "parent": self.parent,
             "stats": self.stats,
-            "trust": self.trust,
+            "trust": self.trust.value,
             "tags": list(self.tags),
         }
         with SafeFile(self.info_filename, encoding="utf-8") as f:
@@ -105,19 +113,20 @@ class Revision(object):
         safe_symlink(self.info_filename, p.join(path, name + ".rev"))
 
     def distrust(self):
-        logger.info("Distrusting revision %s", self.uuid)
-        self.trust = TRUST_DISTRUSTED
+        self.log.info("distrusted")
+        self.trust = Trust.DISTRUSTED
 
     def verify(self):
-        logger.info("Marking revision as verified %s", self.uuid)
-        self.trust = TRUST_VERIFIED
+        self.log.info("verified")
+        self.trust = Trust.VERIFIED
 
     def remove(self):
+        self.log.info("remove")
         for filename in glob.glob(self.filename + "*"):
             if os.path.exists(filename):
-                logger.info("Removing %s", filename)
+                self.log.debug("remove-start", filename=filename)
                 os.remove(filename)
-                logger.info("Removed %s", filename)
+                self.log.debug("remove-end", filename=filename)
 
         if self in self.backup.history:
             self.backup.history.remove(self)

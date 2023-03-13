@@ -6,8 +6,8 @@ from backy.backends.chunked import ChunkedFileBackend
 from backy.revision import Revision
 
 
-def test_overlay(simple_file_config):
-    r = Revision(simple_file_config)
+def test_overlay(simple_file_config, log):
+    r = Revision(simple_file_config, log)
     assert isinstance(r.backend, ChunkedFileBackend)
     # Write 1 version to the file
     f = r.open("w")
@@ -29,9 +29,9 @@ def test_overlay(simple_file_config):
     f.close()
 
 
-def test_purge(simple_file_config):
+def test_purge(simple_file_config, log):
     b = simple_file_config
-    r = Revision(b)
+    r = Revision(b, log)
     # Write 1 version to the file
     f = r.open("w")
     f.write(b"asdf")
@@ -48,9 +48,9 @@ def test_purge(simple_file_config):
     assert len(list(r.backend.store.ls())) == 0
 
 
-def test_scrub_light(simple_file_config):
+def test_scrub_light(simple_file_config, log):
     b = simple_file_config
-    r = Revision(b)
+    r = Revision(b, log)
     r.materialize()
     b.scan()
     f = r.open("w")
@@ -62,9 +62,9 @@ def test_scrub_light(simple_file_config):
     assert r.backend.scrub(b, "light") == 1
 
 
-def test_scrub_deep(simple_file_config):
+def test_scrub_deep(simple_file_config, log):
     b = simple_file_config
-    r = Revision(b)
+    r = Revision(b, log)
     r.materialize()
     b.scan()
     f = r.open("w")
@@ -78,9 +78,9 @@ def test_scrub_deep(simple_file_config):
     assert r.backend.scrub(b, "deep") == 1
 
 
-def test_scrub_wrong_type(simple_file_config):
+def test_scrub_wrong_type(simple_file_config, log):
     b = simple_file_config
-    r = Revision(b)
+    r = Revision(b, log)
     r.materialize()
     b.scan()
     with pytest.raises(RuntimeError):

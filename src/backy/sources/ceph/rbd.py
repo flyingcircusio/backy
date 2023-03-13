@@ -1,7 +1,8 @@
 import contextlib
 import json
-import logging
 import subprocess
+
+from structlog.stdlib import BoundLogger
 
 import backy.sources.ceph
 
@@ -9,10 +10,13 @@ from ...ext_deps import RBD
 from ...utils import CHUNK_SIZE
 from .diff import RBDDiffV1
 
-logger = logging.getLogger(__name__)
-
 
 class RBDClient(object):
+    log: BoundLogger
+
+    def __init__(self, log: BoundLogger):
+        self.log = log.bind(subsystem="rbd")
+
     def _ceph_cli(self, cmdline, encoding="utf-8") -> str:
         # This wrapper function for the `rbd` command is only used for
         # getting and interpreting text messages, making this the correct level for
@@ -32,9 +36,10 @@ class RBDClient(object):
         if format == "json":
             rbd.append("--format=json")
 
-        logger.debug(" ".join(rbd))
+        self.log.debug("executing-command", command=" ".join(rbd))
         result = self._ceph_cli(rbd)
 
+        self.log.debug("executed-command", stdout=result)
         if format == "json":
             result = json.loads(result)
 
@@ -108,7 +113,9 @@ class RBDClient(object):
 
     @contextlib.contextmanager
     def export_diff(self, new, old):
-        logger.info(str(backy.sources.ceph.CEPH_VERSION))
+        self.log.info(
+            "export-diff", ceph_version=str(backy.sources.ceph.CEPH_VERSION)
+        )
         if backy.sources.ceph.CEPH_RBD_SUPPORTS_WHOLE_OBJECT_DIFF:
             EXPORT_WHOLE_OBJECT = ["--whole-object"]
         else:

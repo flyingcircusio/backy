@@ -26,6 +26,10 @@ def filter_schedule_tags(tags):
     return {t for t in tags if not t.startswith(TAG_MANUAL_PREFIX)}
 
 
+def filter_manual_tags(tags):
+    return {t for t in tags if t.startswith(TAG_MANUAL_PREFIX)}
+
+
 class Revision(object):
     backup: "backy.backup.Backup"
     uuid: str

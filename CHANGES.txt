@@ -34,6 +34,8 @@ Changelog
 
 - Static typechecking with mypy
 
+- List all manual tags in `backy check`
+
 2.4.3 (2019-04-17)
 ==================
 

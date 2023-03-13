@@ -365,6 +365,32 @@ def test_check_too_old(daemon, tmpdir, clock, log, setup_structlog):
     )
 
 
+def test_check_manual_tags(daemon, setup_structlog, log):
+    setup_structlog.default_job_name = "-"
+    job = daemon.jobs["test01"]
+    revision = Revision.create(job.backup, {"manual:test"}, log)
+    revision.timestamp = utils.now()
+    revision.stats["duration"] = 60.0
+    revision.materialize()
+    daemon._write_status_file()
+
+    utils.log_data = ""
+    try:
+        daemon.check()
+    except SystemExit as exit:
+        assert exit.code == 0
+    assert (
+        Ellipsis(
+            """\
+... I -                    daemon/read-config             ...
+... I test01               daemon/check-manual-tags       manual_tags='manual:test'
+... I -                    daemon/check-within-sla        num=2
+"""
+        )
+        == utils.log_data
+    )
+
+
 def test_check_no_status_file(daemon, setup_structlog):
     setup_structlog.default_job_name = "-"
     os.unlink(daemon.status_file)

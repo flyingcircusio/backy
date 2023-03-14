@@ -16,6 +16,7 @@ import telnetlib3
 import yaml
 from structlog.stdlib import BoundLogger
 
+from .revision import filter_manual_tags
 from .schedule import Schedule
 from .scheduler import Job
 from .utils import SafeFile, format_datetime_local, has_recent_changes
@@ -229,8 +230,11 @@ class BackyDaemon(object):
             if filter_re and not filter_re.search(job.name):
                 continue
             job.backup.scan()
+            manual_tags = set()
             if job.backup.clean_history:
                 last = job.backup.clean_history[-1]
+                for rev in job.backup.clean_history:
+                    manual_tags |= filter_manual_tags(rev.tags)
             else:
                 last = None
             result.append(
@@ -254,6 +258,7 @@ class BackyDaemon(object):
                         if job.next_tags
                         else None
                     ),
+                    manual_tags=", ".join(manual_tags),
                 )
             )
         return result
@@ -321,6 +326,12 @@ class BackyDaemon(object):
             status = yaml.safe_load(f)
 
         for job in status:
+            if job["manual_tags"]:
+                self.log.info(
+                    "check-manual-tags",
+                    manual_tags=job["manual_tags"],
+                    job_name=job["job"],
+                )
             if job["sla"] != "OK":
                 failed_jobs.append(job)
 

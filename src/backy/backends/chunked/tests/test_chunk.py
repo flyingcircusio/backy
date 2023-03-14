@@ -11,8 +11,8 @@ SPACE_CHUNK = b" " * Chunk.CHUNK_SIZE
 SPACE_CHUNK_HASH = "c01b5d75bfe6a1fa5bca6e492c5ab09a"
 
 
-def test_chunk_read_write_update(tmpdir):
-    store = Store(str(tmpdir / "store"))
+def test_chunk_read_write_update(tmpdir, log):
+    store = Store(str(tmpdir / "store"), log)
     f = File(str(tmpdir / "asdf"), store)
 
     chunk = Chunk(f, 1, store, None)
@@ -23,8 +23,8 @@ def test_chunk_read_write_update(tmpdir):
     assert chunk.read(0) == (b"axxxxsdf", -1)
 
 
-def test_chunk_write_partial_offset(tmpdir):
-    store = Store(str(tmpdir / "store"))
+def test_chunk_write_partial_offset(tmpdir, log):
+    store = Store(str(tmpdir / "store"), log)
     f = File(str(tmpdir / "asdf"), store)
 
     chunk = Chunk(f, 1, store, None)
@@ -53,8 +53,8 @@ def test_chunk_write_partial_offset(tmpdir):
     assert store_state == os.stat(store.chunk_path(SPACE_CHUNK_HASH))
 
 
-def test_chunk_read_existing(tmpdir):
-    store = Store(str(tmpdir / "store"))
+def test_chunk_read_existing(tmpdir, log):
+    store = Store(str(tmpdir / "store"), log)
 
     chunk_hash = hash("asdf")
     p = store.chunk_path(chunk_hash)
@@ -71,8 +71,8 @@ def test_chunk_read_existing(tmpdir):
     chunk.flush()
 
 
-def test_chunk_write_existing_partial_joins_with_existing_data(tmpdir):
-    store = Store(str(tmpdir / "store"))
+def test_chunk_write_existing_partial_joins_with_existing_data(tmpdir, log):
+    store = Store(str(tmpdir / "store"), log)
 
     chunk_hash = hash("asdf")
     p = store.chunk_path(chunk_hash)
@@ -87,8 +87,8 @@ def test_chunk_write_existing_partial_joins_with_existing_data(tmpdir):
     assert chunk._read_existing_called
 
 
-def test_chunk_fails_wrong_content(tmpdir):
-    store = Store(str(tmpdir / "store"))
+def test_chunk_fails_wrong_content(tmpdir, log):
+    store = Store(str(tmpdir / "store"), log)
 
     chunk_hash = hash("asdf")
     p = store.chunk_path(chunk_hash)
@@ -103,9 +103,9 @@ def test_chunk_fails_wrong_content(tmpdir):
 
 
 def test_chunk_write_existing_partial_complete_does_not_read_existing_data(
-    tmpdir,
+    tmpdir, log
 ):
-    store = Store(str(tmpdir / "store"))
+    store = Store(str(tmpdir / "store"), log)
 
     p = store.chunk_path("asdf")
     os.makedirs(os.path.dirname(p))

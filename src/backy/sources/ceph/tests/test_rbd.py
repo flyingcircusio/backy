@@ -11,15 +11,16 @@ from backy.sources.ceph.rbd import RBDClient
 
 
 @mock.patch("subprocess.check_output")
-def test_rbd_command_wrapper(check_output):
-    client = RBDClient()
+def test_rbd_command_wrapper(check_output, log):
+    client = RBDClient(log)
 
+    check_output.return_value = ""
     client._rbd(["foo"])
     check_output.assert_called_with(
         [RBD, "foo"], encoding="utf-8", errors="replace"
     )
 
-    check_output.return_value = b'{"asdf": 1}'
+    check_output.return_value = '{"asdf": 1}'
     result = client._rbd(["foo"], format="json")
     assert result == {"asdf": 1}
     check_output.assert_called_with(

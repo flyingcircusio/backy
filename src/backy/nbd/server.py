@@ -27,9 +27,10 @@ THE SOFTWARE.
 """
 
 import asyncio
-import logging
 import signal
 import struct
+
+from structlog.stdlib import BoundLogger
 
 
 class AbortedNegotiationError(IOError):
@@ -68,8 +69,8 @@ class Server(object):
     NBD_EXPORT_FLAGS = (1 << 0) ^ (1 << 2)
     NBD_RO_FLAG = 1 << 1
 
-    def __init__(self, addr, backup):
-        self.log = logging.getLogger(__package__)
+    def __init__(self, addr, backup, log: BoundLogger):
+        self.log = log.bind(subsystem="nbd-server")
 
         self.address = addr
         self.backup = backup
@@ -85,7 +86,8 @@ class Server(object):
         revision = None
         try:
             host, port = writer.get_extra_info("peername")
-            self.log.info("Incoming connection from %s:%s" % (host, port))
+            log = self.log.bind(host=host, port=port)
+            log.info("new-connection")
 
             # initial handshake
             writer.write(
@@ -105,7 +107,7 @@ class Server(object):
             # we support both fixed and unfixed new-style handshake
             if client_flag == 0:
                 fixed = False
-                self.log.warning("Client using new-style non-fixed handshake")
+                log.warning("non-fixed-handshake")
             elif client_flag & 1:
                 fixed = True
             else:
@@ -135,10 +137,7 @@ class Server(object):
                 else:
                     data = None
 
-                self.log.debug(
-                    "[%s:%s]: opt=%s, len=%s, data=%s"
-                    % (host, port, opt, length, data)
-                )
+                log.debug("negotiating", opt=opt, length=length, data=data)
 
                 if opt == self.NBD_OPT_EXPORTNAME:
                     if not data:
@@ -172,9 +171,7 @@ class Server(object):
                         await writer.drain()
                         continue
 
-                    self.log.info(
-                        "[%s:%s] Negotiated export: %s" % (host, port, uuid)
-                    )
+                    log.info("negotiated-export", uuid=uuid)
 
                     export_flags = self.NBD_EXPORT_FLAGS
                     # export_flags ^= self.NBD_RO_FLAG
@@ -258,13 +255,16 @@ class Server(object):
                 if magic != self.NBD_REQUEST:
                     raise IOError("Bad magic number, disconnecting")
 
-                self.log.debug(
-                    "[%s:%s]: cmd=%s, handle=%s, offset=%s, len=%s"
-                    % (host, port, cmd, handle, offset, length)
+                log.debug(
+                    "new-request",
+                    cmd=cmd,
+                    handle=handle,
+                    offset=offset,
+                    length=length,
                 )
 
                 if cmd == self.NBD_CMD_DISC:
-                    self.log.info("[%s:%s] disconnecting" % (host, port))
+                    log.info("disconnecting")
                     break
 
                 elif cmd == self.NBD_CMD_WRITE:
@@ -283,7 +283,7 @@ class Server(object):
                         revision.write(data)
                         revision._flush_chunks()
                     except IOError as ex:
-                        self.log.error("[%s:%s] %s" % (host, port, ex))
+                        log.exception("cmd-write-exception")
                         await self.nbd_response(writer, handle, error=ex.errno)
                         continue
 
@@ -295,7 +295,7 @@ class Server(object):
                         data = revision.read(length)
                         revision._flush_chunks()
                     except IOError as ex:
-                        self.log.error("[%s:%s] %s" % (host, port, ex))
+                        log.exception("cmd-read-exception")
                         await self.nbd_response(writer, handle, error=ex.errno)
                         continue
 
@@ -306,17 +306,14 @@ class Server(object):
                     await self.nbd_response(writer, handle)
 
                 else:
-                    self.log.warning(
-                        "[%s:%s] Unknown cmd %s, disconnecting"
-                        % (host, port, cmd)
-                    )
+                    log.warning("unknown-cmd", cmd=cmd)
                     break
 
         except AbortedNegotiationError:
-            self.log.info("[%s:%s] Client aborted negotiation" % (host, port))
+            log.info("negotiation-aborted")
 
         except (asyncio.IncompleteReadError, IOError) as ex:
-            self.log.error("[%s:%s] %s" % (host, port, ex))
+            log.exception("exception")
 
         finally:
             if revision:

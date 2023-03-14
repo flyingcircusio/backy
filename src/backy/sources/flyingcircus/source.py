@@ -1,49 +1,31 @@
 import json
-import logging
 import time
 import uuid
 
 import consulate
+from structlog.stdlib import BoundLogger
 
 from ...timeout import TimeOut, TimeOutError
 from ..ceph.source import CephRBD
-
-logger = logging.getLogger(__name__)
 
 
 class FlyingCircusRootDisk(CephRBD):
     snapshot_timeout = 90
 
-    def __init__(self, config):
+    def __init__(self, config, log: BoundLogger):
         self.config = config
         self.vm = config["vm"]
         self.consul_acl_token = config.get("consul_acl_token")
-        super(FlyingCircusRootDisk, self).__init__(config)
-
-    @classmethod
-    def config_from_cli(cls, spec):
-        logger.debug("FlyingCircusRootDisk.config_from_cli(%s)", spec)
-        param = [v.strip() for v in spec.split(",")]
-        if len(param) not in [2, 3]:
-            raise RuntimeError(
-                "flyingcircus source must be initialized with "
-                "POOL/IMAGE,VM[,CONSUL_ACL_TOKEN"
-            )
-        volume, vm = param[:2]
-        consul_acl_token = param[2] if len(param) == 3 else None
-        c = super(FlyingCircusRootDisk, cls).config_from_cli(volume)
-        c["vm"] = vm
-        c["consul_acl_token"] = consul_acl_token
-        return c
+        super(FlyingCircusRootDisk, self).__init__(config, log)
+        self.log = self.log.bind(vm=self.vm, subsystem="fc-disk")
 
     def create_snapshot(self, name):
         consul = consulate.Consul(token=self.consul_acl_token)
         snapshot_key = "snapshot/{}".format(str(uuid.uuid4()))
-        logger.info(
-            "Consul: requesting consistent snapshot of %s@%s via %s",
-            self.vm,
-            name,
-            snapshot_key,
+        self.log.info(
+            "creating-snapshot",
+            snapshot_name=name,
+            snapshot_key=snapshot_key,
         )
 
         consul.kv[snapshot_key] = {"vm": self.vm, "snapshot": name}
@@ -78,8 +60,9 @@ class FlyingCircusRootDisk(CephRBD):
                     s = json.loads(s)
                 except json.decoder.JSONDecodeError:
                     # Clean up garbage.
-                    logger.warning(
-                        "Consul: removing garbage request {}".format(key)
+                    self.log.warning(
+                        "create-snapshot-removing-garbage-request",
+                        snapshot_key=key,
                     )
                     del consul.kv[key]
                 if s["vm"] != self.vm:
@@ -87,10 +70,10 @@ class FlyingCircusRootDisk(CephRBD):
                 # The knowledge about the `backy-` prefix  isn't properly
                 # encapsulated here.
                 if s["snapshot"].startswith("backy-"):
-                    logger.info(
-                        "Consul: removing snapshot request of %s@%s via %s",
-                        s["vm"],
-                        s["snapshot"],
-                        key,
+                    self.log.info(
+                        "create-snapshot-removing-request",
+                        vm=s["vm"],
+                        snapshot_name=s["snapshot"],
+                        snapshot_key=key,
                     )
                     del consul.kv[key]

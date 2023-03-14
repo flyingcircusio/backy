@@ -150,11 +150,11 @@ def test_tag_catchup_needed_for_recently_missed(backup, clock):
 
 
 def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
-    schedule, backup, clock
+    schedule, backup, clock, log
 ):
     def add_revision(timestamp):
         revision = Revision(
-            backup, len(backup.history) + 1, timestamp=timestamp
+            backup, log, len(backup.history) + 1, timestamp=timestamp
         )
         revision.tags = {"daily"}
         revision.materialize()

@@ -1,15 +1,12 @@
 import glob
-import logging
 import os.path
 
 import lzo
+from structlog.stdlib import BoundLogger
 
 from backy.utils import END, report_status
 
-from . import chunk
-
-logger = logging.getLogger(__name__)
-
+from . import File, chunk
 
 # A chunkstore, is responsible for all revisions for a single backup, for now.
 # We can start having statistics later how much reuse between images is
@@ -27,11 +24,18 @@ class Store(object):
     # wanting to perform new backups.
     force_writes = False
 
-    def __init__(self, path="/tmp/chunks"):
+    path: str
+    users: list[File]
+    seen_forced: set[str]
+    known: set[str]
+    log: BoundLogger
+
+    def __init__(self, path, log):
         self.path = path
         self.users = []
         self.seen_forced = set()
         self.known = set()
+        self.log = log.bind(subsystem="chunked-store")
         for x in range(256):
             subdir = os.path.join(self.path, f"{x:02x}")
             if not os.path.exists(subdir):
@@ -45,10 +49,10 @@ class Store(object):
         for c in glob.iglob(os.path.join(self.path, "*/*.chunk.lzo")):
             hash = os.path.basename(c).replace(".chunk.lzo", "")
             self.known.add(hash)
-        logger.info("Loaded {} known chunks.".format(len(self.known)))
+        self.log.debug("init", known_chunks=len(self.known))
 
     def convert_to_v2(self):
-        logger.info("Converting chunk store to v2")
+        self.log.info("to-v2")
         for path in glob.iglob(os.path.join(self.path, "*/*/*.chunk.lzo")):
             new = path.replace(self.path + "/", "", 1)
             dir, _, c = new.split("/")
@@ -59,7 +63,7 @@ class Store(object):
                 os.rmdir(path)
         with open(os.path.join(self.path, "store"), "wb") as f:
             f.write(b"v2")
-        logger.info("Finished conversion to v2")
+        self.log.info("to-v2-finished")
 
     @report_status
     def validate_chunks(self):
@@ -99,7 +103,7 @@ class Store(object):
         to_delete = self.known.copy()
         for user in self.users:
             to_delete = to_delete - set(user._mapping.values())
-        print("Purging: {} chunks".format(len(to_delete)))
+        self.log.info("purge", purging=len(to_delete))
         for file_hash in sorted(to_delete):
             os.unlink(self.chunk_path(file_hash))
 

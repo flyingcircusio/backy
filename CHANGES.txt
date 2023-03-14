@@ -30,6 +30,10 @@ Changelog
 - Add compatibility to changed `rbd showmapped` output format in Ceph Nautilus.
   Ceph Jewel and Luminous clusters remain supported.
 
+- Use structlog for logging
+
+- Static typechecking with mypy
+
 2.4.3 (2019-04-17)
 ==================
 

@@ -10,8 +10,8 @@ from backy.backends.chunked.file import File
 from backy.backends.chunked.store import Store
 
 
-def test_simple_open_write_read_seek(tmpdir):
-    store = Store(str(tmpdir))
+def test_simple_open_write_read_seek(tmpdir, log):
+    store = Store(str(tmpdir), log)
 
     f = File(str(tmpdir / "asdf"), store)
     f.write(b"asdf")
@@ -33,8 +33,8 @@ def test_simple_open_write_read_seek(tmpdir):
     f.close()
 
 
-def test_file_api(tmpdir):
-    store = Store(str(tmpdir))
+def test_file_api(tmpdir, log):
+    store = Store(str(tmpdir), log)
     f = File(str(tmpdir / "asdf"), store)
     assert not f.isatty()
     assert f.readable()
@@ -52,10 +52,10 @@ def test_file_api(tmpdir):
     assert not f.writable()
 
 
-def test_underrun_gets_noticed(tmpdir):
+def test_underrun_gets_noticed(tmpdir, log):
     # This is a somewhat weird case. this means we're referring to a block
     # that is correctly compressed but has too little data in it.
-    store = Store(str(tmpdir))
+    store = Store(str(tmpdir), log)
     with File(str(tmpdir / "asdf"), store) as f:
         f.write(b"asdfasdfasdf")
         f._flush_chunks(0)
@@ -70,8 +70,8 @@ def test_underrun_gets_noticed(tmpdir):
             f.read()
 
 
-def test_file_seek(tmpdir):
-    store = Store(str(tmpdir))
+def test_file_seek(tmpdir, log):
+    store = Store(str(tmpdir), log)
     f = File(str(tmpdir / "asdf"), store)
     with pytest.raises(ValueError):
         f.seek(-1)
@@ -122,14 +122,14 @@ def test_file_seek(tmpdir):
     f.close()
 
 
-def test_simple_open_nonexisting(tmpdir):
-    store = Store(str(tmpdir))
+def test_simple_open_nonexisting(tmpdir, log):
+    store = Store(str(tmpdir), log)
     with pytest.raises(FileNotFoundError):
         File(str(tmpdir / "asdf"), store, mode="r")
 
 
-def test_continuously_updated_file(tmpdir):
-    store = Store(str(tmpdir))
+def test_continuously_updated_file(tmpdir, log):
+    store = Store(str(tmpdir), log)
     sample = open(str(tmpdir / "bsdf"), "wb")
     f = File(str(tmpdir / "asdf"), store)
     for i in range(20):
@@ -165,8 +165,8 @@ def test_continuously_updated_file(tmpdir):
         assert data == chunked_data
 
 
-def test_seeky_updated_file(tmpdir):
-    store = Store(str(tmpdir))
+def test_seeky_updated_file(tmpdir, log):
+    store = Store(str(tmpdir), log)
 
     sample = open(str(tmpdir / "bsdf"), "wb")
     f = File(str(tmpdir / "asdf"), store)
@@ -206,8 +206,8 @@ def test_seeky_updated_file(tmpdir):
         assert data == chunked_data
 
 
-def test_truncate(tmpdir):
-    store = Store(str(tmpdir))
+def test_truncate(tmpdir, log):
+    store = Store(str(tmpdir), log)
 
     f = File(str(tmpdir / "asdf"), store)
     for i in range(5):
@@ -229,8 +229,8 @@ def test_truncate(tmpdir):
     f.close()
 
 
-def test_rplus_and_append_positions(tmpdir):
-    store = Store(str(tmpdir))
+def test_rplus_and_append_positions(tmpdir, log):
+    store = Store(str(tmpdir), log)
 
     with File(str(tmpdir / "asdf"), store) as f:
         f.write(b"asdf")

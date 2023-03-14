@@ -8,8 +8,10 @@ import pytest
 import structlog
 
 import backy.backup
+import backy.logging
 import backy.main
 import backy.schedule
+from backy import utils
 
 fixtures = os.path.dirname(__file__) + "/tests/samples"
 
@@ -22,10 +24,10 @@ def fix_pytest_coverage_465():
 
 
 @pytest.fixture
-def simple_file_config(tmpdir, monkeypatch):
+def simple_file_config(tmpdir, monkeypatch, log):
     shutil.copy(fixtures + "/simple_file/config", str(tmpdir))
     monkeypatch.chdir(tmpdir)
-    b = backy.backup.Backup(str(tmpdir))
+    b = backy.backup.Backup(str(tmpdir), log)
     return b
 
 
@@ -38,10 +40,16 @@ def pytest_assertrepr_compare(op, left, right):
 
 
 @pytest.fixture(autouse=True)
-def wrap_logging(monkeypatch):
-    monkeypatch.setattr(
-        backy.main, "init_logging", lambda backupdir, verbose: None
-    )
+def log(monkeypatch):
+    def noop_init_logging(
+        verbose,
+        logfile=None,
+        default_job_name="",
+    ):
+        pass
+
+    monkeypatch.setattr(backy.logging, "init_logging", noop_init_logging)
+    return structlog.stdlib.get_logger()
 
 
 @pytest.fixture(autouse=True)
@@ -73,49 +81,29 @@ def schedule():
 
 
 @pytest.fixture
-def backup(schedule, tmpdir):
+def backup(schedule, tmpdir, log):
     with open(str(tmpdir / "config"), "wb") as f:
         f.write(
             b"{'source': {'type': 'file', 'filename': 'test'},"
             b"'schedule': {'daily': {'interval': '1d', 'keep': 7}}}"
         )
-    return backy.backup.Backup(str(tmpdir))
+    return backy.backup.Backup(str(tmpdir), log)
 
 
 @pytest.fixture(scope="session")
 def setup_structlog():
-    from . import utils
+    utils.log_data = ""
 
-    utils.log_data = []
-    log_exceptions = False  # set to True to get detailed tracebacks
+    class PytestLogger:
+        def msg(self, message: str):
+            utils.log_data += message + "\n"
 
-    def test_logger(logger, method_name, event):
-        result = []
-
-        if log_exceptions:
-            stack = event.pop("stack", None)
-            exc = event.pop("exception", None)
-        for key in sorted(event):
-            result.append("{}={}".format(key, event[key]))
-        utils.log_data.append(" ".join(result))
-        if log_exceptions:
-            if stack:
-                utils.log_data.extend(stack.splitlines())
-            if exc:
-                utils.log_data.extend(exc.splitlines())
-        raise structlog.DropEvent
-
-    structlog.configure(
-        processors=(
-            [structlog.processors.format_exc_info]
-            if log_exceptions
-            else [] + [test_logger]
-        )
-    )
+    backy.logging.init_logging(True)
+    structlog.get_config()["logger_factory"].factories["file"] = PytestLogger
+    yield structlog.get_config()["processors"][-1]
 
 
 @pytest.fixture(autouse=True)
 def reset_structlog(setup_structlog):
-    from . import utils
-
-    utils.log_data = []
+    utils.log_data = ""
+    setup_structlog.default_job_name = ""

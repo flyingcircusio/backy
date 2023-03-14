@@ -3,10 +3,11 @@
 
 import ctypes
 import ctypes.util
-import logging
 import os
 
-_log = logging.getLogger(__name__)
+import structlog
+
+log = structlog.stdlib.get_logger()
 
 FALLOC_FL_KEEP_SIZE = 0x01
 FALLOC_FL_PUNCH_HOLE = 0x02
@@ -48,7 +49,7 @@ def _make_fallocate():
 try:
     fallocate = _make_fallocate()
 except AttributeError:  # pragma: no cover
-    _log.debug("Falling back to non-hole-punching `fallocate`.")
+    log.debug("fallocate-non-hole-punching")
     fallocate = _fake_fallocate
 
 

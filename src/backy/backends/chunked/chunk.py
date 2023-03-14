@@ -7,6 +7,7 @@ import time
 import lzo
 import mmh3
 
+import backy.backends.chunked
 from backy.utils import posix_fadvise
 
 chunk_stats = {
@@ -26,6 +27,13 @@ class Chunk(object):
     CHUNK_SIZE = 4 * 1024**2  # 4 MiB chunks
 
     _read_existing_called = False  # Test support
+
+    id: int
+    hash: str
+    file: "backy.backends.chunked.File"
+    store: "backy.backends.chunked.Store"
+    clean: bool
+    loaded: bool
 
     def __init__(self, file, id, store, hash):
         self.id = id

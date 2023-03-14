@@ -17,18 +17,18 @@ def test_config(simple_file_config, tmpdir):
     assert backup.source.filename == "input-file"
 
 
-def test_find(simple_file_config, tmpdir):
+def test_find(simple_file_config, tmpdir, log):
     backup = simple_file_config
-    rev = Revision(backup, "123-456", backup)
+    rev = Revision(backup, log, "123-456", backup)
     rev.timestamp = backy.utils.now()
     rev.materialize()
     backup.scan()
     assert str(tmpdir / "123-456") == backup.find(0).filename
 
 
-def test_find_should_raise_if_not_found(simple_file_config):
+def test_find_should_raise_if_not_found(simple_file_config, log):
     backup = simple_file_config
-    rev = Revision(backup, "123-456")
+    rev = Revision(backup, log, "123-456")
     rev.timestamp = backy.utils.now()
     rev.materialize()
     backup.scan()

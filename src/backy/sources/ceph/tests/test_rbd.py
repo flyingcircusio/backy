@@ -1,8 +1,10 @@
+import os
 import subprocess
 from unittest import mock
 
 import pytest
 
+import backy.sources.ceph
 from backy.ext_deps import RBD
 from backy.sources.ceph.diff import RBDDiffV1
 from backy.sources.ceph.rbd import RBDClient
@@ -13,130 +15,85 @@ def test_rbd_command_wrapper(check_output):
     client = RBDClient()
 
     client._rbd(["foo"])
-    check_output.assert_called_with([RBD, "foo"])
+    check_output.assert_called_with(
+        [RBD, "foo"], encoding="utf-8", errors="replace"
+    )
 
     check_output.return_value = b'{"asdf": 1}'
     result = client._rbd(["foo"], format="json")
     assert result == {"asdf": 1}
-    check_output.assert_called_with([RBD, "--format=json", "foo"])
-
-
-@pytest.fixture
-def rbdclient():
-    client = RBDClient()
-    client._rbd = mock.Mock()
-    import backy.sources.ceph
-
-    backy.sources.ceph.CEPH_RBD_SUPPORTS_WHOLE_OBJECT_DIFF = True
-    return client
-
-
-def test_rbd_exists(rbdclient):
-    rbdclient._rbd.return_value = ""
-    assert not rbdclient.exists("asdf")
-    rbdclient._rbd.assert_called_with(["info", "asdf"], format="json")
+    check_output.assert_called_with(
+        [RBD, "foo", "--format=json"], encoding="utf-8", errors="replace"
+    )
 
 
 def test_rbd_generic_calledprocesserror_bubbles_up(rbdclient):
-    # Generic errors are bubbled up
-    rbdclient._rbd.side_effect = subprocess.CalledProcessError(
+    # Generic errors are bubbled up,
+    # explicitly check the subprocess backend
+    rbdclient._ceph_cli = mock.Mock()
+    rbdclient._ceph_cli.side_effect = subprocess.CalledProcessError(
         returncode=1, cmd="foo"
     )
     with pytest.raises(subprocess.CalledProcessError):
-        rbdclient.exists("asdf")
+        rbdclient.exists("test/asdf")
 
 
 def test_rbd_nonexisting_image_turned_to_false(rbdclient):
-    rbdclient._rbd.side_effect = subprocess.CalledProcessError(
-        returncode=2, cmd="foo"
-    )
-    assert not rbdclient.exists("foo")
-    rbdclient._rbd.assert_called_with(["info", "foo"], format="json")
+    assert not rbdclient.exists("test/foo")
 
 
-def test_rbd_map_writable(rbdclient):
-    rbdclient._rbd.side_effect = [
-        None,
-        {"1": {"pool": "test", "name": "test04.root", "snap": "backup"}},
-    ]
+# uses mock data defined in conftest.py
+
+
+def test_rbd_map_unmap_writable(rbdclient):
     mapped = rbdclient.map("test/test04.root@backup")
-    assert mapped == {"pool": "test", "name": "test04.root", "snap": "backup"}
-    rbdclient._rbd.assert_has_calls(
-        [
-            mock.call(["", "map", "test/test04.root@backup"]),
-            mock.call(["showmapped"], format="json"),
-        ]
-    )
+    # device is a tempfile, needs to be checked separately
+    map_dev = mapped.pop("device")
+    assert map_dev.endswith("/rbd0")
+    assert mapped == {
+        "name": "test04.root",
+        "pool": "test",
+        "snap": "backup",
+    }
+    rbdclient.unmap(map_dev)
 
 
 def test_rbd_map_readonly(rbdclient):
-    rbdclient._rbd.side_effect = [
-        None,
-        {"1": {"pool": "test", "name": "test04.root", "snap": "backup"}},
-    ]
     mapped = rbdclient.map("test/test04.root@backup", readonly=True)
-    assert mapped == {"pool": "test", "name": "test04.root", "snap": "backup"}
-    rbdclient._rbd.assert_has_calls(
-        [
-            mock.call(["--read-only", "map", "test/test04.root@backup"]),
-            mock.call(["showmapped"], format="json"),
-        ]
-    )
+    # device is a tempfile, needs to be checked separately
+    assert mapped.pop("device").endswith("/rbd0")
+    assert mapped == {
+        "name": "test04.root",
+        "pool": "test",
+        "snap": "backup",
+    }
 
 
 def test_rbd_map_writable_missing_map_no_maps(rbdclient):
-    rbdclient._rbd.side_effect = [None, {}]
+    # enforce empty showmapped
+    rbdclient._ceph_cli._freeze_mapped = True
     with pytest.raises(RuntimeError):
         rbdclient.map("test/test04.root@backup", readonly=True)
-    rbdclient._rbd.assert_has_calls(
-        [
-            mock.call(["--read-only", "map", "test/test04.root@backup"]),
-            mock.call(["showmapped"], format="json"),
-        ]
-    )
 
 
 def test_rbd_map_writable_missing_map(rbdclient):
-    rbdclient._rbd.side_effect = [
-        None,
-        {"sadf": {"pool": "sadf", "name": "asdf", "snap": "asdf"}},
-    ]
+    # enforce empty showmapped
+    rbdclient._ceph_cli._freeze_mapped = True
     with pytest.raises(RuntimeError):
         rbdclient.map("test/test04.root@backup", readonly=True)
-    rbdclient._rbd.assert_has_calls(
-        [
-            mock.call(["--read-only", "map", "test/test04.root@backup"]),
-            mock.call(["showmapped"], format="json"),
-        ]
-    )
 
 
-def test_rbd_unmap(rbdclient):
-    rbdclient.unmap("asdf")
-    rbdclient._rbd.assert_has_calls([mock.call(["unmap", "asdf"])])
-
-
-def test_rbd_snap_create(rbdclient):
-    rbdclient.snap_create("test/test04.root@backup")
-    rbdclient._rbd.assert_has_calls(
-        [mock.call(["snap", "create", "test/test04.root@backup"])]
-    )
-
-
-def test_rbd_snap_ls(rbdclient):
-    rbdclient._rbd.return_value = "asdf"
-    ls = rbdclient.snap_ls("test/test04.root")
-    assert ls == "asdf"
-    rbdclient._rbd.assert_has_calls(
-        [mock.call(["snap", "ls", "test/test04.root"], format="json")]
-    )
-
-
-def test_rbd_snap_rm(rbdclient):
-    rbdclient.snap_rm("test/test04.root@backup")
-    rbdclient._rbd.assert_has_calls(
-        [mock.call(["snap", "rm", "test/test04.root@backup"])]
-    )
+def test_rbd_snap(rbdclient):
+    # test setup: mark image as existing, as rbd snap only operates on existing images
+    rbdclient._ceph_cli._register_image_for_snaps("test/test04.root")
+    rbdclient.snap_create("test/test04.root@backup-asdf")
+    assert rbdclient.snap_ls("test/test04.root")[0]["name"] == "backup-asdf"
+    with pytest.raises(subprocess.CalledProcessError):
+        rbdclient.snap_rm("test/test04.root@backup-nonasdf")
+    with pytest.raises(subprocess.CalledProcessError):
+        rbdclient.snap_rm("test/test42.root@backup-asdf")
+    rbdclient.snap_rm("test/test04.root@backup-asdf")
+    assert len(rbdclient.snap_ls("test/test04.root")) == 0
 
 
 @mock.patch("subprocess.Popen")
@@ -167,61 +124,25 @@ def test_rbd_export_diff(popen, rbdclient, tmpdir):
     )
 
 
-def test_rbd_image_reader(rbdclient, tmpdir):
-    device = str(tmpdir / "device")
+def test_rbd_image_reader_simple(rbdclient, tmpdir):
+    device = rbdclient.map("test/test04.root@backup")["device"]
     open(device, "wb").write(b"asdf")
-    rbdclient._rbd.side_effect = [
-        None,
-        {
-            "1": {
-                "device": device,
-                "pool": "test",
-                "name": "test04.root",
-                "snap": "foo",
-            }
-        },
-        None,
-    ]
-    with rbdclient.image_reader("test/test04.root@foo") as f:
+    with rbdclient.image_reader("test/test04.root@backup") as f:
         assert f.name == device
-    rbdclient._rbd.assert_has_calls(
-        [
-            mock.call(["--read-only", "map", "test/test04.root@foo"]),
-            mock.call(["showmapped"], format="json"),
-            mock.call(["unmap", device]),
-        ]
-    )
 
 
 def test_rbd_image_reader_explicit_closed(rbdclient, tmpdir):
-    device = str(tmpdir / "device")
+    device = rbdclient.map("test/test04.root@backup")["device"]
     open(device, "wb").write(b"asdf")
-    rbdclient._rbd.side_effect = [
-        None,
-        {
-            "1": {
-                "device": device,
-                "pool": "test",
-                "name": "test04.root",
-                "snap": "foo",
-            }
-        },
-        None,
-    ]
-    with rbdclient.image_reader("test/test04.root@foo") as f:
+
+    with rbdclient.image_reader("test/test04.root@backup") as f:
+        assert f.read() == b"asdf"
         f.close()
-    rbdclient._rbd.assert_has_calls(
-        [
-            mock.call(["--read-only", "map", "test/test04.root@foo"]),
-            mock.call(["showmapped"], format="json"),
-            mock.call(["unmap", device]),
-        ]
-    )
 
 
 @mock.patch("subprocess.Popen")
 def test_rbd_export(popen, rbdclient, tmpdir):
-    stdout = open(str(tmpdir / "foobar"), "wb+")
+    stdout = open(str(tmpdir / "rbd0"), "wb+")
     popen.return_value = mock.Mock(stdout=stdout)
     with rbdclient.export(mock.sentinel.image) as f:
         assert f == stdout

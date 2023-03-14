@@ -13,39 +13,86 @@ logger = logging.getLogger(__name__)
 
 
 class RBDClient(object):
+    def _ceph_cli(self, cmdline, encoding="utf-8") -> str:
+        # This wrapper function for the `rbd` command is only used for
+        # getting and interpreting text messages, making this the correct level for
+        # managing text encoding.
+        # Other use cases where binary data is piped to rbd have their own dedicated
+        # wrappers.
+        return subprocess.check_output(
+            cmdline, encoding=encoding, errors="replace"
+        )
+
     def _rbd(self, cmd, format=None):
         cmd = filter(None, cmd)
         rbd = [RBD]
 
+        rbd.extend(cmd)
+
         if format == "json":
             rbd.append("--format=json")
 
-        rbd.extend(cmd)
-
         logger.debug(" ".join(rbd))
-        result = subprocess.check_output(rbd)
+        result = self._ceph_cli(rbd)
 
         if format == "json":
-            result = json.loads(result.decode("utf-8"))
+            result = json.loads(result)
 
         return result
 
-    def exists(self, image):
+    def exists(self, snapspec):
         try:
-            return self._rbd(["info", image], format="json")
+            return self._rbd(["info", snapspec], format="json")
         except subprocess.CalledProcessError as e:
             if e.returncode == 2:
                 return False
             raise
 
     def map(self, image, readonly=False):
-        self._rbd(["--read-only" if readonly else "", "map", image])
+        def parse_mappings_pre_nautilus(mappings):
+            """The parser code for Ceph release Luminous and earlier."""
+            for mapping in mappings.values():
+                if image == "{pool}/{name}@{snap}".format(**mapping):
+                    return mapping
+            raise RuntimeError("Map not found in mapping list.")
 
-        mappings = self._rbd(["showmapped"], format="json")
-        for mapping in mappings.values():
-            if image == "{pool}/{name}@{snap}".format(**mapping):
-                return mapping
-        raise RuntimeError("Map not found in mapping list.")
+        def parse_mappings_since_nautilus(mappings):
+            """The parser code for Ceph release Nautilus and later."""
+            for mapping in mappings:
+                if image == "{pool}/{name}@{snap}".format(**mapping):
+                    return mapping
+            raise RuntimeError("Map not found in mapping list.")
+
+        versionstring = self._rbd(["--version"])
+
+        self._rbd(["map", image, "--read-only" if readonly else ""])
+
+        mappings_raw = self._rbd(["showmapped"], format="json")
+
+        if "nautilus" in versionstring:
+            mapping = parse_mappings_since_nautilus(mappings_raw)
+        elif "luminous" in versionstring:
+            mapping = parse_mappings_pre_nautilus(mappings_raw)
+        else:
+            # our jewel build provides no version info
+            # this will break with releases newer than nautilus
+            mapping = parse_mappings_pre_nautilus(mappings_raw)
+
+        def scrub_mapping(mapping):
+            SPEC = set(["pool", "name", "snap", "device"])
+            # Ensure all specced keys exist
+            for key in SPEC:
+                if key not in mapping:
+                    raise KeyError(
+                        f"Missing key `{key}` in mapping {mapping!r}"
+                    )
+            # Scrub all non-specced keys
+            for key in list(mapping):
+                if key not in SPEC:
+                    del mapping[key]
+            return mapping
+
+        return scrub_mapping(mapping)
 
     def unmap(self, device):
         self._rbd(["unmap", device])

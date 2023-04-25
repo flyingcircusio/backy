@@ -113,9 +113,7 @@ class RBDClient(object):
 
     @contextlib.contextmanager
     def export_diff(self, new, old):
-        self.log.info(
-            "export-diff", ceph_version=str(backy.sources.ceph.CEPH_VERSION)
-        )
+        self.log.info("export-diff")
         if backy.sources.ceph.CEPH_RBD_SUPPORTS_WHOLE_OBJECT_DIFF:
             EXPORT_WHOLE_OBJECT = ["--whole-object"]
         else:
@@ -148,6 +146,7 @@ class RBDClient(object):
 
     @contextlib.contextmanager
     def export(self, image):
+        self.log.info("export")
         proc = subprocess.Popen(
             [RBD, "export", image, "-"],
             stdin=subprocess.DEVNULL,

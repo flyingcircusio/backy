@@ -36,6 +36,8 @@ Changelog
 
 - List all manual tags in `backy check`
 
+- Fix crash for non-numeric Ceph version strings
+
 2.4.3 (2019-04-17)
 ==================
 

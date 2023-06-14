@@ -103,12 +103,10 @@ def setup_structlog():
         def msg(self, message: str):
             utils.log_data += message + "\n"
 
-    backy.logging.init_logging(True)
+    backy.logging.init_logging(True, defaults={"taskid": "AAAA"})
     structlog.get_config()["logger_factory"].factories["file"] = PytestLogger
-    yield structlog.get_config()["processors"][-1]
 
 
 @pytest.fixture(autouse=True)
 def reset_structlog(setup_structlog):
     utils.log_data = ""
-    setup_structlog.default_job_name = ""

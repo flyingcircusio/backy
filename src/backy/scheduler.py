@@ -17,7 +17,12 @@ import backy.utils
 
 from .backup import Backup
 from .ext_deps import BACKY_CMD
-from .utils import SafeFile, format_datetime_local, time_or_event
+from .utils import (
+    SafeFile,
+    format_datetime_local,
+    generate_taskid,
+    time_or_event,
+)
 
 
 class Job(object):
@@ -35,6 +40,7 @@ class Job(object):
     run_immediately: asyncio.Event
     errors: int = 0
     backoff: int = 0
+    taskid: str = ""
     log: BoundLogger
 
     _task: Optional[asyncio.Task] = None
@@ -146,7 +152,10 @@ class Job(object):
         self.backoff = 0
         self.log.debug("loop-started")
         while True:
-            self.backup.scan()
+            self.taskid = generate_taskid()
+            self.log = self.log.bind(job_name=self.name, sub_taskid=self.taskid)
+
+            self.backup = Backup(self.path, self.log)
 
             next_time, next_tags = self.schedule.next(
                 backy.utils.now(), self.spread, self.backup
@@ -188,7 +197,6 @@ class Job(object):
                 async with self.daemon.backup_semaphores[speed]:
                     self.update_status(f"running ({speed})")
 
-                    self.update_config()
                     await self.run_backup(next_tags)
                     await self.pull_metadata()
                     await self.run_expiry()
@@ -218,13 +226,13 @@ class Job(object):
 
     async def pull_metadata(self):
         try:
-            await self.backup.pull_metadata(self.daemon.peers)
+            await self.backup.pull_metadata(self.daemon.peers, self.taskid)
         except Exception:
             self.log.exception("pull-metadata-failed")
 
     async def push_metadata(self):
         try:
-            await self.backup.push_metadata(self.daemon.peers)
+            await self.backup.push_metadata(self.daemon.peers, self.taskid)
         except Exception:
             self.log.exception("push-metadata-failed")
 
@@ -232,6 +240,8 @@ class Job(object):
         self.log.info("backup-started", tags=", ".join(tags))
         proc = await asyncio.create_subprocess_exec(
             BACKY_CMD,
+            "-t",
+            self.taskid,
             "-b",
             str(self.path),
             "-l",
@@ -267,6 +277,8 @@ class Job(object):
         self.log.info("expiry-started")
         proc = await asyncio.create_subprocess_exec(
             BACKY_CMD,
+            "-t",
+            self.taskid,
             "-b",
             self.path,
             "-l",
@@ -301,6 +313,8 @@ class Job(object):
         self.log.info("purge-started")
         proc = await asyncio.create_subprocess_exec(
             BACKY_CMD,
+            "-t",
+            self.taskid,
             "-b",
             str(self.path),
             "-l",

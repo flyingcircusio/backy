@@ -718,9 +718,10 @@ class Backup(object):
 
     ###################
     # Syncing Revisions
+    # called by the scheduler without a subprocess
 
     @locked(target=".backup", mode="exclusive")
-    async def push_metadata(self, peers):
+    async def push_metadata(self, peers, taskid: str):
         grouped = defaultdict(list)
         for r in self.history:
             if r.pending_changes:
@@ -728,7 +729,7 @@ class Backup(object):
         self.log.info(
             "push-start", changes=sum(len(l) for l in grouped.values())
         )
-        async with APIClientManager(peers, self.log) as apis:
+        async with APIClientManager(peers, taskid, self.log) as apis:
             await asyncio.gather(
                 *[
                     self._push_metadata(apis[server], grouped[server])
@@ -777,7 +778,7 @@ class Backup(object):
                 log.warning("push-purge-error", exc_info=True)
 
     @locked(target=".backup", mode="exclusive")
-    async def pull_metadata(self, peers: dict):
+    async def pull_metadata(self, peers: dict, taskid: str):
         async def remove_dead_peer():
             for r in list(self.history):
                 if r.location and r.location not in peers:
@@ -785,7 +786,7 @@ class Backup(object):
                     r.remove(force=True)
 
         self.log.info("pull-start")
-        async with APIClientManager(peers, self.log) as apis:
+        async with APIClientManager(peers, taskid, self.log) as apis:
             await asyncio.gather(
                 remove_dead_peer(),
                 *[self._pull_metadata(apis[server]) for server in apis],

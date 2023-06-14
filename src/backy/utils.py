@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import contextlib
 import datetime
 import hashlib
@@ -479,6 +480,10 @@ def format_datetime_local(dt):
         dt.astimezone(tz).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S"),
         tz,
     )
+
+
+def generate_taskid():
+    return base64.b32encode(random.randbytes(3)).decode("utf-8")[:4]
 
 
 def unique(iterable: Iterable[_T]) -> List[_T]:

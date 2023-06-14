@@ -336,39 +336,44 @@ async def test_task_generator_backoff(
     assert (
         Ellipsis(
             """\
-... D test01               job/loop-started               \n\
-... I test01               job/waiting                    next_tags='daily' next_time='2015-09-02 07:32:51'
-... E test01               job/exception                  exception_class='builtins.Exception' exception_msg=''
+... D test01[...]         job/loop-started               \n\
+... D test01[...]         quarantine/scan                entries=0
+... I test01[...]         job/waiting                    next_tags='daily' next_time='2015-09-02 07:32:51'
+... E test01[...]         job/exception                  exception_class='builtins.Exception' exception_msg=''
 exception>\tTraceback (most recent call last):
 exception>\t  File "/.../src/backy/scheduler.py", line ..., in run_forever
 exception>\t    await self.run_backup(next_tags)
 exception>\t  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
 exception>\t    raise Exception()
 exception>\tException
-... W test01               job/backoff                    backoff=120
-... I test01               job/waiting                    next_tags='daily' next_time='2015-09-01 09:08:47'
-... E test01               job/exception                  exception_class='builtins.Exception' exception_msg=''
+... W test01[...]         job/backoff                    backoff=120
+... D test01[...]         quarantine/scan                entries=0
+... I test01[...]         job/waiting                    next_tags='daily' next_time='2015-09-01 09:08:47'
+... E test01[...]         job/exception                  exception_class='builtins.Exception' exception_msg=''
 exception>\tTraceback (most recent call last):
 exception>\t  File "/.../src/backy/scheduler.py", line ..., in run_forever
 exception>\t    await self.run_backup(next_tags)
 exception>\t  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
 exception>\t    raise Exception()
 exception>\tException
-... W test01               job/backoff                    backoff=240
-... I test01               job/waiting                    next_tags='daily' next_time='2015-09-01 09:10:47'
-... E test01               job/exception                  exception_class='builtins.Exception' exception_msg=''
+... W test01[...]         job/backoff                    backoff=240
+... D test01[...]         quarantine/scan                entries=0
+... I test01[...]         job/waiting                    next_tags='daily' next_time='2015-09-01 09:10:47'
+... E test01[...]         job/exception                  exception_class='builtins.Exception' exception_msg=''
 exception>\tTraceback (most recent call last):
 exception>\t  File "/.../src/backy/scheduler.py", line ..., in run_forever
 exception>\t    await self.run_backup(next_tags)
 exception>\t  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
 exception>\t    raise Exception()
 exception>\tException
-... W test01               job/backoff                    backoff=480
-... I test01               job/waiting                    next_tags='daily' next_time='2015-09-01 09:14:47'
-... I test01               backup/pull-start              \n\
-... I test01               backup/push-start              \n\
-... I test01               job/stop                       \n\
-... I test01               job/waiting                    next_tags='daily' next_time='2015-09-02 07:32:51'
+... W test01[...]         job/backoff                    backoff=480
+... D test01[...]         quarantine/scan                entries=0
+... I test01[...]         job/waiting                    next_tags='daily' next_time='2015-09-01 09:14:47'
+... I test01[...]         backup/pull-start              \n\
+... I test01[...]         backup/push-start              \n\
+... I test01[...]         job/stop                       \n\
+... D test01[...]         quarantine/scan                entries=0
+... I test01[...]         job/waiting                    next_tags='daily' next_time='2015-09-02 07:32:51'
 """
         )
         == utils.log_data

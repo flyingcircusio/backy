@@ -116,8 +116,8 @@ class BackyDaemon(object):
             job = self.jobs[name]
             if config != job.last_config:
                 self.log.info("changed-job", job_name=name)
-                job.configure(config)
                 job.stop()
+                job.configure(config)
                 job.start()
 
         for name, job in list(self.jobs.items()):

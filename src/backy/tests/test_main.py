@@ -28,7 +28,7 @@ def test_display_usage(capsys, argv):
     out, err = capsys.readouterr()
     assert (
         """\
-usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
+usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR] [-t TASKID]
               {client,backup,restore,purge,find,status,\
 upgrade,scheduler,distrust,verify,forget,tags,expire}
               ...
@@ -63,7 +63,7 @@ def test_display_help(capsys, argv):
     assert (
         Ellipsis(
             """\
-usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
+usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR] [-t TASKID]
               {client,backup,restore,purge,find,status,\
 upgrade,scheduler,distrust,verify,forget,tags,expire}
               ...
@@ -427,7 +427,7 @@ exception>\tRuntimeError: test
 
 
 def test_commands_wrapper_status(backup, tmpdir, capsys, clock, tz_berlin, log):
-    commands = backy.main.Command(str(tmpdir), log)
+    commands = backy.main.Command(str(tmpdir), "AAAA", log)
 
     revision = Revision(backup, log, "1")
     revision.timestamp = backy.utils.now()
@@ -452,7 +452,7 @@ def test_commands_wrapper_status(backup, tmpdir, capsys, clock, tz_berlin, log):
 def test_commands_wrapper_status_yaml(
     backup, tmpdir, capsys, clock, tz_berlin, log
 ):
-    commands = backy.main.Command(str(tmpdir), log)
+    commands = backy.main.Command(str(tmpdir), "AAAA", log)
 
     revision = Revision(backup, log, "1")
     revision.timestamp = backy.utils.now()

@@ -21,18 +21,20 @@ class APIClientManager:
     connector: TCPConnector
     peers: dict
     clients: dict[str, "APIClient"]
+    taskid: str
     log: BoundLogger
 
-    def __init__(self, peers, log):
+    def __init__(self, peers, taskid, log):
         self.connector = TCPConnector()
         self.peers = peers
         self.clients = dict()
+        self.taskid = taskid
         self.log = log.bind(subsystem="APIClientManager")
 
     def __getitem__(self, name):
         if name and name not in self.clients:
             self.clients[name] = APIClient.from_conf(
-                name, self.peers[name], self.log, self.connector
+                name, self.peers[name], self.taskid, self.log, self.connector
             )
         return self.clients[name]
 
@@ -61,6 +63,7 @@ class APIClient:
         server_name: str,
         url: str,
         token: str,
+        taskid: str,
         log,
         connector=None,
     ):
@@ -69,7 +72,7 @@ class APIClient:
         self.server_name = server_name
         self.session = aiohttp.ClientSession(
             url,
-            headers={hdrs.AUTHORIZATION: "Bearer " + token},
+            headers={hdrs.AUTHORIZATION: "Bearer " + token, "taskid": taskid},
             raise_for_status=True,
             timeout=ClientTimeout(30, connect=10),
             connector=connector,

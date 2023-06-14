@@ -18,7 +18,7 @@ from structlog.stdlib import BoundLogger
 
 import backy.backup
 import backy.daemon
-from backy.utils import format_datetime_local
+from backy.utils import format_datetime_local, generate_taskid
 
 from . import logging
 from .backup import RestoreBackend
@@ -29,10 +29,12 @@ class Command(object):
     """Proxy between CLI calls and actual backup code."""
 
     path: str
+    taskid: str
     log: BoundLogger
 
-    def __init__(self, path, log):
+    def __init__(self, path, taskid, log):
         self.path = path
+        self.taskid = taskid
         self.log = log
 
     def status(self, yaml_: bool, revision):
@@ -132,15 +134,17 @@ class Command(object):
     def client(self, config, peer, url, token, apifunc, **kwargs):
         async def run():
             if url and token:
-                api = APIClient("<server>", url, token, self.log)
+                api = APIClient("<server>", url, token, self.taskid, self.log)
             else:
                 d = backy.daemon.BackyDaemon(config, self.log)
                 d._read_config()
                 if peer:
-                    api = APIClient.from_conf(peer, d.peers[peer], self.log)
+                    api = APIClient.from_conf(
+                        peer, d.peers[peer], self.taskid, self.log
+                    )
                 else:
                     api = APIClient.from_conf(
-                        "<server>", d.api_cli_default, self.log
+                        "<server>", d.api_cli_default, self.taskid, self.log
                     )
             async with CLIClient(api, self.log) as c:
                 try:
@@ -185,7 +189,7 @@ def setup_argparser():
         type=Path,
         help=(
             "file name to write log output in. "
-            "(default: /var/log/backy.log for `scheduler`, "
+            "(default: /var/log/backy.log for `scheduler`, ignored for `client`, "
             "$backupdir/backy.log otherwise)"
         ),
     )
@@ -198,6 +202,12 @@ def setup_argparser():
             "directory where backups and logs are written to "
             "(default: %(default)s)"
         ),
+    )
+    parser.add_argument(
+        "-t",
+        "--taskid",
+        default=generate_taskid(),
+        help="id to include in log messages (default: 4 random base32 chars)",
     )
 
     subparsers = parser.add_subparsers()
@@ -478,12 +488,12 @@ def main():
     logging.init_logging(
         args.verbose,
         args.logfile or default_logfile,
-        default_job_name=default_job_name,
+        defaults={"job_name": default_job_name, "taskid": args.taskid},
     )
     log = structlog.stdlib.get_logger(subsystem="command")
     log.debug("invoked", args=" ".join(sys.argv))
 
-    command = Command(args.backupdir, log)
+    command = Command(args.backupdir, args.taskid, log)
     func = getattr(command, args.func)
 
     # Pass over to function
@@ -492,6 +502,7 @@ def main():
     del func_args["verbose"]
     del func_args["backupdir"]
     del func_args["logfile"]
+    del func_args["taskid"]
 
     try:
         log.debug("parsed", func=args.func, func_args=func_args)

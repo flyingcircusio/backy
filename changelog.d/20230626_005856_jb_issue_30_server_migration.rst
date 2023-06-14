@@ -5,3 +5,5 @@
 - Add `expire` subcommand
 
 - logging: improve exception formatting
+
+- logging: add taskid

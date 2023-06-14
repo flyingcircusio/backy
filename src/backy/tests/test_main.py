@@ -28,7 +28,7 @@ def test_display_usage(capsys, argv):
     assert (
         """\
 usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
-              {backup,restore,purge,find,status,nbd-server,\
+              {backup,restore,purge,status,\
 upgrade,scheduler,check,distrust,verify,forget}
               ...
 """
@@ -47,7 +47,7 @@ def test_display_help(capsys, argv):
         Ellipsis(
             """\
 usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
-              {backup,restore,purge,find,status,nbd-server,\
+              {backup,restore,purge,status,\
 upgrade,scheduler,check,distrust,verify,forget}
               ...
 
@@ -145,35 +145,6 @@ source:
             """\
 ... D command/invoked                args='... -v backup manual:test'
 ... D command/parsed                 func='backup' func_args={'force': False, 'tags': 'manual:test'}
-... D command/successful             \n\
-"""
-        )
-        == utils.log_data
-    )
-    assert exit.value.code == 0
-
-
-def test_call_find(capsys, backup, argv, monkeypatch, tz_berlin):
-    monkeypatch.setattr(backy.main.Command, "find", print_args)
-    argv.extend(["-v", "-b", backup.path, "find", "-r", "1"])
-    with pytest.raises(SystemExit) as exit:
-        backy.main.main()
-    assert exit.value.code == 0
-    out, err = capsys.readouterr()
-    assert (
-        Ellipsis(
-            """\
-(<backy.main.Command object at ...>,)
-{'revision': '1'}
-"""
-        )
-        == out
-    )
-    assert (
-        Ellipsis(
-            """\
-... D command/invoked                args='... -v -b ... find -r 1'
-... D command/parsed                 func='find' func_args={'revision': '1'}
 ... D command/successful             \n\
 """
         )

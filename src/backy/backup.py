@@ -13,7 +13,6 @@ from backy.utils import min_date
 from .backends import BackyBackend
 from .backends.chunked import ChunkedFileBackend
 from .backends.cowfile import COWFileBackend
-from .nbd.server import Server
 from .revision import Revision, Trust, filter_schedule_tags
 from .schedule import Schedule
 from .sources import BackySourceFactory, select_source
@@ -24,7 +23,7 @@ from .utils import CHUNK_SIZE, copy, posix_fadvise
 # - You can only run one backup of a machine at a time, as the backup will
 #   interact with this machines' list of snapshots and will get confused
 #   if run in parallel.
-# - You can restore/nbd while a backup is running.
+# - You can restore while a backup is running.
 # - You can only purge while nothing else is happening.
 # - Trying to get a shared lock (specifically purge) will block and wait
 #   whereas trying to get an exclusive lock (running backups, purging) will
@@ -325,11 +324,6 @@ class Backup(object):
                 target.write(chunk)
 
     @locked(target=".purge", mode="shared")
-    def nbd_server(self, host, port):
-        server = Server((host, port), self, self.log)
-        server.serve_forever()
-
-    @locked(target=".purge", mode="shared")
     def upgrade(self):
         """Upgrade this backup's store from cowfile to chunked.
 
@@ -470,7 +464,7 @@ class Backup(object):
         except KeyError:
             raise IndexError()
 
-    def find(self, spec):
+    def find(self, spec) -> Revision:
         """Flexible revision search.
 
         Locates a revision by relative number, by tag, or by uuid.

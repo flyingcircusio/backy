@@ -27,13 +27,13 @@ daemon: "BackyDaemon"
 class BackyDaemon(object):
     # config defaults, will be overriden from config file
     worker_limit: int = 1
-    base_dir: Optional[str] = None
-    status_file: Optional[str] = None
+    base_dir: str
+    status_file: str
     status_interval: int = 30
     telnet_addrs: str = "::1, 127.0.0.1"
     telnet_port: int = 6023
     config_file: str
-    config: Optional[dict]
+    config: dict
     schedules: dict[str, Schedule]
     jobs: dict[str, Job]
 
@@ -46,7 +46,7 @@ class BackyDaemon(object):
     def __init__(self, config_file, log):
         self.config_file = config_file
         self.log = log.bind(subsystem="daemon")
-        self.config = None
+        self.config = {}
         self.schedules = {}
         self.backup_semaphores = {}
         self.jobs = {}
@@ -61,16 +61,14 @@ class BackyDaemon(object):
             self.config = yaml.safe_load(f)
 
         g = self.config.get("global", {})
-        self.worker_limit = int(g.get("worker-limit", self.worker_limit))
-        self.base_dir = g.get("base-dir", self.base_dir)
-        if not self.status_file:
-            self.status_file = p.join(self.base_dir, "status")
-        self.status_file = g.get("status-file", self.status_file)
+        self.worker_limit = int(g.get("worker-limit", type(self).worker_limit))
+        self.base_dir = g.get("base-dir")
+        self.status_file = g.get("status-file", p.join(self.base_dir, "status"))
         self.status_interval = int(
-            g.get("status-interval", self.status_interval)
+            g.get("status-interval", type(self).status_interval)
         )
-        self.telnet_addrs = g.get("telnet-addrs", self.telnet_addrs)
-        self.telnet_port = int(g.get("telnet-port", self.telnet_port))
+        self.telnet_addrs = g.get("telnet-addrs", type(self).telnet_addrs)
+        self.telnet_port = int(g.get("telnet-port", type(self).telnet_port))
 
         new = {}
         for name, config in self.config["schedules"].items():
@@ -179,11 +177,12 @@ class BackyDaemon(object):
         self.log.info("reloading")
         try:
             self._read_config()
-        except RuntimeError:
-            self.log.exception("error-reading-config")
-        else:
             self._apply_config()
             self.log.info("reloading-finished")
+        except Exception:
+            self.log.critical("error-reloading", exc_info=True)
+            self.terminate()
+            raise
 
     def telnet_server(self):
         """Starts to listen on all configured telnet addresses."""

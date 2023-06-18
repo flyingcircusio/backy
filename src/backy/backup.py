@@ -249,6 +249,7 @@ class Backup(object):
                 backend.verify()
                 break
 
+    @locked(target=".backup", mode="exclusive")
     def distrust(self, revision=None, from_=None, until=None):
         if revision:
             r = self.find(revision)

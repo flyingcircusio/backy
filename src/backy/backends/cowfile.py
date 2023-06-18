@@ -1,7 +1,5 @@
 import os.path
 
-from structlog.stdlib import BoundLogger
-
 import backy.revision
 from backy.backends import BackyBackend
 from backy.utils import CHUNK_SIZE, cp_reflink

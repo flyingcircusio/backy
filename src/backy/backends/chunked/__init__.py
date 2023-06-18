@@ -29,7 +29,7 @@ class ChunkedFileBackend(BackyBackend):
                 self.revision.backup.path + "/chunks", log
             )
         self.store = self.STORES[path]
-        self.log = log
+        self.log = log.bind(subsystem="chunked-backend")
 
     def open(self, mode="rb"):
         if "w" in mode or "+" in mode and self.clone_parent:

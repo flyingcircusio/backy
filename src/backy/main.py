@@ -1,6 +1,7 @@
 # -*- encoding: utf-8 -*-
 
 import argparse
+import asyncio
 import datetime
 import errno
 import sys
@@ -10,7 +11,9 @@ import humanize
 import structlog
 import tzlocal
 import yaml
-from prettytable import PrettyTable
+from aiohttp import ClientConnectionError
+from rich import print as rprint
+from rich.table import Column, Table
 from structlog.stdlib import BoundLogger
 
 import backy.backup
@@ -18,6 +21,7 @@ import backy.daemon
 from backy.utils import format_datetime_local
 
 from . import logging
+from .client import APIClient, CLIClient
 
 
 def valid_date(s):
@@ -48,12 +52,14 @@ class Command(object):
         total_bytes = 0
 
         tz = tzlocal.get_localzone()
-        t = PrettyTable(
-            [f"Date ({tz})", "ID", "Size", "Duration", "Tags", "Trust"]
+        t = Table(
+            f"Date ({tz})",
+            "ID",
+            Column("Size", justify="right"),
+            Column("Duration", justify="right"),
+            "Tags",
+            "Trust",
         )
-        t.align = "l"
-        t.align["Size"] = "r"  # type: ignore
-        t.align["Durat"] = "r"  # type: ignore
 
         for r in b.history:
             total_bytes += r.stats.get("bytes_written", 0)
@@ -64,19 +70,17 @@ class Command(object):
                 duration = "-"
 
             t.add_row(
-                [
-                    format_datetime_local(r.timestamp)[0],
-                    r.uuid,
-                    humanize.naturalsize(
-                        r.stats.get("bytes_written", 0), binary=True
-                    ),
-                    duration,
-                    ",".join(r.tags),
-                    r.trust.value,
-                ]
+                format_datetime_local(r.timestamp)[0],
+                r.uuid,
+                humanize.naturalsize(
+                    r.stats.get("bytes_written", 0), binary=True
+                ),
+                duration,
+                ",".join(r.tags),
+                r.trust.value,
             )
 
-        print(t)
+        rprint(t)
 
         print(
             "{} revisions containing {} data (estimated)".format(
@@ -108,9 +112,6 @@ class Command(object):
     def scheduler(self, config):
         backy.daemon.main(config, self.log)
 
-    def check(self, config):
-        backy.daemon.check(config, self.log)
-
     def purge(self):
         b = backy.backup.Backup(self.path, self.log)
         b.purge()
@@ -126,6 +127,47 @@ class Command(object):
     def verify(self, revision):
         b = backy.backup.Backup(self.path, self.log)
         b.verify(revision)
+
+    def client(self, config, peer, url, token, apifunc, **kwargs):
+        async def run():
+            if url and token:
+                api = APIClient("<server>", url, token, self.log)
+            else:
+                d = backy.daemon.BackyDaemon(config, self.log)
+                d._read_config()
+                if peer:
+                    api = APIClient.from_conf(peer, d.peers[peer], self.log)
+                else:
+                    api = APIClient.from_conf(
+                        "<server>", d.api_cli_default, self.log
+                    )
+            async with CLIClient(api, self.log) as c:
+                try:
+                    await getattr(c, apifunc)(**kwargs)
+                except ClientConnectionError as e:
+                    c.log.error("connection-error", _output=str(e))
+                    c.log.debug("connection-error", exc_info=True)
+                    sys.exit(1)
+
+        asyncio.run(run())
+
+    def tags(self, action, autoremove, expect, revision, tags, force):
+        tags = set(t.strip() for t in tags.split(","))
+        if expect is not None:
+            expect = set(t.strip() for t in expect.split(","))
+        b = backy.backup.Backup(self.path, self.log)
+        b.tags(
+            action,
+            revision,
+            tags,
+            expect=expect,
+            autoremove=autoremove,
+            force=force,
+        )
+
+    def expire(self):
+        b = backy.backup.Backup(self.path, self.log)
+        b.expire()
 
 
 def setup_argparser():
@@ -144,7 +186,7 @@ def setup_argparser():
         default=argparse.SUPPRESS,
         help=(
             "file name to write log output in. "
-            "(default: /var/log/backy.log for `scheduler` and `check`, "
+            "(default: /var/log/backy.log for `scheduler`, "
             "$backupdir/backy.log otherwise)"
         ),
     )
@@ -160,6 +202,63 @@ def setup_argparser():
     )
 
     subparsers = parser.add_subparsers()
+
+    # CLIENT
+    client = subparsers.add_parser(
+        "client",
+        help="""\
+Query the api
+""",
+    )
+    g = client.add_argument_group()
+    g.add_argument("-c", "--config", default="/etc/backy.conf")
+    g.add_argument("-p", "--peer")
+    g = client.add_argument_group()
+    g.add_argument("--url")
+    g.add_argument("--token")
+    client.set_defaults(func="client")
+    client_parser = client.add_subparsers()
+
+    # CLIENT jobs
+    p = client_parser.add_parser("jobs", help="List status of all known jobs")
+    p.add_argument(
+        "filter_re",
+        default="",
+        metavar="[filter]",
+        nargs="?",
+        help="Optional job filter regex",
+    )
+    p.set_defaults(apifunc="jobs")
+
+    # CLIENT status
+    p = client_parser.add_parser("status", help="Show job status overview")
+    p.set_defaults(apifunc="status")
+
+    # CLIENT run
+    p = client_parser.add_parser(
+        "run", help="Trigger immediate run for one job"
+    )
+    p.add_argument("job", metavar="<job>", help="Name of the job to run")
+    p.set_defaults(apifunc="run")
+
+    # CLIENT runall
+    p = client_parser.add_parser(
+        "runall", help="Trigger immediate run for all jobs"
+    )
+    p.set_defaults(apifunc="runall")
+
+    # CLIENT reload
+    p = client_parser.add_parser("reload", help="Reload the configuration")
+    p.set_defaults(apifunc="reload")
+
+    # CLIENT check
+    p = client_parser.add_parser(
+        "check",
+        help="""\
+Check whether all jobs adhere to their schedules' SLA.
+""",
+    )
+    p.set_defaults(apifunc="check")
 
     # BACKUP
     p = subparsers.add_parser(
@@ -235,16 +334,6 @@ Run the scheduler.
     p.set_defaults(func="scheduler")
     p.add_argument("-c", "--config", default="/etc/backy.conf")
 
-    # SCHEDULE CHECK
-    p = subparsers.add_parser(
-        "check",
-        help="""\
-Check whether all jobs adhere to their schedules' SLA.
-""",
-    )
-    p.set_defaults(func="check")
-    p.add_argument("-c", "--config", default="/etc/backy.conf")
-
     # DISTRUST
     p = subparsers.add_parser(
         "distrust",
@@ -308,32 +397,44 @@ Forget revision.
     )
     p.set_defaults(func="forget")
 
-    return parser
+    return parser, client
 
 
 def main():
-    parser = setup_argparser()
+    parser, client_parser = setup_argparser()
     args = parser.parse_args()
 
     if not hasattr(args, "func"):
         parser.print_usage()
         sys.exit(0)
+    if args.func == "client" and not hasattr(args, "apifunc"):
+        client_parser.print_usage()
+        sys.exit(0)
 
     if not hasattr(args, "logfile"):
         args.logfile = None
 
-    is_daemon = args.func == "scheduler" or args.func == "check"
-    default_logfile = (
-        Path("/var/log/backy.log")
-        if is_daemon
-        else args.backupdir / "backy.log"
-    )
+    match args.func:
+        case "scheduler":
+            default_logfile = Path("/var/log/backy.log")
+        case "client":
+            default_logfile = None
+        case _:
+            default_logfile = args.backupdir / "backy.log"
+
+    match (args.func, vars(args).get("apifunc")):
+        case ("scheduler", _):
+            default_job_name = "-"
+        case ("client", "check"):
+            default_job_name = "-"
+        case _:
+            default_job_name = ""
 
     # Logging
     logging.init_logging(
         args.verbose,
         args.logfile or default_logfile,
-        default_job_name="-" if is_daemon else "",
+        default_job_name=default_job_name,
     )
     log = structlog.stdlib.get_logger(subsystem="command")
     log.debug("invoked", args=" ".join(sys.argv))

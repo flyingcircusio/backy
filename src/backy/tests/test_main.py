@@ -5,6 +5,7 @@ import sys
 import pytest
 
 import backy.backup
+import backy.client
 import backy.main
 from backy import utils
 from backy.revision import Revision
@@ -28,9 +29,25 @@ def test_display_usage(capsys, argv):
     assert (
         """\
 usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
-              {backup,restore,purge,status,\
-upgrade,scheduler,check,distrust,verify,forget}
+              {client,backup,restore,purge,status,\
+upgrade,scheduler,distrust,verify,forget}
               ...
+"""
+        == out
+    )
+    assert err == ""
+
+
+def test_display_client_usage(capsys, argv):
+    argv.append("client")
+    with pytest.raises(SystemExit) as exit:
+        backy.main.main()
+    assert exit.value.code == 0
+    out, err = capsys.readouterr()
+    assert (
+        """\
+usage: pytest client [-h] [-c CONFIG] [-p PEER] [--url URL] [--token TOKEN]
+                     {jobs,status,run,runall,reload,check} ...
 """
         == out
     )
@@ -47,11 +64,32 @@ def test_display_help(capsys, argv):
         Ellipsis(
             """\
 usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
-              {backup,restore,purge,status,\
-upgrade,scheduler,check,distrust,verify,forget}
+              {client,backup,restore,purge,status,\
+upgrade,scheduler,distrust,verify,forget}
               ...
 
 Backup and restore for block devices.
+
+positional arguments:
+...
+"""
+        )
+        == out
+    )
+    assert err == ""
+
+
+def test_display_client_help(capsys, argv):
+    argv.extend(["client", "--help"])
+    with pytest.raises(SystemExit) as exit:
+        backy.main.main()
+    assert exit.value.code == 0
+    out, err = capsys.readouterr()
+    assert (
+        Ellipsis(
+            """\
+usage: pytest client [-h] [-c CONFIG] [-p PEER] [--url URL] [--token TOKEN]
+                     {jobs,status,run,runall,reload,check} ...
 
 positional arguments:
 ...
@@ -74,6 +112,10 @@ def test_verbose_logging(capsys, argv):
 def print_args(*args, **kw):
     print(args)
     pprint.pprint(kw)
+
+
+async def async_print_args(*args, **kw):
+    print_args(*args, **kw)
 
 
 def test_call_status(capsys, backup, argv, monkeypatch):
@@ -156,11 +198,39 @@ source:
     assert exit.value.code == 0
 
 
-def test_call_check(capsys, backup, argv, monkeypatch, tmpdir):
-    monkeypatch.setattr(backy.main.Command, "check", print_args)
-    argv.extend(
-        ["-v", "-b", backup.path, "-l", str(tmpdir / "backy.log"), "check"]
-    )
+@pytest.mark.parametrize(
+    ["action", "args"],
+    [
+        ("jobs", {"filter_re": "test"}),
+        ("status", dict()),
+        ("run", {"job": "test"}),
+        ("runall", dict()),
+        ("reload", dict()),
+        ("check", dict()),
+    ],
+)
+def test_call_client(
+    capsys, backup, argv, monkeypatch, log, tmpdir, action, args
+):
+    monkeypatch.setattr(backy.client.CLIClient, action, async_print_args)
+    conf = str(tmpdir / "conf")
+    with open(conf, "w") as c:
+        c.write(
+            f"""\
+global:
+    base-dir: {str(tmpdir)}
+api:
+    addrs: "127.0.0.1, ::1"
+    port: 1234
+    cli-default:
+        token: "test"
+
+schedules: {{}}
+jobs: {{}}
+"""
+        )
+
+    argv.extend(["-v", "client", "-c", conf, action, *args.values()])
     utils.log_data = ""
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
@@ -168,18 +238,20 @@ def test_call_check(capsys, backup, argv, monkeypatch, tmpdir):
     out, err = capsys.readouterr()
     assert (
         Ellipsis(
-            """\
-(<backy.main.Command object at ...>,)
-{'config': '/etc/backy.conf'}
+            f"""\
+(<backy.client.CLIClient object at ...>,)
+{args}
 """
         )
         == out
     )
     assert (
         Ellipsis(
-            """\
-... D command/invoked                args='... -v -b ... check'
-... D command/parsed                 func='check' func_args={'config': '/etc/backy.conf'}
+            f"""\
+... D command/invoked                args='... -v client -c ... {action}{" "*bool(args)}{", ".join(args.values())}'
+... D command/parsed                 func='client' func_args={{'config': '...', 'peer': None, \
+'url': None, 'token': None{", "*bool(args)}{str(args)[1:-1]}, 'apifunc': '{action}'}}
+... D daemon/read-config             ...
 ... D command/successful             \n\
 """
         )
@@ -258,7 +330,7 @@ exception>\tRuntimeError: test
 def test_commands_wrapper_status(backup, tmpdir, capsys, clock, tz_berlin, log):
     commands = backy.main.Command(str(tmpdir), log)
 
-    revision = Revision(backup, log, 1)
+    revision = Revision(backup, log, "1")
     revision.timestamp = backy.utils.now()
     revision.materialize()
 
@@ -268,11 +340,11 @@ def test_commands_wrapper_status(backup, tmpdir, capsys, clock, tz_berlin, log):
     assert err == ""
     assert out == Ellipsis(
         """\
-+----------------------+----+---------+----------+------+---------+
-| Date (...) | ID |    Size | Duration | Tags | Trust   |
-+----------------------+----+---------+----------+------+---------+
-| ... | 1  | 0 Bytes | -        |      | trusted |
-+----------------------+----+---------+----------+------+---------+
+┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━┳━━━━━━━━━┓
+┃ Date (...) ┃ ID ┃    Size ┃ Duration ┃ Tags ┃ Trust   ┃
+┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━╇━━━━━━━━━┩
+│ ...  │ 1  │ 0 Bytes │        - │      │ trusted │
+└──────────────────────┴────┴─────────┴──────────┴──────┴─────────┘
 1 revisions containing 0 Bytes data (estimated)
 """
     )

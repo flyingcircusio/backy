@@ -74,13 +74,6 @@ configurable.
 Features
 ========
 
-Telnet shell
-------------
-
-Telnet into localhost port 6023 to get an interactive console. The console can
-currently be used to inspect the scheduler's live status.
-
-
 Self-check
 ----------
 

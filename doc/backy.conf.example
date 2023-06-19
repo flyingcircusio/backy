@@ -2,6 +2,18 @@ global:
     base-dir: /my/backydir
     worker-limit: 3
     backup-completed-callback: /path/to/script.sh
+api:
+    addrs: "127.0.0.1, ::1"
+    port: 1234
+    tokens:
+        "test-token": "test-server"
+        "cli-token": "cli"
+    cli-default:
+        token: "cli-token"
+peers:
+    "test-server":
+        url: "https://example.com:1234"
+        token: "token2"
 schedules:
     default:
         daily:

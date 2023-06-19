@@ -100,3 +100,6 @@ class Ellipsis(object):
         assert isinstance(other, str)
         report = self.compare(other)
         return report.is_ok
+
+    def __repr__(self):
+        return "\n".join(self.patterns)

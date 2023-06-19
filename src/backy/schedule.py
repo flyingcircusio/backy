@@ -61,6 +61,9 @@ class Schedule(object):
         for tag, spec in self.schedule.items():
             self.schedule[tag]["interval"] = parse_duration(spec["interval"])
 
+    def to_dict(self):
+        return self.config
+
     def next(self, relative, spread, archive):
         time, tags = ideal_time, ideal_tags = self._next_ideal(relative, spread)
         missed_tags = self._missed(archive)

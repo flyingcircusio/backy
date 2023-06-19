@@ -18,9 +18,6 @@ let
       scriv = super.scriv.overrideAttrs (old: {
         buildInputs = (old.buildInputs or []) ++ [ super.setuptools ];
       });
-      telnetlib3 = super.telnetlib3.overrideAttrs (old: {
-        buildInputs = (old.buildInputs or []) ++ [ super.setuptools ];
-      });
       execnet = super.execnet.overrideAttrs (old: {
         buildInputs = (old.buildInputs or []) ++ [ super.hatchling super.hatch-vcs ];
       });
@@ -76,7 +73,7 @@ in
       src = ./.;
     } ''
       unpackPhase
-      cd *-source
+      cd $sourceRoot
       export BACKY_CMD=${poetryApplication}/bin/backy
       patchShebangs src
       pytest -vv -p no:cacheprovider --no-cov

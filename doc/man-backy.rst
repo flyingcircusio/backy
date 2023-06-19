@@ -241,24 +241,6 @@ environment variables like **CEPH_CLUSTER** or **CEPH_ARGS**.
 **backy scheduler** processes exit cleanly on SIGTERM.
 
 
-Telnet shell
-------------
-
-The schedules opens a telnet server (default: localhost port 6023) for live
-inspection. The telnet interface accepts the following commands:
-
-jobs [REGEX]
-    Prints an overview of all configured jobs together with their last and
-    next backup run. An optional (extended) regular expression restricts output
-    to matching job names.
-
-status
-    Dumps internal server status details.
-
-quit
-    Exits the telnet shell.
-
-
 Files
 -----
 
@@ -271,7 +253,7 @@ structured key/value expression in YAML format.
 A description of top-level keys with their sub-keys follows. There is also a
 full example configuration in Section :ref:`example` below.
 
-config
+global
     Defines global scheduler options.
 
     base-dir
@@ -285,19 +267,23 @@ config
         Command/Script to invoke after the scheduler successfully completed a backup.
         The first argument is the job name. The output of `backy status --yaml` is available on stdin.
 
-    status-file
-        Path to a YAML status dump which is regularly updated by the scheduler
-        and evaluated by **backy check**. Defaults to `{base-dir}/status`.
-
-    status-interval
-        Update status file every N seconds (default: 30).
-
-    telnet-addrs
-        Comma-separated list of listen addresses for the telnet server
+api
+    addrs
+        Comma-separated list of listen addresses for the api server
         (default: 127.0.0.1, ::1).
 
-    telnet-port
-        Port number of the telnet server (default: 6023).
+    port
+        Port number of the api server (default: 6023).
+
+    tokens
+        A Token->Server-name mapping. Used for authenticating incoming api requests.
+
+    cli-default
+        token
+            Default Token to use when issuing api requests via the `backy client` command.
+
+peers
+    List of known backy servers with url and token. Currently used for synchronizing available revisions.
 
 .. _schedules:
 

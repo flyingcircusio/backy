@@ -237,6 +237,16 @@ class ConsoleFileRenderer:
         stderr = event_dict.pop("stderr", None)
         stack = event_dict.pop("stack", None)
         exception_traceback = event_dict.pop("exception_traceback", None)
+        exc_style = event_dict.pop("exc_style", "long")
+        match exc_style:
+            case "short":
+                exception_traceback = None
+            case "banner":
+                exception_traceback = (
+                    "\n"
+                    + event_dict.get("exception_msg", exception_traceback)
+                    + "\n"
+                )
 
         write(
             " ".join(
@@ -292,6 +302,7 @@ def process_exc_info(logger, name, event_dict):
     the exception yet.
     """
     exc_info = event_dict.get("exc_info", None)
+    exc_style = event_dict.get("exc_style", None)
 
     if isinstance(exc_info, BaseException):
         event_dict["exc_info"] = (
@@ -301,7 +312,7 @@ def process_exc_info(logger, name, event_dict):
         )
     elif isinstance(exc_info, tuple):
         pass
-    elif exc_info:
+    elif exc_info or exc_style:
         event_dict["exc_info"] = sys.exc_info()
 
     return event_dict

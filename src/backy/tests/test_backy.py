@@ -141,31 +141,31 @@ Restoring img_state2.img from level 2. Done.
 Diffing restore_state2.img against img_state2.img. Success.
 Restoring img_state1.img from level 3. Done.
 Diffing restore_state1.img against img_state1.img. Success.
-┏━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━┓
-┃ Date          ┃               ┃           ┃          ┃             ┃         ┃
-┃ ... ┃ ID            ┃      Size ┃ Duration ┃ Tags        ┃ Trust   ┃
-┡━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━┩
-│ ... │ ... │ 512.0 KiB │ a moment │ manual:test │ trusted │
-│ ... │               │           │          │             │         │
-│ ... │ ... │ 512.0 KiB │ a moment │ daily       │ trusted │
-│ ... │               │           │          │             │         │
-│ ... │ ... │ 512.0 KiB │ a moment │ test        │ trusted │
-│ ... │               │           │          │             │         │
-│ ... │ ... │ 512.0 KiB │ a moment │ manual:test │ trusted │
-│ ... │               │           │          │             │         │
-└───────────────┴───────────────┴───────────┴──────────┴─────────────┴─────────┘
+┏━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┓
+┃ Date      ┃           ┃           ┃          ┃          ┃         ┃          ┃
+┃ ... ┃ ID        ┃      Size ┃ Duration ┃ Tags     ┃ Trust   ┃ Location ┃
+┡━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━┩
+│ ... │ ... │ 512.0 KiB │ a moment │ manual:… │ trusted │          │
+│ ... │           │           │          │          │         │          │
+│ ... │ ... │ 512.0 KiB │ a moment │ daily    │ trusted │          │
+│ ... │           │           │          │          │         │          │
+│ ... │ ... │ 512.0 KiB │ a moment │ test     │ trusted │          │
+│ ... │           │           │          │          │         │          │
+│ ... │ ... │ 512.0 KiB │ a moment │ manual:… │ trusted │          │
+│ ... │           │           │          │          │         │          │
+└───────────┴───────────┴───────────┴──────────┴──────────┴─────────┴──────────┘
 4 revisions containing 2.0 MiB data (estimated)
-┏━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━┓
-┃ Date          ┃               ┃           ┃          ┃             ┃         ┃
-┃ ... ┃ ID            ┃      Size ┃ Duration ┃ Tags        ┃ Trust   ┃
-┡━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━┩
-│ ... │ ... │ 512.0 KiB │ a moment │ manual:test │ trusted │
-│ ... │               │           │          │             │         │
-│ ... │ ... │ 512.0 KiB │ a moment │ test        │ trusted │
-│ ... │               │           │          │             │         │
-│ ... │ ... │ 512.0 KiB │ a moment │ manual:test │ trusted │
-│ ... │               │           │          │             │         │
-└───────────────┴───────────────┴───────────┴──────────┴─────────────┴─────────┘
+┏━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┓
+┃ Date      ┃           ┃           ┃          ┃          ┃         ┃          ┃
+┃ ... ┃ ID        ┃      Size ┃ Duration ┃ Tags     ┃ Trust   ┃ Location ┃
+┡━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━┩
+│ ... │ ... │ 512.0 KiB │ a moment │ manual:… │ trusted │          │
+│ ... │           │           │          │          │         │          │
+│ ... │ ... │ 512.0 KiB │ a moment │ test     │ trusted │          │
+│ ... │           │           │          │          │         │          │
+│ ... │ ... │ 512.0 KiB │ a moment │ manual:… │ trusted │          │
+│ ... │           │           │          │          │         │          │
+└───────────┴───────────┴───────────┴──────────┴──────────┴─────────┴──────────┘
 3 revisions containing 1.5 MiB data (estimated)
 """
         )

@@ -30,7 +30,7 @@ def test_display_usage(capsys, argv):
         """\
 usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
               {client,backup,restore,purge,find,status,\
-upgrade,scheduler,distrust,verify,forget}
+upgrade,scheduler,distrust,verify,forget,tags,expire}
               ...
 """
         == out
@@ -65,7 +65,7 @@ def test_display_help(capsys, argv):
             """\
 usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR]
               {client,backup,restore,purge,find,status,\
-upgrade,scheduler,distrust,verify,forget}
+upgrade,scheduler,distrust,verify,forget,tags,expire}
               ...
 
 Backup and restore for block devices.
@@ -322,6 +322,75 @@ def test_call_scheduler(capsys, backup, argv, monkeypatch, tmpdir):
     assert exit.value.code == 0
 
 
+@pytest.mark.parametrize("action", ["set", "add", "remove"])
+def test_call_tags(capsys, backup, argv, monkeypatch, action):
+    monkeypatch.setattr(backy.main.Command, "tags", print_args)
+    argv.extend(
+        ["-v", "-b", backup.path, "tags", action, "-r", "last", "manual:a"]
+    )
+    with pytest.raises(SystemExit) as exit:
+        backy.main.main()
+    assert exit.value.code == 0
+    out, err = capsys.readouterr()
+    assert (
+        Ellipsis(
+            f"""\
+(<backy.main.Command object at ...>,)
+{{'action': '{action}',
+ 'autoremove': False,
+ 'expect': None,
+ 'force': False,
+ 'revision': 'last',
+ 'tags': 'manual:a'}}
+"""
+        )
+        == out
+    )
+    assert (
+        Ellipsis(
+            f"""\
+... D quarantine/scan                entries=0
+... D command/invoked                args='... -v -b ... tags {action} -r last manual:a'
+... D command/parsed                 func='tags' func_args={{'autoremove': False, 'force': False, 'expect': None, \
+'action': '{action}', 'revision': 'last', 'tags': 'manual:a'}}
+... D command/successful             \n\
+"""
+        )
+        == utils.log_data
+    )
+    assert exit.value.code == 0
+
+
+def test_call_expire(capsys, backup, argv, monkeypatch):
+    monkeypatch.setattr(backy.main.Command, "expire", print_args)
+    argv.extend(["-v", "-b", backup.path, "expire"])
+    with pytest.raises(SystemExit) as exit:
+        backy.main.main()
+    assert exit.value.code == 0
+    out, err = capsys.readouterr()
+    assert (
+        Ellipsis(
+            """\
+(<backy.main.Command object at ...>,)
+{}
+"""
+        )
+        == out
+    )
+    assert (
+        Ellipsis(
+            """\
+... D quarantine/scan                entries=0
+... D command/invoked                args='... -v -b ... expire'
+... D command/parsed                 func='expire' func_args={}
+... D command/successful             \n\
+"""
+        )
+        == utils.log_data
+    )
+    assert exit.value.code == 0
+
+
 def test_call_unexpected_exception(
     capsys, backup, argv, monkeypatch, log, tmpdir
 ):
@@ -370,11 +439,11 @@ def test_commands_wrapper_status(backup, tmpdir, capsys, clock, tz_berlin, log):
     assert err == ""
     assert out == Ellipsis(
         """\
-┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━┳━━━━━━━━━┓
-┃ Date (...) ┃ ID ┃    Size ┃ Duration ┃ Tags ┃ Trust   ┃
-┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━╇━━━━━━━━━┩
-│ ...  │ 1  │ 0 Bytes │        - │      │ trusted │
-└──────────────────────┴────┴─────────┴──────────┴──────┴─────────┘
+┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┓
+┃ Date (...) ┃ ID ┃    Size ┃ Duration ┃ Tags ┃ Trust   ┃ Location ┃
+┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━╇━━━━━━━━━╇━━━━━━━━━━┩
+│ ...  │ 1  │ 0 Bytes │        - │      │ trusted │          │
+└──────────────────────┴────┴─────────┴──────────┴──────┴─────────┴──────────┘
 1 revisions containing 0 Bytes data (estimated)
 """
     )
@@ -399,6 +468,8 @@ def test_commands_wrapper_status_yaml(
         out
         == """\
 - backend_type: chunked
+  location: ''
+  orig_tags: []
   parent: ''
   stats:
     bytes_written: 42

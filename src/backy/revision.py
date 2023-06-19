@@ -39,8 +39,10 @@ class Revision(object):
     timestamp: datetime.datetime
     stats: dict
     tags: set[str]
+    orig_tags: set[str]
     trust: Trust = Trust.TRUSTED
     backend_type: Literal["cowfile", "chunked"] = "chunked"
+    location: str = ""
     log: BoundLogger
 
     def __init__(
@@ -55,6 +57,7 @@ class Revision(object):
         self.timestamp = timestamp if timestamp else utils.now()
         self.stats = {"bytes_written": 0}
         self.tags = set()
+        self.orig_tags = set()
         self.log = log.bind(revision_uuid=self.uuid, subsystem="revision")
 
     @classmethod
@@ -79,12 +82,20 @@ class Revision(object):
     def load(cls, file: Path, backup: "Backup", log: BoundLogger) -> "Revision":
         with file.open(encoding="utf-8") as f:
             metadata = yaml.safe_load(f)
-        assert metadata["timestamp"].tzinfo == datetime.timezone.utc
-        r = Revision(
-            backup, log, uuid=metadata["uuid"], timestamp=metadata["timestamp"]
-        )
+        r = cls.from_dict(metadata, backup, log)
+        return r
+
+    @classmethod
+    def from_dict(cls, metadata, backup, log):
+        ts = metadata["timestamp"]
+        if isinstance(ts, str):
+            ts = datetime.datetime.fromisoformat(ts)
+        assert ts.tzinfo == datetime.timezone.utc
+        r = Revision(backup, log, uuid=metadata["uuid"], timestamp=ts)
         r.stats = metadata.get("stats", {})
         r.tags = set(metadata.get("tags", []))
+        r.orig_tags = set(metadata.get("orig_tags", []))
+        r.location = metadata.get("location", "")
         # Assume trusted by default to support migration
         r.trust = Trust(metadata.get("trust", Trust.TRUSTED.value))
         # If the metadata does not show the backend type, then it's cowfile.
@@ -109,6 +120,7 @@ class Revision(object):
         self.log.debug("writing-info", tags=", ".join(self.tags))
         with SafeFile(self.info_filename, encoding="utf-8") as f:
             f.open_new("wb")
+            f.write("# Please use the `backy tags` subcommand to edit tags\n")
             yaml.safe_dump(self.to_dict(), f)
 
     def to_dict(self) -> dict:
@@ -122,7 +134,13 @@ class Revision(object):
             "stats": self.stats,
             "trust": self.trust.value,
             "tags": list(self.tags),
+            "orig_tags": list(self.orig_tags),
+            "location": self.location,
         }
+
+    @property
+    def pending_changes(self):
+        return self.location and self.tags != self.orig_tags
 
     def distrust(self) -> None:
         self.log.info("distrusted")
@@ -132,16 +150,22 @@ class Revision(object):
         self.log.info("verified")
         self.trust = Trust.VERIFIED
 
-    def remove(self) -> None:
+    def remove(self, force=False) -> None:
         self.log.info("remove")
-        for filename in self.filename.parent.glob(self.filename.name + "*"):
-            if filename.exists():
-                self.log.debug("remove-start", filename=filename)
-                filename.unlink()
-                self.log.debug("remove-end", filename=filename)
+        if not force and self.location:
+            self.log.debug("remove-remote", location=self.location)
+            self.tags = set()
+            self.write_info()
+        else:
+            for filename in self.filename.parent.glob(self.filename.name + "*"):
+                if filename.exists():
+                    self.log.debug("remove-start", filename=filename)
+                    filename.unlink()
+                    self.log.debug("remove-end", filename=filename)
 
-        if self in self.backup.history:
-            self.backup.history.remove(self)
+            if self in self.backup.history:
+                self.backup.history.remove(self)
+                del self.backup._by_uuid[self.uuid]
 
     def writable(self) -> None:
         if self.filename.exists():

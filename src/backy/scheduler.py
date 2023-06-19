@@ -44,12 +44,12 @@ class Job(object):
         self.name = name
         self.log = log.bind(job_name=name, subsystem="job")
         self.run_immediately = asyncio.Event()
+        self.path = self.daemon.base_dir / self.name
+        self.logfile = self.path / "backy.log"
 
     def configure(self, config):
         self.source = config["source"]
         self.schedule_name = config["schedule"]
-        self.path = self.daemon.base_dir / self.name
-        self.logfile = self.path / "backy.log"
         self.update_config()
         self.backup = Backup(self.path, self.log)
         self.last_config = config
@@ -190,7 +190,9 @@ class Job(object):
 
                     self.update_config()
                     await self.run_backup(next_tags)
+                    await self.pull_metadata()
                     await self.run_expiry()
+                    await self.push_metadata()
                     await self.run_purge()
                     await self.run_callback()
             except asyncio.CancelledError:
@@ -213,6 +215,18 @@ class Job(object):
                 self.errors = 0
                 self.backoff = 0
                 self.update_status("finished")
+
+    async def pull_metadata(self):
+        try:
+            await self.backup.pull_metadata(self.daemon.peers)
+        except Exception:
+            self.log.exception("pull-metadata-failed")
+
+    async def push_metadata(self):
+        try:
+            await self.backup.push_metadata(self.daemon.peers)
+        except Exception:
+            self.log.exception("push-metadata-failed")
 
     async def run_backup(self, tags):
         self.log.info("backup-started", tags=", ".join(tags))
@@ -250,8 +264,38 @@ class Job(object):
             raise
 
     async def run_expiry(self):
-        self.log.info("expiring-revs")
-        self.schedule.expire(self.backup)
+        self.log.info("expiry-started")
+        proc = await asyncio.create_subprocess_exec(
+            BACKY_CMD,
+            "-b",
+            self.path,
+            "-l",
+            self.logfile,
+            "expire",
+            close_fds=True,
+            start_new_session=True,  # Avoid signal propagation like Ctrl-C
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            return_code = await proc.wait()
+            self.log.info(
+                "expiry-finished",
+                return_code=return_code,
+                subprocess_pid=proc.pid,
+            )
+            if return_code:
+                raise RuntimeError(
+                    f"Expiry failed with return code {return_code}"
+                )
+        except asyncio.CancelledError:
+            self.log.warning("expiry-cancelled")
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+            raise
 
     async def run_purge(self):
         self.log.info("purge-started")

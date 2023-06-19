@@ -4,6 +4,7 @@ import os
 import re
 import signal
 from pathlib import Path
+from unittest import mock
 
 import pytest
 import yaml
@@ -53,6 +54,8 @@ jobs:
 
     with open(source, "w") as f:
         f.write("I am your father, Luke!")
+
+    tmp_path.joinpath("dead01").mkdir()
 
     daemon.start(asyncio.get_running_loop())
     yield daemon
@@ -164,7 +167,7 @@ async def test_run_callback(daemon, log):
         assert isinstance(r["tags"][0], str)
         assert isinstance(r["stats"]["bytes_written"], int)
         assert isinstance(r["stats"]["duration"], float)
-        # assert isinstance(r["location"], str)
+        assert isinstance(r["location"], str)
 
 
 def test_spread(daemon):
@@ -362,6 +365,8 @@ exception>\t    raise Exception()
 exception>\tException
 ... W test01               job/backoff                    backoff=480
 ... I test01               job/waiting                    next_tags='daily' next_time='2015-09-01 09:14:47'
+... I test01               backup/pull-start              \n\
+... I test01               backup/push-start              \n\
 ... I test01               job/stop                       \n\
 ... I test01               job/waiting                    next_tags='daily' next_time='2015-09-02 07:32:51'
 """
@@ -380,3 +385,19 @@ def test_daemon_status(daemon):
 def test_daemon_status_filter_re(daemon):
     r = re.compile(r"foo\d\d")
     assert {"foo00"} == set([s["job"] for s in daemon.status(r)])
+
+
+async def test_purge_pending(daemon, monkeypatch):
+    run_purge = mock.Mock()
+    monkeypatch.setattr("backy.scheduler.Job.run_purge", run_purge)
+    monkeypatch.setattr(
+        "asyncio.sleep", mock.Mock(side_effect=asyncio.CancelledError())
+    )
+
+    daemon.jobs["test01"].backup.set_purge_pending()
+    del daemon.jobs["test01"]
+
+    with pytest.raises(asyncio.CancelledError):
+        await daemon.purge_pending_backups()
+
+    run_purge.assert_called_once()

@@ -6,7 +6,7 @@ import signal
 import sys
 import time
 from pathlib import Path
-from typing import IO, List, Optional
+from typing import IO, List, Optional, Pattern
 
 import yaml
 from structlog.stdlib import BoundLogger
@@ -168,6 +168,9 @@ class BackyDaemon(object):
         self._apply_config()
 
         loop.create_task(self.purge_old_files(), name="purge-old-files")
+        loop.create_task(
+            self.purge_pending_backups(), name="purge-pending-backups"
+        )
         loop.create_task(self.shutdown_loop(), name="shutdown-cleanup")
 
         def handle_signals(signum):
@@ -252,7 +255,7 @@ class BackyDaemon(object):
         self.log.info("stopping-loop")
         self.loop.stop()
 
-    def status(self, filter_re=None):
+    def status(self, filter_re: Optional[Pattern[str]] = None) -> List[dict]:
         """Collects status information for all jobs."""
         result = []
         for job in list(self.jobs.values()):
@@ -260,10 +263,13 @@ class BackyDaemon(object):
                 continue
             job.backup.scan()
             manual_tags = set()
+            unsynced_revs = 0
             if job.backup.clean_history:
                 last = job.backup.clean_history[-1]
                 for rev in job.backup.clean_history:
                     manual_tags |= filter_manual_tags(rev.tags)
+                    if rev.pending_changes:
+                        unsynced_revs += 1
             else:
                 last = None
             result.append(
@@ -289,6 +295,7 @@ class BackyDaemon(object):
                     ),
                     manual_tags=", ".join(manual_tags),
                     quarantine_reports=len(job.backup.quarantine.report_ids),
+                    unsynced_revs=unsynced_revs,
                 )
             )
         return result
@@ -298,17 +305,51 @@ class BackyDaemon(object):
         # properly async, we might want to spawn those off into a separate
         # thread.
         while True:
-            self.log.info("purge-scanning")
-            for candidate in os.scandir(self.base_dir):
-                if not candidate.is_dir(follow_symlinks=False):
-                    continue
-                self.log.debug("purge-candidate", candidate=candidate.path)
-                reference_time = time.time() - 3 * 31 * 24 * 60 * 60
-                if not has_recent_changes(candidate, reference_time):
-                    self.log.info("purging", candidate=candidate.path)
-                    shutil.rmtree(candidate)
-            self.log.info("purge-finished")
+            try:
+                self.log.info("purge-scanning")
+                for candidate in os.scandir(self.base_dir):
+                    if not candidate.is_dir(follow_symlinks=False):
+                        continue
+                    self.log.debug("purge-candidate", candidate=candidate.path)
+                    reference_time = time.time() - 3 * 31 * 24 * 60 * 60
+                    if not has_recent_changes(candidate, reference_time):
+                        self.log.info("purging", candidate=candidate.path)
+                        shutil.rmtree(candidate)
+                self.log.info("purge-finished")
+            except Exception:
+                self.log.exception("purge")
             await asyncio.sleep(24 * 60 * 60)
+
+    async def purge_pending_backups(self):
+        # `stat` and other file system access things are _not_
+        # properly async, we might want to spawn those off into a separate
+        # thread.
+        while True:
+            try:
+                self.log.info("purge-pending-scanning")
+                for candidate in os.scandir(self.base_dir):
+                    if (
+                        not candidate.is_dir(follow_symlinks=False)
+                        or candidate.name in self.jobs  # will get purged anyway
+                        or not p.exists(
+                            p.join(candidate.path, ".purge_pending")
+                        )
+                    ):
+                        continue
+                    self.log.info("purging-pending", job=candidate.name)
+                    await Job(self, candidate.name, self.log).run_purge()
+                self.log.info("purge-pending-finished")
+            except Exception:
+                self.log.exception("purge-pending")
+            await asyncio.sleep(24 * 60 * 60)
+
+    def find_dead_backups(self) -> List[str]:
+        self.log.debug("scanning-backups")
+        return [
+            b.name
+            for b in os.scandir(self.base_dir)
+            if b.is_dir(follow_symlinks=False) and b.name not in self.jobs
+        ]
 
 
 def main(config_file: Path, log: BoundLogger):  # pragma: no cover

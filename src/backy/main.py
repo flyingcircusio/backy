@@ -49,6 +49,7 @@ class Command(object):
             Column("Duration", justify="right"),
             "Tags",
             "Trust",
+            "Location",
         )
 
         for r in revs:
@@ -68,6 +69,7 @@ class Command(object):
                 duration,
                 ",".join(r.tags),
                 r.trust.value,
+                r.location,
             )
 
         rprint(t)
@@ -153,7 +155,7 @@ class Command(object):
                 try:
                     await getattr(c, apifunc)(**kwargs)
                 except ClientConnectionError as e:
-                    c.log.error("connection-error", _output=str(e))
+                    c.log.error("connection-error", exc_style="banner")
                     c.log.debug("connection-error", exc_info=True)
                     sys.exit(1)
 
@@ -163,7 +165,6 @@ class Command(object):
 def setup_argparser():
     parser = argparse.ArgumentParser(
         description="Backup and restore for block devices.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     parser.add_argument(
@@ -173,7 +174,6 @@ def setup_argparser():
         "-l",
         "--logfile",
         type=Path,
-        default=argparse.SUPPRESS,
         help=(
             "file name to write log output in. "
             "(default: /var/log/backy.log for `scheduler`, "
@@ -196,13 +196,17 @@ def setup_argparser():
     # CLIENT
     client = subparsers.add_parser(
         "client",
-        help="""\
-Query the api
-""",
+        help="Query the api",
     )
     g = client.add_argument_group()
-    g.add_argument("-c", "--config", type=Path, default="/etc/backy.conf")
-    g.add_argument("-p", "--peer")
+    g.add_argument(
+        "-c",
+        "--config",
+        type=Path,
+        default="/etc/backy.conf",
+        help="(default: %(default)s)",
+    )
+    g.add_argument("-p", "--peer", help="(default: read from config file)")
     g = client.add_argument_group()
     g.add_argument("--url")
     g.add_argument("--token")
@@ -244,31 +248,25 @@ Query the api
     # CLIENT check
     p = client_parser.add_parser(
         "check",
-        help="""\
-Check whether all jobs adhere to their schedules' SLA.
-""",
+        help="Check whether all jobs adhere to their schedules' SLA",
     )
     p.set_defaults(apifunc="check")
 
     # BACKUP
     p = subparsers.add_parser(
         "backup",
-        help="""\
-Perform a backup.
-""",
+        help="Perform a backup",
     )
     p.add_argument(
         "-f", "--force", action="store_true", help="Do not validate tags"
     )
-    p.add_argument("tags", help="Tags to apply to the backup.")
+    p.add_argument("tags", help="Tags to apply to the backup")
     p.set_defaults(func="backup")
 
     # RESTORE
     p = subparsers.add_parser(
         "restore",
-        help="""\
-Restore (a given revision) to a given target.
-""",
+        help="Restore (a given revision) to a given target",
     )
     p.add_argument(
         "--backend",
@@ -276,29 +274,26 @@ Restore (a given revision) to a given target.
         choices=list(RestoreBackend),
         default=RestoreBackend.AUTO,
         dest="restore_backend",
+        help="(default: %(default)s)"
     )
     p.add_argument(
         "-r",
         "--revision",
         metavar="SPEC",
         default="latest",
-        help="use revision SPEC as restore source",
+        help="use revision SPEC as restore source (default: %(default)s)",
     )
     p.add_argument(
         "target",
         metavar="TARGET",
-        help="""\
-Copy backed up revision to TARGET. Use stdout if TARGET is "-".
-""",
+        help='Copy backed up revision to TARGET. Use stdout if TARGET is "-"',
     )
     p.set_defaults(func="restore")
 
     # BACKUP
     p = subparsers.add_parser(
         "purge",
-        help="""\
-Purge the backup store (i.e. chunked) from unused data.
-""",
+        help="Purge the backup store (i.e. chunked) from unused data",
     )
     p.set_defaults(func="purge")
 
@@ -324,9 +319,7 @@ Purge the backup store (i.e. chunked) from unused data.
     # STATUS
     p = subparsers.add_parser(
         "status",
-        help="""\
-Show backup status. Show inventory and summary information.
-""",
+        help="Show backup status. Show inventory and summary information",
     )
     p.add_argument("--yaml", dest="yaml_", action="store_true")
     p.add_argument(
@@ -341,28 +334,28 @@ Show backup status. Show inventory and summary information.
     # upgrade
     p = subparsers.add_parser(
         "upgrade",
-        help="""\
-Upgrade this backup (incl. its data) to the newest supported version.
-""",
+        help="Upgrade this backup (incl. its data) to the newest supported version",
     )
     p.set_defaults(func="upgrade")
 
     # SCHEDULER DAEMON
     p = subparsers.add_parser(
         "scheduler",
-        help="""\
-Run the scheduler.
-""",
+        help="Run the scheduler",
     )
     p.set_defaults(func="scheduler")
-    p.add_argument("-c", "--config", type=Path, default="/etc/backy.conf")
+    p.add_argument(
+        "-c",
+        "--config",
+        type=Path,
+        default="/etc/backy.conf",
+        help="(default: %(default)s)",
+    )
 
     # DISTRUST
     p = subparsers.add_parser(
         "distrust",
-        help="""\
-Distrust specified revisions.
-""",
+        help="Distrust specified revisions",
     )
     p.add_argument(
         "-r",
@@ -376,9 +369,7 @@ Distrust specified revisions.
     # VERIFY
     p = subparsers.add_parser(
         "verify",
-        help="""\
-Verify specified revisions.
-""",
+        help="Verify specified revisions",
     )
     p.add_argument(
         "-r",
@@ -392,9 +383,7 @@ Verify specified revisions.
     # FORGET
     p = subparsers.add_parser(
         "forget",
-        help="""\
-Forget specified revisions.
-""",
+        help="Forget specified revision",
     )
     p.add_argument(
         "-r",
@@ -404,6 +393,49 @@ Forget specified revisions.
         help="use revision SPEC to forget",
     )
     p.set_defaults(func="forget")
+
+    # TAGS
+    p = subparsers.add_parser(
+        "tags",
+        help="Modify tags on revision",
+    )
+    p.add_argument(
+        "--autoremove",
+        action="store_true",
+        help="Remove revision if no tags remain",
+    )
+    p.add_argument(
+        "-f", "--force", action="store_true", help="Do not validate tags"
+    )
+    p.add_argument(
+        "--expect",
+        metavar="<tags>",
+        help="Do nothing if tags differ from the expected tags",
+    )
+    p.add_argument(
+        "action",
+        choices=["set", "add", "remove"],
+    )
+    p.add_argument(
+        "-r",
+        "--revision",
+        metavar="SPEC",
+        default="all",
+        help="modify tags for revision SPEC, modifies all if not given (default: %(default)s)",
+    )
+    p.add_argument(
+        "tags",
+        metavar="<tags>",
+        help="comma separated list of tags",
+    )
+    p.set_defaults(func="tags")
+
+    # EXPIRE
+    p = subparsers.add_parser(
+        "expire",
+        help="Expire tags according to schedule",
+    )
+    p.set_defaults(func="expire")
 
     return parser, client
 
@@ -418,9 +450,6 @@ def main():
     if args.func == "client" and not hasattr(args, "apifunc"):
         client_parser.print_usage()
         sys.exit(0)
-
-    if not hasattr(args, "logfile"):
-        args.logfile = None
 
     default_logfile: Optional[Path]
     match args.func:

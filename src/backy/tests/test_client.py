@@ -90,8 +90,9 @@ async def test_cli_jobs(cli_client, capsys):
 │ test01 │ OK  │ -      │ waiti… │ -      │        │      - │ ... │ daily  │
 │        │     │        │ for    │        │        │        │ ... │        │
 │        │     │        │ deadl… │        │        │        │         │        │
+│ dead01 │ -   │ -      │ Dead   │ -      │        │      - │ -       │        │
 └────────┴─────┴────────┴────────┴────────┴────────┴────────┴─────────┴────────┘
-2 jobs shown
+3 jobs shown
 """
         )
         == out
@@ -143,6 +144,7 @@ async def test_cli_status(cli_client, capsys):
 ┏━━━━━━━━━━━━━━━━━━━━━━┳━━━┓
 ┃ Status               ┃ # ┃
 ┡━━━━━━━━━━━━━━━━━━━━━━╇━━━┩
+│ Dead                 │ 1 │
 │ waiting for deadline │ 2 │
 └──────────────────────┴───┘
 """
@@ -209,7 +211,7 @@ async def test_cli_runall(daemon, cli_client, monkeypatch):
             """\
 ... D -                    api/new-conn                   path='/v1/jobs' query=''
 ... D -                    api/auth-passed                client='cli' path='/v1/jobs' query=''
-... D -                    api/request-result             client='cli' path='/v1/jobs' query='' response=...
+... D -                    api/request-result             client='cli' path='/v1/jobs' query='' response=... status_code=200
 ... D -                    api/new-conn                   path='/v1/jobs/test01/run' query=''
 ... D -                    api/auth-passed                client='cli' path='/v1/jobs/test01/run' query=''
 ... D -                    api/request-result             client='cli' path='/v1/jobs/test01/run' query='' status_code=202
@@ -257,7 +259,7 @@ async def test_cli_check_ok(daemon, cli_client):
             """\
 ... D -                    api/new-conn                   path='/v1/status' query='filter='
 ... D -                    api/auth-passed                client='cli' path='/v1/status' query='filter='
-... D -                    api/request-result             client='cli' path='/v1/status' query='filter=' response=...
+... D -                    api/request-result             client='cli' path='/v1/status' query='filter=' response=... status_code=200
 ... I -                    CLIClient/check-exit           exitcode=0 jobs=2
 """
         )
@@ -282,7 +284,7 @@ async def test_cli_check_too_old(daemon, clock, cli_client, log):
             """\
 ... D -                    api/new-conn                   path='/v1/status' query='filter='
 ... D -                    api/auth-passed                client='cli' path='/v1/status' query='filter='
-... D -                    api/request-result             client='cli' path='/v1/status' query='filter=' response=...
+... D -                    api/request-result             client='cli' path='/v1/status' query='filter=' response=... status_code=200
 ... C test01               CLIClient/check-sla-violation  last_time='2015-08-30 07:06:47+00:00' sla_overdue=172800.0
 ... I -                    CLIClient/check-exit           exitcode=2 jobs=2
 """
@@ -307,7 +309,7 @@ async def test_cli_check_manual_tags(daemon, cli_client, log):
             """\
 ... D -                    api/new-conn                   path='/v1/status' query='filter='
 ... D -                    api/auth-passed                client='cli' path='/v1/status' query='filter='
-... D -                    api/request-result             client='cli' path='/v1/status' query='filter=' response=...
+... D -                    api/request-result             client='cli' path='/v1/status' query='filter=' response=... status_code=200
 ... I test01               CLIClient/check-manual-tags    manual_tags='manual:test'
 ... I -                    CLIClient/check-exit           exitcode=0 jobs=2
 """
@@ -330,7 +332,7 @@ async def test_cli_check_quarantine(daemon, cli_client, log):
             """\
 ... D -                    api/new-conn                   path='/v1/status' query='filter='
 ... D -                    api/auth-passed                client='cli' path='/v1/status' query='filter='
-... D -                    api/request-result             client='cli' path='/v1/status' query='filter=' response=...
+... D -                    api/request-result             client='cli' path='/v1/status' query='filter=' response=... status_code=200
 ... W test01               CLIClient/check-quarantined    reports=1
 ... I -                    CLIClient/check-exit           exitcode=1 jobs=2
 """

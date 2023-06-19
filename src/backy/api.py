@@ -1,15 +1,28 @@
 import datetime
 import re
 from json import JSONEncoder
+from pathlib import Path
 from typing import Any, List, Tuple
 
 from aiohttp import hdrs, web
-from aiohttp.web_exceptions import HTTPAccepted, HTTPNotFound, HTTPUnauthorized
+from aiohttp.web_exceptions import (
+    HTTPAccepted,
+    HTTPBadRequest,
+    HTTPForbidden,
+    HTTPNotFound,
+    HTTPPreconditionFailed,
+    HTTPPreconditionRequired,
+    HTTPServiceUnavailable,
+    HTTPUnauthorized,
+)
 from aiohttp.web_middlewares import middleware
 from aiohttp.web_runner import AppRunner, TCPSite
 from structlog.stdlib import BoundLogger
 
 import backy.daemon
+from backy.backup import Backup
+from backy.revision import Revision
+from backy.scheduler import Job
 
 
 class BackyJSONEncoder(JSONEncoder):
@@ -42,6 +55,14 @@ class BackyAPI:
                 web.post("/v1/reload", self.reload_daemon),
                 web.get("/v1/jobs", self.get_jobs),
                 web.post("/v1/jobs/{job_name}/run", self.run_job),
+                web.get("/v1/backups", self.list_backups),
+                web.post("/v1/backups/{backup_name}/purge", self.run_purge),
+                web.post("/v1/backups/{backup_name}/touch", self.touch_backup),
+                web.get("/v1/backups/{backup_name}/revs", self.get_revs),
+                web.put(
+                    "/v1/backups/{backup_name}/revs/{rev_spec}/tags",
+                    self.put_tags,
+                ),
             ]
         )
 
@@ -121,8 +142,8 @@ class BackyAPI:
         else:
             return web.json_response(resp, dumps=BackyJSONEncoder().encode)
 
-    async def get_status(self, request: web.Request):
-        filter = request.query.get("filter", "")
+    async def get_status(self, request: web.Request) -> List[dict]:
+        filter = request.query.get("filter", None)
         if filter:
             filter = re.compile(filter)
         return self.daemon.status(filter)
@@ -130,10 +151,10 @@ class BackyAPI:
     async def reload_daemon(self, request: web.Request):
         self.daemon.reload()
 
-    async def get_jobs(self, request: web.Request):
+    async def get_jobs(self, request: web.Request) -> List[Job]:
         return list(self.daemon.jobs.values())
 
-    async def get_job(self, request: web.Request):
+    async def get_job(self, request: web.Request) -> Job:
         try:
             name = request.match_info.get("job_name", None)
             return self.daemon.jobs[name]
@@ -144,3 +165,67 @@ class BackyAPI:
         j = await self.get_job(request)
         j.run_immediately.set()
         raise HTTPAccepted()
+
+    async def list_backups(self, request: web.Request) -> List[str]:
+        return self.daemon.find_dead_backups()
+
+    async def get_backup(self, request: web.Request) -> Backup:
+        name = request.match_info.get("backup_name", None)
+        if not name:
+            raise HTTPNotFound()
+        if name in self.daemon.jobs:
+            raise HTTPForbidden()
+        try:
+            path = Path(self.daemon.base_dir).joinpath(name).resolve()
+            if (
+                not path.exists()
+                or Path(self.daemon.base_dir).resolve() not in path.parents
+            ):
+                raise FileNotFoundError
+            return Backup(path, request["log"])
+        except FileNotFoundError:
+            raise HTTPNotFound()
+
+    async def run_purge(self, request: web.Request):
+        backup = await self.get_backup(request)
+        backup.set_purge_pending()
+        raise HTTPAccepted()
+
+    async def touch_backup(self, request: web.Request):
+        backup = await self.get_backup(request)
+        backup.touch()
+
+    async def get_revs(self, request: web.Request) -> List[Revision]:
+        backup = await self.get_backup(request)
+        if request.query.get("only_clean", "") == "1":
+            revs = backup.clean_history
+        else:
+            revs = backup.history
+        return [r for r in revs if not r.location]
+
+    async def put_tags(self, request: web.Request):
+        json = await request.json()
+        if "old_tags" not in json:
+            raise HTTPPreconditionRequired()
+        old_tags = set(json["old_tags"])
+        if "new_tags" not in json:
+            raise HTTPBadRequest()
+        new_tags = set(json["new_tags"])
+
+        autoremove = request.query.get("autoremove", "") == "1"
+        spec = request.match_info.get("rev_spec", None)
+        backup = await self.get_backup(request)
+        try:
+            if not backup.tags(
+                "set",
+                spec,
+                new_tags,
+                old_tags,
+                autoremove=autoremove,
+                force=True,
+            ):
+                raise HTTPPreconditionFailed()
+        except KeyError:
+            raise HTTPNotFound()
+        except BlockingIOError:
+            raise HTTPServiceUnavailable()

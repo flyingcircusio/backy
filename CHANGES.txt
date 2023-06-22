@@ -38,6 +38,8 @@ Changelog
 
 - Fix crash for non-numeric Ceph version strings
 
+- Fix a missing lock on distrust
+
 2.4.3 (2019-04-17)
 ==================
 

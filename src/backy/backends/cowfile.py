@@ -15,10 +15,10 @@ class COWFileBackend(BackyBackend):
 
     def open(self, mode="rb"):
         if not os.path.exists(self.revision.filename):
-            if not self.revision.parent:
+            parent = self.revision.get_parent()
+            if not parent:
                 open(self.revision.filename, "wb").close()
             else:
-                parent = self.revision.backup.find(self.revision.parent)
                 cp_reflink(parent.filename, self.revision.filename)
             self.revision.writable()
         return open(self.revision.filename, mode, buffering=CHUNK_SIZE)

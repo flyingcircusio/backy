@@ -1,3 +1,4 @@
+import datetime
 import io
 import os.path as p
 import subprocess
@@ -78,11 +79,9 @@ def test_context_manager_cleans_out_snapshots(
     # unexpected revision snapshots are cleaned
     source.rbd.snap_create("test/foo@backy-2")
 
-    revision = Revision(backup, log, "1")
+    revision = Revision(backup, log, "1", backy.utils.now())
     with source(revision):
         revision.materialize()
-        revision.timestamp = backy.utils.now()
-        revision.write_info()
         backup.scan()
 
     assert source.rbd.snap_ls("test/foo") == [
@@ -140,14 +139,12 @@ def test_choose_full_without_snapshot(
     source.diff = mock.Mock()
     source.full = mock.Mock()
 
-    revision1 = Revision(backup, log, "a1")
-    revision1.timestamp = backy.utils.now()
+    revision1 = Revision(backup, log, "a1", backy.utils.now())
     revision1.materialize()
 
     backup.scan()
 
     revision2 = Revision(backup, log, "a2")
-    revision2.parent = "a1"
 
     backend = backend_factory(revision2, log)
     with source(revision2):
@@ -170,8 +167,7 @@ def test_choose_diff_with_snapshot(
     source.diff = mock.Mock()
     source.full = mock.Mock()
 
-    revision1 = Revision(backup, log, "a1")
-    revision1.timestamp = backy.utils.now()
+    revision1 = Revision(backup, log, "a1", backy.utils.now())
     revision1.materialize()
 
     # part of test setup: we check backy's behavior when a previous version not only
@@ -181,7 +177,6 @@ def test_choose_diff_with_snapshot(
     backup.scan()
 
     revision2 = Revision(backup, log, "a2")
-    revision2.parent = "a1"
 
     backend = backend_factory(revision2, log)
     with source(revision2):
@@ -204,15 +199,19 @@ def test_diff_backup(
 
     source = ceph_rbd_imagesource
 
-    parent = Revision(backup, log, "ed968696-5ab0-4fe0-af1c-14cadab44661")
-    parent.timestamp = backy.utils.now()
+    parent = Revision(
+        backup, log, "ed968696-5ab0-4fe0-af1c-14cadab44661", backy.utils.now()
+    )
     parent.materialize()
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
-    revision = Revision(backup, log, "f0e7292e-4ad8-4f2e-86d6-f40dca2aa802")
-    revision.timestamp = backy.utils.now()
-    revision.parent = parent.uuid
+    revision = Revision(
+        backup,
+        log,
+        "f0e7292e-4ad8-4f2e-86d6-f40dca2aa802",
+        backy.utils.now() + datetime.timedelta(seconds=1),
+    )
 
     with backend_factory(parent, log).open("wb") as f:
         f.write(b"asdf")
@@ -233,8 +232,7 @@ def test_diff_backup(
         )
         backend = backend_factory(revision, log)
         with source(revision):
-            parent = backup.find(revision.parent)
-            source.diff(backend, parent)
+            source.diff(backend, revision.get_parent())
             backup.history.append(revision)
         export.assert_called_with(
             "test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802",
@@ -258,8 +256,7 @@ def test_full_backup(
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
-    revision = Revision(backup, log, "a0")
-    revision.timestamp = backy.utils.now()
+    revision = Revision(backup, log, "a0", backy.utils.now())
     revision.materialize()
     backup.scan()
 
@@ -277,8 +274,9 @@ def test_full_backup(
         assert f.read() == b"Han likes Leia."
 
     # Now make another full backup. This overwrites the first.
-    revision2 = Revision(backup, log, "a1")
-    revision2.parent = revision.uuid
+    revision2 = Revision(
+        backup, log, "a1", backy.utils.now() + datetime.timedelta(seconds=1)
+    )
     revision2.materialize()
     backup.scan()
 
@@ -310,13 +308,13 @@ def test_full_backup_integrates_changes(
     content0 = BLOCK * b"A" + BLOCK * b"B" + BLOCK * b"C" + BLOCK * b"D"
     content1 = BLOCK * b"A" + BLOCK * b"X" + BLOCK * b"\0" + BLOCK * b"D"
 
-    rev0 = Revision(backup, log, "a0")
-    rev0.timestamp = backy.utils.now()
+    rev0 = Revision(backup, log, "a0", backy.utils.now())
     rev0.materialize()
     backup.scan()
 
-    rev1 = Revision(backup, log, "a1")
-    rev1.parent = "a0"
+    rev1 = Revision(
+        backup, log, "a1", backy.utils.now() + datetime.timedelta(seconds=1)
+    )
     rev1.materialize()
 
     # check fidelity
@@ -342,8 +340,7 @@ def test_verify_fail(
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
-    revision = Revision(backup, log, "a0")
-    revision.timestamp = backy.utils.now()
+    revision = Revision(backup, log, "a0", backy.utils.now())
     revision.materialize()
 
     backup.scan()
@@ -374,8 +371,7 @@ def test_verify(
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
-    revision = Revision(backup, log, "a0")
-    revision.timestamp = backy.utils.now()
+    revision = Revision(backup, log, "a0", backy.utils.now())
     revision.materialize()
 
     backup.scan()

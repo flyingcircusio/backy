@@ -11,7 +11,7 @@ from structlog.stdlib import BoundLogger
 
 import backy.backup
 
-from .utils import SafeFile, now, safe_symlink
+from .utils import SafeFile, now
 
 TAG_MANUAL_PREFIX = "manual:"
 
@@ -110,11 +110,6 @@ class Revision(object):
         with SafeFile(self.info_filename, encoding="utf-8") as f:
             f.open_new("wb")
             yaml.safe_dump(metadata, f)
-
-    def set_link(self, name):
-        path = self.backup.path
-        safe_symlink(self.filename, p.join(path, name))
-        safe_symlink(self.info_filename, p.join(path, name + ".rev"))
 
     def distrust(self):
         self.log.info("distrusted")

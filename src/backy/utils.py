@@ -198,19 +198,6 @@ class SafeFile(object):
         return self.f.fileno()
 
 
-def safe_symlink(realfile, link):
-    """Set a symlink unconditionally.
-
-    If the link used to exit before, replace it. Make the symlink
-    relative if possible.
-    """
-    try:
-        os.unlink(link)
-    except OSError:
-        pass
-    os.symlink(os.path.relpath(realfile, os.path.dirname(link)), link)
-
-
 if hasattr(os, "posix_fadvise"):
     posix_fadvise = os.posix_fadvise
 else:  # pragma: no cover

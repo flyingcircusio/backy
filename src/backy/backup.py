@@ -200,6 +200,12 @@ class Backup(object):
                 )
                 raise RuntimeError("Unknown tags")
 
+        try:  # cleanup old symlinks
+            os.unlink(p.join(self.path, "last"))
+            os.unlink(p.join(self.path, "last.rev"))
+        except OSError:
+            pass
+
         start = time.time()
 
         if not self.source.ready():
@@ -228,7 +234,6 @@ class Backup(object):
                 self.log.info(
                     "verification-ok", revision_uuid=new_revision.uuid
                 )
-                new_revision.set_link("last")
                 new_revision.stats["duration"] = time.time() - start
                 new_revision.write_info()
                 new_revision.readonly()

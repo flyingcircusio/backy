@@ -1,16 +1,17 @@
+import datetime
 import fcntl
 import glob
 import os
 import os.path as p
 import time
-from typing import IO, Type
+from typing import IO, Optional, Type
 
 import yaml
 from structlog.stdlib import BoundLogger
 
 from backy.utils import min_date
 
-from .backends import BackyBackend
+from .backends import BackendException, BackyBackend
 from .backends.chunked import ChunkedFileBackend
 from .backends.cowfile import COWFileBackend
 from .revision import Revision, Trust, filter_schedule_tags
@@ -165,6 +166,10 @@ class Backup(object):
         """History without incomplete revisions."""
         return [rev for rev in self.history if "duration" in rev.stats]
 
+    @property
+    def contains_distrusted(self):
+        return any((r == Trust.DISTRUSTED for r in self.clean_history))
+
     #################
     # Making backups
 
@@ -222,8 +227,14 @@ class Backup(object):
 
         backend = self.backend_factory(new_revision, self.log)
         with self.source(new_revision) as source:
-            source.backup(backend)
-            if not source.verify(backend):
+            try:
+                source.backup(backend)
+                verified = source.verify(backend)
+            except BackendException:
+                self.log.exception("backend-error-distrust-all")
+                verified = False
+                self.distrust_range()
+            if not verified:
                 self.log.error(
                     "verification-failed",
                     revision_uuid=new_revision.uuid,
@@ -254,19 +265,31 @@ class Backup(object):
                 break
 
     @locked(target=".backup", mode="exclusive")
-    def distrust(self, revision=None, from_=None, until=None):
+    def distrust(
+        self,
+        revision=None,
+        from_: Optional[datetime.date] = None,
+        until: Optional[datetime.date] = None,
+    ):
         if revision:
             r = self.find(revision)
             r.distrust()
             r.write_info()
         else:
-            for r in self.clean_history:
-                if from_ and r.timestamp.date() < from_:
-                    continue
-                if until and r.timestamp.date() > until:
-                    continue
-                r.distrust()
-                r.write_info()
+            self.distrust_range(from_, until)
+
+    def distrust_range(
+        self,
+        from_: Optional[datetime.date] = None,
+        until: Optional[datetime.date] = None,
+    ):
+        for r in self.clean_history:
+            if from_ and r.timestamp.date() < from_:
+                continue
+            if until and r.timestamp.date() > until:
+                continue
+            r.distrust()
+            r.write_info()
 
     @locked(target=".purge", mode="shared")
     def verify(self, revision=None):

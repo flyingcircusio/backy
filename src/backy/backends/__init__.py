@@ -6,6 +6,10 @@ import backy.backup
 import backy.revision
 
 
+class BackendException(IOError):
+    pass
+
+
 class BackyBackend(ABC):
     @abstractmethod
     def __init__(

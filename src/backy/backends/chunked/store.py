@@ -105,7 +105,9 @@ class Store(object):
             to_delete = to_delete - set(user._mapping.values())
         self.log.info("purge", purging=len(to_delete))
         for file_hash in sorted(to_delete):
-            os.unlink(self.chunk_path(file_hash))
+            if os.path.exists(self.chunk_path(file_hash)):
+                os.unlink(self.chunk_path(file_hash))
+        self.known -= to_delete
 
     def chunk_path(self, hash):
         dir1 = hash[:2]

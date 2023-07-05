@@ -3,7 +3,7 @@ import os
 import lzo
 import pytest
 
-from backy.backends.chunked.chunk import Chunk, hash
+from backy.backends.chunked.chunk import Chunk, InconsistentHash, hash
 from backy.backends.chunked.file import File
 from backy.backends.chunked.store import Store
 
@@ -98,7 +98,7 @@ def test_chunk_fails_wrong_content(tmpdir, log):
     f = File(str(tmpdir / "asdf"), store)
 
     chunk = Chunk(f, 1, store, chunk_hash)
-    with pytest.raises(ValueError):
+    with pytest.raises(InconsistentHash):
         chunk.read(0)
 
 

@@ -58,3 +58,21 @@ def test_restore_stdout(simple_file_config, capfd):
     assert not os.path.exists("-")
     out, err = capfd.readouterr()
     assert "volume contents\n" == out
+
+
+def test_backup_corrupted(simple_file_config):
+    backup = simple_file_config
+    source = "input-file"
+    with open(source, "wb") as f:
+        f.write(b"volume contents\n")
+    backup.backup({"daily"})
+
+    store = backup.history[0].backend.store
+    chunk_path = store.chunk_path(next(iter(store.known)))
+    os.chmod(chunk_path, 0o664)
+    with open(chunk_path, "wb") as f:
+        f.write(b"invalid")
+    backup.backup({"daily"})
+
+    assert backup.history == []
+    assert not os.path.exists(chunk_path)

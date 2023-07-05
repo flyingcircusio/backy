@@ -42,7 +42,10 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
         s = open(self.filename, "rb")
         t = target.open("r+b")
         with s as source, t as target:
-            if self.cow:
+            if self.revision.backup.contains_distrusted:
+                self.log.info("backup-forcing-full")
+                bytes = copy(source, target)
+            elif self.cow:
                 self.log.info("backup-sparse")
                 bytes = copy_overwrite(source, target)
             else:
@@ -51,13 +54,9 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
 
         self.revision.stats["bytes_written"] = bytes
 
-    def verify(self, target):
-        try:
-            self.log.info("verify")
-            s = open(self.filename, "rb")
-            t = target.open("rb")
-            with s as source, t as target:
-                return files_are_equal(source, target)
-        except Exception:
-            self.log.exception("verify-failed")
-            return False
+    def verify(self, target) -> bool:
+        self.log.info("verify")
+        s = open(self.filename, "rb")
+        t = target.open("rb")
+        with s as source, t as target:
+            return files_are_equal(source, target)

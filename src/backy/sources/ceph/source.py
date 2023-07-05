@@ -5,6 +5,7 @@ from structlog.stdlib import BoundLogger
 import backy.utils
 from backy.revision import Trust
 
+from ...quarantine import QuarantineReport
 from .. import BackySource, BackySourceContext, BackySourceFactory
 from .rbd import RBDClient
 
@@ -142,7 +143,13 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
 
         with s as source, t as target:
             self.log.info("verify")
-            return backy.utils.files_are_roughly_equal(source, target)
+            return backy.utils.files_are_roughly_equal(
+                source,
+                target,
+                report=lambda s, t, o: self.revision.backup.quarantine.add_report(
+                    QuarantineReport(s, t, o)
+                ),
+            )
 
     def _delete_old_snapshots(self):
         # Clean up all snapshots except the one for the most recent valid

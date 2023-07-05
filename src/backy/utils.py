@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from typing import IO, Callable
 from zoneinfo import ZoneInfo
 
 import humanize
@@ -334,10 +335,14 @@ def cp_reflink(source, target):
         subprocess.check_call([CP, source, target])
 
 
-def files_are_equal(a, b):
+def files_are_equal(
+    a: IO,
+    b: IO,
+    report: Callable[[bytes, bytes, int], None] = lambda a, b, c: None,
+) -> bool:
     try:
-        posix_fadvise(a.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-        posix_fadvise(b.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+        posix_fadvise(a.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)  # type: ignore
+        posix_fadvise(b.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)  # type: ignore
     except Exception:
         pass
     position = 0
@@ -352,6 +357,7 @@ def files_are_equal(a, b):
                 hash_b=hashlib.md5(chunk_b).hexdigest(),
                 pos=position,
             )
+            report(chunk_a, chunk_b, position)
             errors += 1
         if not chunk_a:
             break
@@ -360,8 +366,13 @@ def files_are_equal(a, b):
 
 
 def files_are_roughly_equal(
-    a, b, samplesize=0.01, blocksize=CHUNK_SIZE, timeout=5 * 60
-):
+    a: IO,
+    b: IO,
+    samplesize=0.01,
+    blocksize=CHUNK_SIZE,
+    timeout=5 * 60,
+    report: Callable[[bytes, bytes, int], None] = lambda a, b, c: None,
+) -> bool:
     a.seek(0, os.SEEK_END)
     size = a.tell()
     blocks = size // blocksize
@@ -371,7 +382,7 @@ def files_are_roughly_equal(
     # turn off readahead
     try:
         for fdesc in a.fileno(), b.fileno():
-            posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)
+            posix_fadvise(fdesc, 0, 0, os.POSIX_FADV_RANDOM)  # type: ignore
     except Exception:
         pass
 
@@ -398,10 +409,9 @@ def files_are_roughly_equal(
                 hash_b=hashlib.md5(chunk_b).hexdigest(),
                 pos=block * blocksize,
             )
+            report(chunk_a, chunk_b, block * blocksize)
             return False
-    else:
-        return True
-    return False
+    return True
 
 
 def now():

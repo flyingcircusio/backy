@@ -355,6 +355,7 @@ def test_verify_fail(
     # The backend has false data, so this needs to be detected.
     with source(revision):
         assert not source.verify(backend)
+        assert len(backup.quarantine.report_ids) == 1
 
 
 @pytest.mark.parametrize(

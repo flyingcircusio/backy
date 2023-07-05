@@ -14,6 +14,7 @@ from backy.utils import min_date
 from .backends import BackendException, BackyBackend
 from .backends.chunked import ChunkedFileBackend
 from .backends.cowfile import COWFileBackend
+from .quarantine import QuarantineStore
 from .revision import Revision, Trust, filter_schedule_tags
 from .schedule import Schedule
 from .sources import BackySourceFactory, select_source
@@ -88,6 +89,7 @@ class Backup(object):
     backend_type: str
     backend_factory: Type[BackyBackend]
     history: list[Revision]
+    quarantine: QuarantineStore
     log: BoundLogger
 
     _by_uuid: dict[str, Revision]
@@ -146,6 +148,8 @@ class Backup(object):
             raise ValueError(
                 "Unsupported backend_type '{}'".format(self.backend_type)
             )
+
+        self.quarantine = QuarantineStore(self.path, self.log)
 
     def scan(self):
         self.history = []

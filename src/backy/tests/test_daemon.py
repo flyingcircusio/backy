@@ -23,11 +23,12 @@ async def daemon(tmpdir, event_loop, log):
     source = str(tmpdir / "test01.source")
     with open(str(tmpdir / "config"), "w") as f:
         f.write(
-            """\
+            f"""\
 ---
 global:
     base-dir: {base_dir}
     status-interval: 1
+    telnet_port: 1234
 schedules:
     default:
         daily:
@@ -44,9 +45,7 @@ jobs:
             type: file
             filename: {source}
         schedule: default
-""".format(
-                **locals()
-            )
+"""
         )
 
     with open(source, "w") as f:
@@ -61,6 +60,40 @@ def test_fail_on_nonexistent_config(log):
     daemon = BackyDaemon("/no/such/config", log)
     with pytest.raises(RuntimeError):
         daemon._read_config()
+
+
+def test_reload(daemon, tmpdir):
+    new_base_dir = p.join(tmpdir, "newdir")
+    os.mkdir(new_base_dir)
+    with open(str(tmpdir / "config"), "w") as f:
+        f.write(
+            f"""\
+---
+global:
+    base-dir: {new_base_dir}
+schedules:
+    default2:
+        daily:
+            interval: 24h
+            keep: 13
+jobs:
+    test05:
+        source:
+            type: file
+            filename: {daemon.jobs["test01"].source}
+        schedule: default2
+    foo05:
+        source:
+            type: file
+            filename: {daemon.jobs["foo00"].source}
+        schedule: default2
+"""
+        )
+    daemon.reload()
+    assert daemon.base_dir == new_base_dir
+    assert set(daemon.jobs) == {"test05", "foo05"}
+    assert set(daemon.schedules) == {"default2"}
+    assert daemon.telnet_port == BackyDaemon.telnet_port
 
 
 @pytest.mark.asyncio

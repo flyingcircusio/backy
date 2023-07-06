@@ -19,7 +19,7 @@ import tzlocal
 from .ext_deps import CP
 from .fallocate import punch_hole
 
-log = structlog.stdlib.get_logger()
+log = structlog.stdlib.get_logger(subsystem="utils")
 
 log_data: str  # for pytest
 
@@ -201,13 +201,13 @@ class SafeFile(object):
 if hasattr(os, "posix_fadvise"):
     posix_fadvise = os.posix_fadvise
 else:  # pragma: no cover
-    log.warning("safe-symlink-no-posix_fadivse")
     os.POSIX_FADV_RANDOM = None  # type: ignore
     os.POSIX_FADV_SEQUENTIAL = None  # type: ignore
     os.POSIX_FADV_WILLNEED = None  # type: ignore
     os.POSIX_FADV_DONTNEED = None  # type: ignore
 
     def posix_fadvise(*args, **kw):
+        log.debug("posix_fadivse-unavailable")
         return
 
 

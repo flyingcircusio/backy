@@ -16,11 +16,6 @@ try:
 except ImportError:
     colorama = None
 
-try:
-    import systemd.journal as journal
-except ImportError:
-    journal = None
-
 _MISSING = "{who} requires the {package} package installed."
 _EVENT_WIDTH = 30  # pad the event name to so many characters
 

@@ -41,11 +41,7 @@ def pytest_assertrepr_compare(op, left, right):
 
 @pytest.fixture(autouse=True)
 def log(monkeypatch):
-    def noop_init_logging(
-        verbose,
-        logfile=None,
-        default_job_name="",
-    ):
+    def noop_init_logging(*args, **kwargs):
         pass
 
     monkeypatch.setattr(backy.logging, "init_logging", noop_init_logging)

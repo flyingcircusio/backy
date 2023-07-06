@@ -14,6 +14,7 @@ FALLOC_FL_PUNCH_HOLE = 0x02
 
 
 def _fake_fallocate(fd, mode, offset, len_):
+    log.debug("fallocate-non-hole-punching")
     if len_ <= 0:
         raise IOError("fallocate: length must be positive")
     if mode & FALLOC_FL_PUNCH_HOLE:
@@ -49,7 +50,6 @@ def _make_fallocate():
 try:
     fallocate = _make_fallocate()
 except AttributeError:  # pragma: no cover
-    log.debug("fallocate-non-hole-punching")
     fallocate = _fake_fallocate
 
 

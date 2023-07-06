@@ -1,0 +1,1 @@
+- Remove the `last` and `last.rev` symlink

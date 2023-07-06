@@ -97,10 +97,6 @@ class Command(object):
         b = backy.backup.Backup(self.path, self.log)
         b.restore(revision, target)
 
-    def find(self, revision):
-        b = backy.backup.Backup(self.path, self.log)
-        print(b.find(revision).filename)
-
     def forget(self, revision):
         b = backy.backup.Backup(self.path, self.log)
         b.forget_revision(revision)
@@ -114,10 +110,6 @@ class Command(object):
     def purge(self):
         b = backy.backup.Backup(self.path, self.log)
         b.purge()
-
-    def nbd(self, host, port):
-        b = backy.backup.Backup(self.path, self.log)
-        b.nbd_server(host, port)
 
     def upgrade(self):
         b = backy.backup.Backup(self.path, self.log)
@@ -210,22 +202,6 @@ Purge the backup store (i.e. chunked) from unused data.
     )
     p.set_defaults(func="purge")
 
-    # FIND
-    p = subparsers.add_parser(
-        "find",
-        help="""\
-Print full path to a given revision's image file.
-""",
-    )
-    p.add_argument(
-        "-r",
-        "--revision",
-        metavar="SPEC",
-        default="latest",
-        help="use revision SPEC to find",
-    )
-    p.set_defaults(func="find")
-
     # STATUS
     p = subparsers.add_parser(
         "status",
@@ -234,29 +210,6 @@ Show backup status. Show inventory and summary information.
 """,
     )
     p.set_defaults(func="status")
-
-    # NBD
-    p = subparsers.add_parser(
-        "nbd-server",
-        help="""\
-Serve the revisions of this backup through an NBD server.
-""",
-    )
-    p.add_argument(
-        "-H",
-        "--host",
-        default="127.0.0.1",
-        help="which IP address to listen on (default: 127.0.0.1)",
-    )
-    p.add_argument(
-        "-p",
-        "--port",
-        default="9000",
-        type=int,
-        help="which port to listen on (default: 9000)",
-    )
-
-    p.set_defaults(func="nbd")
 
     # upgrade
     p = subparsers.add_parser(

@@ -48,27 +48,6 @@ Restore the full image through a Pipe::
 
   $ backy restore -r <revision> - | rbd import - <pool>/<rootimage>
 
-Restoring individual files
---------------------------
-
-Backy provides an NBD server to access backups through a mountable device::
-
-  $ cd /srv/backy/$vm
-  $ backy nbd-server
-
-In a different shell you can now mount this::
-
-  $ nbd-client -N <revision> localhost 9000 /dev/nbd0
-  $ mkdir  -p /mnt/restore/<vm>
-  $ mount -r /dev/nbd0p1 /mnt/restore/<vm>
-
-When done::
-
-  $ umount /mnt/restore/<vm>
-  $ nbd-client -d /dev/nbd0
-
-Also stop the nbd-server with Ctrl-C.
-
 
 Setting up backy
 ----------------

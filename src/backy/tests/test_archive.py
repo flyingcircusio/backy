@@ -56,7 +56,9 @@ def test_load_revisions(backup_with_revisions):
     a = backup_with_revisions
     assert [x.uuid for x in a.history] == ["123-0", "123-1", "123-2"]
     assert a.history[1].uuid == "123-1"
-    assert a.history[1].parent == "123-0"
+    assert a.history[1].get_parent().uuid == "123-0"
+    assert a.history[2].get_parent().uuid == "123-1"
+    assert a.history[0].get_parent() is None
     assert a.find_revisions("all") == a.history
     assert a.find_revisions(1) == [a.find(1)]
 

@@ -31,7 +31,7 @@ def test_revision_create_child(backup, log):
     r = Revision.create(backup, {"test"}, log)
     assert r.uuid is not None
     assert r.tags == {"test"}
-    assert r.parent == "asdf"
+    assert r.get_parent().uuid == "asdf"
     assert (backy.utils.now() - r.timestamp).total_seconds() < 10
     assert r.backup is backup
 
@@ -40,7 +40,7 @@ def test_load_sample1(backup, log):
     r = Revision.load(SAMPLE_DIR + "/sample1.rev", backup, log)
     assert r.uuid == "asdf"
     assert r.timestamp == datetime.datetime(2015, 8, 1, 20, 0, tzinfo=UTC)
-    assert r.parent is None
+    assert r.get_parent() is None
     assert r.backup is backup
 
 
@@ -48,7 +48,7 @@ def test_load_sample2(backup, log):
     r = Revision.load(SAMPLE_DIR + "/sample2.rev", backup, log)
     assert r.uuid == "asdf2"
     assert r.timestamp == datetime.datetime(2015, 8, 1, 21, 0, tzinfo=UTC)
-    assert r.parent == "asdf"
+    assert r.get_parent() is None
     assert r.backup is backup
 
 
@@ -61,13 +61,29 @@ def test_filenames_based_on_uuid_and_backup_dir(log):
 
 
 def test_store_revision_data(backup, clock, log):
+    backup.history = [Revision(backup, log, "asdf", backy.utils.now())]
     r = Revision(backup, log, "asdf2", backy.utils.now())
-    r.parent = "asdf"
     r.backup = backup
     r.write_info()
     with open(r.info_filename, encoding="utf-8") as info:
         assert yaml.safe_load(info) == {
             "parent": "asdf",
+            "backend_type": "chunked",
+            "uuid": "asdf2",
+            "stats": {"bytes_written": 0},
+            "tags": [],
+            "trust": "trusted",
+            "timestamp": datetime.datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC),
+        }
+
+
+def test_store_revision_data_no_parent(backup, clock, log):
+    r = Revision(backup, log, "asdf2", backy.utils.now())
+    r.backup = backup
+    r.write_info()
+    with open(r.info_filename, encoding="utf-8") as info:
+        assert yaml.safe_load(info) == {
+            "parent": "",
             "backend_type": "chunked",
             "uuid": "asdf2",
             "stats": {"bytes_written": 0},

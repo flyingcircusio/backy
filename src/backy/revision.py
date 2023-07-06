@@ -34,7 +34,6 @@ class Revision(object):
     backup: "backy.backup.Backup"
     uuid: str
     timestamp: datetime.datetime
-    parent: Optional[str] = None
     stats: dict
     tags: set[str]
     trust: Trust = Trust.TRUSTED
@@ -53,8 +52,6 @@ class Revision(object):
     def create(cls, backup, tags, log):
         r = Revision(backup, log)
         r.tags = tags
-        if backup.history:
-            r.parent = backup.history[-1].uuid
         r.backend_type = backup.backend_type
         return r
 
@@ -73,7 +70,6 @@ class Revision(object):
         r = Revision(
             backup, log, uuid=metadata["uuid"], timestamp=metadata["timestamp"]
         )
-        r.parent = metadata["parent"]
         r.stats = metadata.get("stats", {})
         r.tags = set(metadata.get("tags", []))
         # Assume trusted by default to support migration
@@ -102,7 +98,9 @@ class Revision(object):
             "uuid": self.uuid,
             "backend_type": self.backend_type,
             "timestamp": self.timestamp,
-            "parent": self.parent,
+            "parent": getattr(
+                self.get_parent(), "uuid", ""
+            ),  # compatibility with older versions
             "stats": self.stats,
             "trust": self.trust.value,
             "tags": list(self.tags),
@@ -140,7 +138,11 @@ class Revision(object):
             os.chmod(self.filename, 0o440)
         os.chmod(self.info_filename, 0o440)
 
-    def get_parent(self):
-        if self.parent:
-            return self.backup.find_by_uuid(self.parent)
-        return
+    def get_parent(self) -> Optional["Revision"]:
+        """defaults to last rev if not in history"""
+        prev = None
+        for r in self.backup.history:
+            if r.uuid == self.uuid:
+                break
+            prev = r
+        return prev

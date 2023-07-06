@@ -71,22 +71,22 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
             return
         revision = self.revision
         while True:
-            if not revision.parent:
+            parent = revision.get_parent()
+            if not parent:
                 self.log.info("backup-no-valid-parent")
                 self.full(target)
                 return
-            parent = self.revision.backup.find(revision.parent)
             if parent.trust == Trust.DISTRUSTED:
                 self.log.info(
                     "ignoring-distrusted-rev",
-                    revision_uuid=revision.parent,
+                    revision_uuid=parent.uuid,
                 )
                 revision = parent
                 continue
             if not self.rbd.exists(self._image_name + "@backy-" + parent.uuid):
                 self.log.info(
                     "ignoring-rev-without-snapshot",
-                    revision_uuid=revision.parent,
+                    revision_uuid=parent.uuid,
                 )
                 revision = parent
                 continue

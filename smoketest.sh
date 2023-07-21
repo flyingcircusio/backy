@@ -3,10 +3,13 @@
 set -e
 umask 022
 
-source `poetry env info --path`/bin/activate
+if [[ -z "$BACKY_CMD" ]]; then
+  echo "error: BACKY_CMD is not set. Set it manually or call via pytest"
+  exit 2
+fi
 
 BACKUP=$(mktemp -d -t backy.test.XXXXX)
-BACKY="backy -l ${BACKUP}/backy.log"
+BACKY="$BACKY_CMD -l ${BACKUP}/backy.log"
 export TZ=Europe/Berlin
 
 mkdir ${BACKUP}/backup
@@ -40,7 +43,7 @@ $BACKY backup manual:test
 echo "Done."
 
 echo -n "Backing up img_state1.img with unknown tag. "
-! $BACKY backup unknown
+$BACKY backup unknown && exit 1
 echo "Done."
 
 echo -n "Restoring img_state1.img from level 0. "

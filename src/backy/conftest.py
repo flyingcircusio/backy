@@ -18,9 +18,10 @@ fixtures = os.path.dirname(__file__) + "/tests/samples"
 
 @pytest.fixture(autouse=True, scope="session")
 def fix_pytest_coverage_465():
-    os.environ["COV_CORE_SOURCE"] = os.path.abspath(
-        os.environ["COV_CORE_SOURCE"]
-    )
+    if "COV_CORE_SOURCE" in os.environ:
+        os.environ["COV_CORE_SOURCE"] = os.path.abspath(
+            os.environ["COV_CORE_SOURCE"]
+        )
 
 
 @pytest.fixture

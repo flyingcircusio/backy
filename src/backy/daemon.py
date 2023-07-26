@@ -225,7 +225,7 @@ class BackyDaemon(object):
     def status(self, filter_re=None):
         """Collects status information for all jobs."""
         result = []
-        for job in self.jobs.values():
+        for job in list(self.jobs.values()):
             if filter_re and not filter_re.search(job.name):
                 continue
             job.backup.scan()

@@ -5,6 +5,7 @@ from structlog.stdlib import BoundLogger
 import backy.utils
 from backy.revision import Trust
 
+from ...quarantine import QuarantineReport
 from .. import BackySource, BackySourceContext, BackySourceFactory
 from .rbd import RBDClient
 
@@ -132,23 +133,23 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
 
         self.revision.stats["chunk_stats"] = chunk_stats
 
-    def verify(self, target):
-        try:
-            s = self.rbd.image_reader(
-                "{}/{}@backy-{}".format(
-                    self.pool, self.image, self.revision.uuid
-                )
+    def verify(self, target) -> bool:
+        s = self.rbd.image_reader(
+            "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
+        )
+        t = target.open("rb")
+
+        self.revision.stats["ceph-verification"] = "partial"
+
+        with s as source, t as target:
+            self.log.info("verify")
+            return backy.utils.files_are_roughly_equal(
+                source,
+                target,
+                report=lambda s, t, o: self.revision.backup.quarantine.add_report(
+                    QuarantineReport(s, t, o)
+                ),
             )
-            t = target.open("rb")
-
-            self.revision.stats["ceph-verification"] = "partial"
-
-            with s as source, t as target:
-                self.log.info("verify")
-                return backy.utils.files_are_roughly_equal(source, target)
-        except Exception:
-            self.log.exception("verify-failed")
-            return False
 
     def _delete_old_snapshots(self):
         # Clean up all snapshots except the one for the most recent valid

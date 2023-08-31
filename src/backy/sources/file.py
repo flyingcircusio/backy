@@ -1,5 +1,6 @@
 from structlog.stdlib import BoundLogger
 
+from backy.quarantine import QuarantineReport
 from backy.revision import Revision
 from backy.sources import BackySource, BackySourceContext, BackySourceFactory
 from backy.utils import copy, copy_overwrite, files_are_equal
@@ -42,7 +43,10 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
         s = open(self.filename, "rb")
         t = target.open("r+b")
         with s as source, t as target:
-            if self.cow:
+            if self.revision.backup.contains_distrusted:
+                self.log.info("backup-forcing-full")
+                bytes = copy(source, target)
+            elif self.cow:
                 self.log.info("backup-sparse")
                 bytes = copy_overwrite(source, target)
             else:
@@ -51,13 +55,15 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
 
         self.revision.stats["bytes_written"] = bytes
 
-    def verify(self, target):
-        try:
-            self.log.info("verify")
-            s = open(self.filename, "rb")
-            t = target.open("rb")
-            with s as source, t as target:
-                return files_are_equal(source, target)
-        except Exception:
-            self.log.exception("verify-failed")
-            return False
+    def verify(self, target) -> bool:
+        self.log.info("verify")
+        s = open(self.filename, "rb")
+        t = target.open("rb")
+        with s as source, t as target:
+            return files_are_equal(
+                source,
+                target,
+                report=lambda s, t, o: self.revision.backup.quarantine.add_report(
+                    QuarantineReport(s, t, o)
+                ),
+            )

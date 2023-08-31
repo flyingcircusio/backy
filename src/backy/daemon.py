@@ -258,6 +258,7 @@ class BackyDaemon(object):
                         else None
                     ),
                     manual_tags=", ".join(manual_tags),
+                    quarantine_reports=len(job.backup.quarantine.report_ids),
                 )
             )
         return result
@@ -319,34 +320,33 @@ class BackyDaemon(object):
             )
             sys.exit(2)
 
-        failed_jobs = []
+        exitcode = 0
 
         with open(self.status_file, encoding="utf-8") as f:
             status = yaml.safe_load(f)
 
         for job in status:
+            log = self.log.bind(job_name=job["job"])
             if job["manual_tags"]:
-                self.log.info(
+                log.info(
                     "check-manual-tags",
                     manual_tags=job["manual_tags"],
-                    job_name=job["job"],
                 )
             if job["sla"] != "OK":
-                failed_jobs.append(job)
-
-        if failed_jobs:
-            for f in failed_jobs:
-                self.log.critical(
+                log.critical(
                     "check-sla-violation",
-                    job_name=f["job"],
-                    last_time=str(f["last_time"]),
-                    sla_overdue=f["sla_overdue"],
+                    last_time=str(job["last_time"]),
+                    sla_overdue=job["sla_overdue"],
                 )
-            self.log.debug("check-jobs-failed", failed_jobs=len(failed_jobs))
-            sys.exit(2)
+                exitcode = max(exitcode, 2)
+            if job["quarantine_reports"]:
+                log.warning(
+                    "check-quarantined", reports=job["quarantine_reports"]
+                )
+                exitcode = max(exitcode, 1)
 
-        self.log.info("check-within-sla", num=len(status))
-        sys.exit(0)
+        self.log.info("check-exit", exitcode=exitcode, jobs=len(status))
+        sys.exit(exitcode)
 
 
 async def telnet_server_shell(reader, writer):

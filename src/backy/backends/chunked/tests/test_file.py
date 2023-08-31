@@ -5,7 +5,7 @@ import random
 import lzo
 import pytest
 
-from backy.backends.chunked.chunk import Chunk
+from backy.backends.chunked.chunk import Chunk, InconsistentHash
 from backy.backends.chunked.file import File
 from backy.backends.chunked.store import Store
 
@@ -66,7 +66,7 @@ def test_underrun_gets_noticed(tmpdir, log):
             cf.write(lzo.compress(b"asdf"))
 
         f.seek(0)
-        with pytest.raises(ValueError):
+        with pytest.raises(InconsistentHash):
             f.read()
 
 

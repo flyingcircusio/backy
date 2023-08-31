@@ -3,17 +3,25 @@ import io
 import os
 import tempfile
 import time
+from typing import Optional
 
 import lzo
 import mmh3
 
 import backy.backends.chunked
+from backy.backends import BackendException
 from backy.utils import posix_fadvise
 
 chunk_stats = {
     "write_full": 0,
     "write_partial": 0,
 }
+
+
+class InconsistentHash(BackendException):
+    def __init__(self, expected, actual):
+        self.expected = expected
+        self.actual = actual
 
 
 class Chunk(object):
@@ -34,6 +42,7 @@ class Chunk(object):
     store: "backy.backends.chunked.Store"
     clean: bool
     loaded: bool
+    data: Optional[io.BytesIO]
 
     def __init__(self, file, id, store, hash):
         self.id = id
@@ -64,19 +73,19 @@ class Chunk(object):
         data = b""
         if self.hash:
             chunk_file = self.store.chunk_path(self.hash)
-            with open(chunk_file, "rb") as f:
-                posix_fadvise(f.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
-                data = f.read()
-                data = lzo.decompress(data)
+            try:
+                with open(chunk_file, "rb") as f:
+                    posix_fadvise(f.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+                    data = f.read()
+                    data = lzo.decompress(data)
+            except (lzo.error, IOError) as e:
+                raise BackendException from e
+
             disk_hash = hash(data)
             # This is a safety belt. Hashing is sufficiently fast to avoid
             # us accidentally reading garbage.
             if disk_hash != self.hash:
-                raise ValueError(
-                    "Expected hash {} but data has {}".format(
-                        self.hash, disk_hash
-                    )
-                )
+                raise InconsistentHash(self.hash, disk_hash)
         self._init_data(data)
 
     def _init_data(self, data):

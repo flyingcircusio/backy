@@ -11,6 +11,7 @@ import pytest
 from backy import utils
 from backy.backends.chunked import ChunkedFileBackend
 from backy.daemon import BackyDaemon
+from backy.quarantine import QuarantineReport
 from backy.revision import Revision
 from backy.scheduler import Job
 from backy.tests import Ellipsis
@@ -365,7 +366,7 @@ def test_check_ok(daemon, setup_structlog):
         Ellipsis(
             """\
 ... I -                    daemon/read-config             ...
-... I -                    daemon/check-within-sla        num=2
+... I -                    daemon/check-exit              exitcode=0 jobs=2
 """
         )
         == utils.log_data
@@ -391,7 +392,7 @@ def test_check_too_old(daemon, tmpdir, clock, log, setup_structlog):
             """\
 ... I -                    daemon/read-config             ...
 ... C test01               daemon/check-sla-violation     last_time='2015-08-30 07:06:47+00:00' sla_overdue=172800.0
-... D -                    daemon/check-jobs-failed       failed_jobs=1
+... I -                    daemon/check-exit              exitcode=2 jobs=2
 """
         )
         == utils.log_data
@@ -417,7 +418,30 @@ def test_check_manual_tags(daemon, setup_structlog, log):
             """\
 ... I -                    daemon/read-config             ...
 ... I test01               daemon/check-manual-tags       manual_tags='manual:test'
-... I -                    daemon/check-within-sla        num=2
+... I -                    daemon/check-exit              exitcode=0 jobs=2
+"""
+        )
+        == utils.log_data
+    )
+
+
+def test_check_quarantine(daemon, setup_structlog, log):
+    setup_structlog.default_job_name = "-"
+    job = daemon.jobs["test01"]
+    job.backup.quarantine.add_report(QuarantineReport(b"a", b"b", 0))
+    daemon._write_status_file()
+
+    utils.log_data = ""
+    try:
+        daemon.check()
+    except SystemExit as exit:
+        assert exit.code == 1
+    assert (
+        Ellipsis(
+            """\
+... I -                    daemon/read-config             ...
+... W test01               daemon/check-quarantined       reports=1
+... I -                    daemon/check-exit              exitcode=1 jobs=2
 """
         )
         == utils.log_data

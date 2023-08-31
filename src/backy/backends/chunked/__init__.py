@@ -46,13 +46,10 @@ class ChunkedFileBackend(BackyBackend):
             overlay = True
         file = File(self.revision.filename, self.store, mode, overlay)
 
-        if file.writable() and not self.store.force_writes:
+        if file.writable() and self.backup.contains_distrusted:
             # "Force write"-mode if any revision is distrusted.
-            for revision in self.backup.clean_history:
-                if revision.trust == Trust.DISTRUSTED:
-                    self.log.warn("chunked-forcing-full")
-                    self.store.force_writes = True
-                    break
+            self.log.warn("chunked-forcing-full")
+            self.store.force_writes = True
 
         return file
 

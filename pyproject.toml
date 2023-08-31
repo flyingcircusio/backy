@@ -41,10 +41,10 @@ license = "GPLv3"
 
 [tool.poetry.dependencies]
 python = "~3.10"
-PyYAML = "^5.3.1"
+PyYAML = "^6.0.1"
 consulate-fc-nix-test = "1.1.0a1"
 humanize = "^4.4.0"
-mmh3 = "^3.0"
+mmh3 = "^3.1"
 packaging = "^22.0"
 prettytable = "^3.6.0"
 python-lzo = "^1.14"

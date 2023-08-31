@@ -79,6 +79,7 @@ def print_args(*args, **kw):
 def test_call_status(capsys, backup, argv, monkeypatch):
     monkeypatch.setattr(backy.main.Command, "status", print_args)
     argv.extend(["-v", "-b", backup.path, "status"])
+    utils.log_data = ""
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
@@ -128,6 +129,7 @@ source:
 
     monkeypatch.setattr(backy.backup.Backup, "backup", print_args)
     argv.extend(["-v", "backup", "manual:test"])
+    utils.log_data = ""
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     out, err = capsys.readouterr()
@@ -145,6 +147,7 @@ source:
             """\
 ... D command/invoked                args='... -v backup manual:test'
 ... D command/parsed                 func='backup' func_args={'force': False, 'tags': 'manual:test'}
+... D quarantine/scan                entries=0
 ... D command/successful             \n\
 """
         )
@@ -158,6 +161,7 @@ def test_call_check(capsys, backup, argv, monkeypatch, tmpdir):
     argv.extend(
         ["-v", "-b", backup.path, "-l", str(tmpdir / "backy.log"), "check"]
     )
+    utils.log_data = ""
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
@@ -189,6 +193,7 @@ def test_call_scheduler(capsys, backup, argv, monkeypatch, tmpdir):
     argv.extend(
         ["-v", "-b", backup.path, "-l", str(tmpdir / "backy.log"), "scheduler"]
     )
+    utils.log_data = ""
     with pytest.raises(SystemExit) as exit:
         backy.main.main()
     assert exit.value.code == 0
@@ -227,6 +232,7 @@ def test_call_unexpected_exception(
     monkeypatch.setattr(os, "_exit", lambda x: None)
 
     argv.extend(["-l", str(tmpdir / "backy.log"), "-b", backup.path, "status"])
+    utils.log_data = ""
     with pytest.raises(SystemExit):
         backy.main.main()
     out, err = capsys.readouterr()

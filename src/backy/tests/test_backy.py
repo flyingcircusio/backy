@@ -4,7 +4,7 @@ import subprocess
 import pytest
 
 import backy.backup
-from backy.ext_deps import BASH
+from backy.ext_deps import BACKY_CMD, BASH
 from backy.tests import Ellipsis
 
 
@@ -107,7 +107,8 @@ def test_smoketest_internal(tmpdir, log):
 @pytest.mark.slow
 def test_smoketest_external():
     output = subprocess.check_output(
-        [BASH, os.path.dirname(__file__) + "/../../../smoketest.sh"]
+        [BASH, os.path.dirname(__file__) + "/../../../smoketest.sh"],
+        env=os.environ | {"BACKY_CMD": BACKY_CMD},
     )
     output = output.decode("utf-8")
     assert (

@@ -1,17 +1,10 @@
-{
-  pkgs ? import <nixpkgs> {},
-  ...
-}:
-pkgs.mkShell {
-  buildInputs = [ pkgs.lzo ];
-  packages = [ pkgs.poetry ];
-  shellHook = ''
-    # check if `poetry env info --path`/bin/activate exists
-    POETRY_ENV_PATH=$(poetry env info --path)/bin/activate
-    if [ -f $POETRY_ENV_PATH ]; then
-      source $POETRY_ENV_PATH
-    else
-      echo "Run \`poetry install\` to install dependencies first"
-    fi
-  '';
-}
+(import
+  (
+    let lock = builtins.fromJSON (builtins.readFile ./flake.lock); in
+    fetchTarball {
+      url = "https://github.com/edolstra/flake-compat/archive/${lock.nodes.flake-compat.locked.rev}.tar.gz";
+      sha256 = lock.nodes.flake-compat.locked.narHash;
+    }
+  )
+  { src = ./.; }
+).shellNix

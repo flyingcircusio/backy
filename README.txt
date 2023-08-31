@@ -173,10 +173,10 @@ Backy has switched to using `poetry` to manage its dependencies. This means
 that you can use `poetry install` to install dependencies from PyPI.
 
 If you don't have `backy` in your PATH when developing, enter the poetry
-virtualenv with `poetry shell` or if you're using nix with `nix-shell`.
+virtualenv with `poetry shell` or if you're using nix with `nix develop`.
 
 You can build backy with `poetry build` making a wheel and a tar archive
-in the `dist` directory, or by running `nix-build`.
+in the `dist` directory, or by running `nix build`.
 
 Authors
 =======

@@ -3,6 +3,7 @@ import datetime
 import os
 import os.path as p
 import re
+import signal
 import time
 from unittest import mock
 
@@ -95,6 +96,27 @@ jobs:
     assert set(daemon.jobs) == {"test05", "foo05"}
     assert set(daemon.schedules) == {"default2"}
     assert daemon.telnet_port == BackyDaemon.telnet_port
+
+
+@pytest.mark.asyncio
+async def test_sighup(daemon, log, monkeypatch):
+    """test that a `SIGHUP` causes a reload without interrupting other tasks"""
+
+    def reload():
+        nonlocal all_tasks
+        all_tasks = asyncio.all_tasks()
+        reloaded.set()
+
+    async def send_sighup():
+        os.kill(os.getpid(), signal.SIGHUP)
+
+    all_tasks = []
+    reloaded = asyncio.Event()
+    monkeypatch.setattr(daemon, "reload", reload)
+
+    signal_task = daemon.loop.create_task(send_sighup())
+    await reloaded.wait()
+    assert signal_task not in all_tasks
 
 
 @pytest.mark.asyncio

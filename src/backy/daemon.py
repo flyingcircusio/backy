@@ -152,7 +152,7 @@ class BackyDaemon(object):
         loop.create_task(self.purge_old_files(), name="purge-old-files")
         loop.create_task(self.shutdown_loop(), name="shutdown-cleanup")
 
-        def handle_signals(signum, _traceback):
+        def handle_signals(signum):
             self.log.info("signal-received", signum=signum)
 
             if signum in [signal.SIGINT, signal.SIGQUIT, signal.SIGTERM]:
@@ -166,7 +166,7 @@ class BackyDaemon(object):
             signal.SIGQUIT,
             signal.SIGTERM,
         ):
-            signal.signal(sig, handle_signals)
+            loop.add_signal_handler(sig, handle_signals, sig)
 
     def run_forever(self):
         self.log.info("starting-loop")
@@ -225,7 +225,7 @@ class BackyDaemon(object):
     def status(self, filter_re=None):
         """Collects status information for all jobs."""
         result = []
-        for job in self.jobs.values():
+        for job in list(self.jobs.values()):
             if filter_re and not filter_re.search(job.name):
                 continue
             job.backup.scan()

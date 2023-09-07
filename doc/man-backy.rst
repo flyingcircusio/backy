@@ -281,6 +281,10 @@ config
         Maximum number of concurrent processes spawned by the scheduler.
         Defaults to 1 (no parallel backups).
 
+    backup-completed-callback
+        Command/Script to invoke after the scheduler successfully completed a backup.
+        The first argument is the job name. The output of `backy status --yaml` is available on stdin.
+
     status-file
         Path to a YAML status dump which is regularly updated by the scheduler
         and evaluated by **backy check**. Defaults to `{base-dir}/status`.

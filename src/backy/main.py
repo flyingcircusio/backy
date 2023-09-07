@@ -9,6 +9,7 @@ from pathlib import Path
 import humanize
 import structlog
 import tzlocal
+import yaml
 from prettytable import PrettyTable
 from structlog.stdlib import BoundLogger
 
@@ -39,8 +40,11 @@ class Command(object):
         self.path = path
         self.log = log
 
-    def status(self):
+    def status(self, yaml_: bool):
         b = backy.backup.Backup(self.path, self.log)
+        if yaml_:
+            print(yaml.safe_dump([r.to_dict() for r in b.clean_history]))
+            return
         total_bytes = 0
 
         tz = tzlocal.get_localzone()
@@ -48,8 +52,8 @@ class Command(object):
             [f"Date ({tz})", "ID", "Size", "Duration", "Tags", "Trust"]
         )
         t.align = "l"
-        t.align["Size"] = "r"
-        t.align["Durat"] = "r"
+        t.align["Size"] = "r"  # type: ignore
+        t.align["Durat"] = "r"  # type: ignore
 
         for r in b.history:
             total_bytes += r.stats.get("bytes_written", 0)
@@ -209,6 +213,7 @@ Purge the backup store (i.e. chunked) from unused data.
 Show backup status. Show inventory and summary information.
 """,
     )
+    p.add_argument("--yaml", dest="yaml_", action="store_true")
     p.set_defaults(func="status")
 
     # upgrade

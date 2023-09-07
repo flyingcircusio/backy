@@ -73,9 +73,12 @@ in
   checks = {
     pytest = runCommand "pytest" {
       nativeBuildInputs = [ poetryEnv ];
+      src = ./.;
     } ''
+      unpackPhase
+      cd *-source
       export BACKY_CMD=${poetryApplication}/bin/backy
-      cd ${./.}
+      patchShebangs src
       pytest -vv -p no:cacheprovider --no-cov
       touch $out
     '';

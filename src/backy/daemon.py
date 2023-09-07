@@ -28,6 +28,7 @@ class BackyDaemon(object):
     # config defaults, will be overriden from config file
     worker_limit: int = 1
     base_dir: str
+    backup_completed_callback: Optional[str]
     status_file: str
     status_interval: int = 30
     telnet_addrs: str = "::1, 127.0.0.1"
@@ -63,6 +64,7 @@ class BackyDaemon(object):
         g = self.config.get("global", {})
         self.worker_limit = int(g.get("worker-limit", type(self).worker_limit))
         self.base_dir = g.get("base-dir")
+        self.backup_completed_callback = g.get("backup-completed-callback")
         self.status_file = g.get("status-file", p.join(self.base_dir, "status"))
         self.status_interval = int(
             g.get("status-interval", type(self).status_interval)

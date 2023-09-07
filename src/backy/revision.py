@@ -94,7 +94,12 @@ class Revision(object):
 
     def write_info(self):
         self.log.debug("writing-info", tags=", ".join(self.tags))
-        metadata = {
+        with SafeFile(self.info_filename, encoding="utf-8") as f:
+            f.open_new("wb")
+            yaml.safe_dump(self.to_dict(), f)
+
+    def to_dict(self):
+        return {
             "uuid": self.uuid,
             "backend_type": self.backend_type,
             "timestamp": self.timestamp,
@@ -105,9 +110,6 @@ class Revision(object):
             "trust": self.trust.value,
             "tags": list(self.tags),
         }
-        with SafeFile(self.info_filename, encoding="utf-8") as f:
-            f.open_new("wb")
-            yaml.safe_dump(metadata, f)
 
     def distrust(self):
         self.log.info("distrusted")

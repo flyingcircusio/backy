@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
+from importlib.metadata import entry_points
 from typing import Type
 
-import pkg_resources
 from structlog.stdlib import BoundLogger
 
-import backy.backends
 import backy.revision
 
 
@@ -45,5 +44,5 @@ class BackySourceFactory(ABC):
 
 
 def select_source(type_: str) -> Type[BackySourceFactory]:
-    entry_points = list(pkg_resources.iter_entry_points("backy.sources", type_))
-    return entry_points[0].load()
+    (entry_point,) = entry_points(group="backy.sources", name=type_)
+    return entry_point.load()

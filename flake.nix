@@ -20,6 +20,12 @@
           scriv = super.scriv.overrideAttrs (old: {
             buildInputs = (old.buildInputs or []) ++ [ super.setuptools ];
           });
+          telnetlib3 = super.telnetlib3.overrideAttrs (old: {
+            buildInputs = (old.buildInputs or []) ++ [ super.setuptools ];
+          });
+          execnet = super.execnet.overrideAttrs (old: {
+            buildInputs = (old.buildInputs or []) ++ [ super.hatchling super.hatch-vcs ];
+          });
           consulate-fc-nix-test = super.consulate-fc-nix-test.overrideAttrs (old: {
             buildInputs = (old.buildInputs or []) ++ [ super.setuptools super.setuptools-scm ];
           });

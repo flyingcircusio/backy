@@ -7,10 +7,10 @@ import shutil
 import signal
 import sys
 import time
+from importlib.metadata import version
 from typing import IO, Optional
 
 import humanize
-import pkg_resources
 import prettytable
 import telnetlib3
 import yaml
@@ -358,9 +358,7 @@ async def telnet_server_shell(reader, writer):
     """
     from telnetlib3.server_shell import CR, LF, readline
 
-    writer.write(
-        "backy {}".format(pkg_resources.require("backy")[0].version) + CR + LF
-    )
+    writer.write("backy {}".format(version("backy")) + CR + LF)
     writer.write("Ready." + CR + LF)
 
     linereader = readline(reader, writer)

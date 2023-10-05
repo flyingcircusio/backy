@@ -45,4 +45,9 @@ jobs:
 
       - name: check flake
         run: |
+          nix run
           nix flake check -L
+
+      - name: check 23.05
+        run: |
+          nix run --override-input nixpkgs github:NixOS/nixpkgs/nixos-23.05

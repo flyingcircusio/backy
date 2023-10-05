@@ -29,7 +29,7 @@ class ChunkedFileBackend(BackyBackend):
                 self.revision.backup.path + "/chunks", log
             )
         self.store = self.STORES[path]
-        self.log = log.bind(subsystem="chunked-backend")
+        self.log = log.bind(subsystem="chunked")
 
     def open(self, mode="rb"):
         if "w" in mode or "+" in mode and self.clone_parent:
@@ -48,13 +48,13 @@ class ChunkedFileBackend(BackyBackend):
 
         if file.writable() and self.backup.contains_distrusted:
             # "Force write"-mode if any revision is distrusted.
-            self.log.warn("chunked-forcing-full")
+            self.log.warn("forcing-full")
             self.store.force_writes = True
 
         return file
 
     def purge(self):
-        self.log.debug("chunked-purge")
+        self.log.debug("purge")
         self.store.users = []
         for revision in self.backup.history:
             try:
@@ -69,7 +69,7 @@ class ChunkedFileBackend(BackyBackend):
     @report_status
     def verify(self):
         log = self.log.bind(revision_uuid=self.revision.uuid)
-        log.info("chunked-verify-start")
+        log.info("verify-start")
         verified_chunks = set()
 
         # Load verified chunks to avoid duplicate work
@@ -79,9 +79,7 @@ class ChunkedFileBackend(BackyBackend):
             f = self.backup.backend_factory(revision, log).open()
             verified_chunks.update(f._mapping.values())
 
-        log.debug(
-            "chunked-verify-loaded-chunks", verified_chunks=len(verified_chunks)
-        )
+        log.debug("verify-loaded-chunks", verified_chunks=len(verified_chunks))
 
         errors = False
         # Go through all chunks and check them. Delete problematic ones.
@@ -96,15 +94,13 @@ class ChunkedFileBackend(BackyBackend):
                 c = Chunk(f, 0, self.store, candidate)
                 c._read_existing()
             except Exception:
-                log.exception("chunked-verify-error", chunk=candidate)
+                log.exception("verify-error", chunk=candidate)
                 errors = True
                 if os.path.exists(self.store.chunk_path(candidate)):
                     try:
                         os.unlink(self.store.chunk_path(candidate))
                     except Exception:
-                        log.exception(
-                            "chunked-verify-remove-error", chunk=candidate
-                        )
+                        log.exception("verify-remove-error", chunk=candidate)
                 # This is an optimisation: we can skip this revision, purge it
                 # and then keep verifying other chunks. This avoids checking
                 # things unnecessarily in duplicate.
@@ -140,17 +136,15 @@ class ChunkedFileBackend(BackyBackend):
 
     def scrub_light(self, backup):
         errors = 0
-        self.log.info("chunked-scrub-light")
+        self.log.info("scrub-light")
         for revision in backup.history:
-            self.log.info(
-                "chunked-scrub-light-rev", revision_uuid=revision.uuid
-            )
+            self.log.info("scrub-light-rev", revision_uuid=revision.uuid)
             backend = backup.backend_factory(revision, self.log).open()
             for hash in backend._mapping.values():
                 if os.path.exists(backend.store.chunk_path(hash)):
                     continue
                 self.log.error(
-                    "chunked-scrub-light-missing-chunk",
+                    "scrub-light-missing-chunk",
                     hash=hash,
                     revision_uuid=revision.uuid,
                 )
@@ -159,6 +153,6 @@ class ChunkedFileBackend(BackyBackend):
 
     def scrub_deep(self, backup):
         errors = self.scrub_light(backup)
-        self.log.info("chunked-scrub-deep")
+        self.log.info("scrub-deep")
         errors += self.store.validate_chunks()
         return errors

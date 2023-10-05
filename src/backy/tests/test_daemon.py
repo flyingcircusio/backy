@@ -5,9 +5,11 @@ import os.path as p
 import re
 import signal
 import time
+from pathlib import Path
 from unittest import mock
 
 import pytest
+import yaml
 
 from backy import utils
 from backy.backends.chunked import ChunkedFileBackend
@@ -31,6 +33,7 @@ global:
     base-dir: {base_dir}
     status-interval: 1
     telnet_port: 1234
+    backup-completed-callback: {Path(__file__).parent / "test_callback.sh"}
 schedules:
     default:
         daily:
@@ -143,7 +146,23 @@ async def test_run_backup(daemon, log):
     with backend.open("r") as f:
         assert f.read() == b"I am your father, Luke!"
 
-    daemon.terminate()
+
+async def test_run_callback(daemon, log):
+    job = daemon.jobs["test01"]
+
+    await job.run_backup({"manual:asdf"})
+    await job.run_callback()
+
+    with open("test01.callback_stdin", "r") as f:
+        r = yaml.safe_load(f)[0]
+        # see directory api before changing this
+        assert isinstance(r["uuid"], str)
+        assert isinstance(r["trust"], str)
+        assert isinstance(r["timestamp"], datetime.datetime)
+        assert isinstance(r["tags"][0], str)
+        assert isinstance(r["stats"]["bytes_written"], int)
+        assert isinstance(r["stats"]["duration"], float)
+        # assert isinstance(r["location"], str)
 
 
 def test_spread(daemon):
@@ -295,6 +314,7 @@ async def test_task_generator_backoff(
     monkeypatch.setattr(job, "_wait_for_deadline", null_coroutine)
     monkeypatch.setattr(job, "run_expiry", null_coroutine)
     monkeypatch.setattr(job, "run_purge", null_coroutine)
+    monkeypatch.setattr(job, "run_callback", null_coroutine)
     monkeypatch.setattr(job, "run_backup", failing_coroutine)
 
     # This patch causes a single run through the generator loop.

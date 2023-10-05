@@ -184,6 +184,7 @@ class Job(object):
                     await self.run_backup(next_tags)
                     await self.run_expiry()
                     await self.run_purge()
+                    await self.run_callback()
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -270,6 +271,62 @@ class Job(object):
             self.log.warning("purge-cancelled", subprocess_pid=proc.pid)
             try:
                 proc.terminate()
+            except ProcessLookupError:
+                pass
+            raise
+
+    async def run_callback(self):
+        if not self.daemon.backup_completed_callback:
+            self.log.debug("callback-not-configured")
+            return
+
+        self.log.info("callback-started")
+        read, write = os.pipe()
+        backy_proc = await asyncio.create_subprocess_exec(
+            BACKY_CMD,
+            "-b",
+            self.path,
+            "-l",
+            self.logfile,
+            "status",
+            "--yaml",
+            stdin=subprocess.DEVNULL,
+            stdout=write,
+            stderr=subprocess.DEVNULL,
+        )
+        os.close(write)
+        callback_proc = await asyncio.create_subprocess_exec(
+            self.daemon.backup_completed_callback,
+            self.name,
+            stdin=read,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        os.close(read)
+        try:
+            stdout, stderr = await callback_proc.communicate()
+            return_code1 = await backy_proc.wait()
+            self.log.info(
+                "callback-finished",
+                return_code1=return_code1,
+                return_code2=callback_proc.returncode,
+                subprocess_pid1=backy_proc.pid,
+                subprocess_pid2=callback_proc.pid,
+                stdout=stdout.decode() if stdout else None,
+                stderr=stderr.decode() if stderr else None,
+            )
+        except asyncio.CancelledError:
+            self.log.warning(
+                "callback-cancelled",
+                subprocess_pid1=backy_proc.pid,
+                subprocess_pid2=callback_proc.pid,
+            )
+            try:
+                backy_proc.terminate()
+            except ProcessLookupError:
+                pass
+            try:
+                callback_proc.terminate()
             except ProcessLookupError:
                 pass
             raise

@@ -88,7 +88,7 @@ def test_call_status(capsys, backup, argv, monkeypatch):
         Ellipsis(
             """\
 (<backy.main.Command object at 0x...>,)
-{}
+{'yaml_': False}
 """
         )
         == out
@@ -97,7 +97,7 @@ def test_call_status(capsys, backup, argv, monkeypatch):
         Ellipsis(
             """\
 ... D command/invoked                args='... -v -b ... status'
-... D command/parsed                 func='status' func_args={}
+... D command/parsed                 func='status' func_args={'yaml_': False}
 ... D command/successful             \n\
 """
         )
@@ -241,7 +241,7 @@ def test_call_unexpected_exception(
         Ellipsis(
             """\
 ... D command/invoked                args='... -l ... -b ... status'
-... D command/parsed                 func='status' func_args={}
+... D command/parsed                 func='status' func_args={'yaml_': False}
 ... E command/failed                 exception_class='builtins.RuntimeError' exception_msg='test'
 exception>\tTraceback (most recent call last):
 exception>\t  File ".../src/backy/main.py", line ..., in main
@@ -262,7 +262,7 @@ def test_commands_wrapper_status(backup, tmpdir, capsys, clock, tz_berlin, log):
     revision.timestamp = backy.utils.now()
     revision.materialize()
 
-    commands.status()
+    commands.status(yaml_=False)
     out, err = capsys.readouterr()
 
     assert err == ""
@@ -274,5 +274,39 @@ def test_commands_wrapper_status(backup, tmpdir, capsys, clock, tz_berlin, log):
 | ... | 1  | 0 Bytes | -        |      | trusted |
 +----------------------+----+---------+----------+------+---------+
 1 revisions containing 0 Bytes data (estimated)
+"""
+    )
+
+
+def test_commands_wrapper_status_yaml(
+    backup, tmpdir, capsys, clock, tz_berlin, log
+):
+    commands = backy.main.Command(str(tmpdir), log)
+
+    revision = Revision(backup, log, "1")
+    revision.timestamp = backy.utils.now()
+    revision.stats["duration"] = 3.5
+    revision.stats["bytes_written"] = 42
+    revision.materialize()
+    revision2 = Revision(backup, log, "2")  # ignored
+    revision2.materialize()
+
+    commands.status(yaml_=True)
+    out, err = capsys.readouterr()
+
+    assert err == ""
+    assert (
+        out
+        == """\
+- backend_type: chunked
+  parent: ''
+  stats:
+    bytes_written: 42
+    duration: 3.5
+  tags: []
+  timestamp: 2015-09-01 07:06:47+00:00
+  trust: trusted
+  uuid: '1'
+
 """
     )

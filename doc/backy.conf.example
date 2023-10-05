@@ -1,6 +1,7 @@
 global:
     base-dir: /my/backydir
     worker-limit: 3
+    backup-completed-callback: /path/to/script.sh
 schedules:
     default:
         daily:
@@ -37,8 +38,8 @@ jobs:
     test03:
         schedule: hourly
         source:
-            type: flyingcircus,
+            type: flyingcircus
             consul_acl_token: a211c244-846b-11e5-999b-081196cf15b4
-            vm: test03,
+            vm: test03
             pool: test
             image: test03.root

@@ -225,16 +225,10 @@ class Job(object):
                 self.update_status("finished")
 
     async def pull_metadata(self):
-        try:
-            await self.backup.pull_metadata(self.daemon.peers, self.taskid)
-        except Exception:
-            self.log.exception("pull-metadata-failed")
+        await self.backup.pull_metadata(self.daemon.peers, self.taskid)
 
     async def push_metadata(self):
-        try:
-            await self.backup.push_metadata(self.daemon.peers, self.taskid)
-        except Exception:
-            self.log.exception("push-metadata-failed")
+        await self.backup.push_metadata(self.daemon.peers, self.taskid)
 
     async def run_backup(self, tags):
         self.log.info("backup-started", tags=", ".join(tags))

@@ -1,1 +1,0 @@
-- Fix race condition when reloading while generating a status file

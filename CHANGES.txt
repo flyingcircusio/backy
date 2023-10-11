@@ -9,6 +9,68 @@ See the fragment files in the `changelog.d` directory.
 
 .. scriv-insert-here
 
+.. _changelog-2.5.0dev:
+
+2.5.0dev (2023-10-11)
+=====================
+
+- Separate pool into fast and slow. According to our statistics 90% of jobs are
+  faster than 10 minutes and after that they might run for hours. We now run
+  the configured amount of workers both in a fast and slow pool so that long
+  jobs may delay other long jobs but fast jobs should be able to squeeze
+  through quickly.
+
+- Port to Python 3.10+.
+
+- Continue deleting snapshots even if some are protected.
+
+- Improve detection for 'whole object' RBD export: we failed to detect this is
+  Ceph is built with wrong version options and shows itself as 'Development'
+  instead of a real version.
+
+- Do not count running jobs as overdue.
+
+- Regularly log overdue jobs.
+
+- Delete Tags from former schedules
+
+- Add forget subcommand
+
+- Add compatibility to changed `rbd showmapped` output format in Ceph Nautilus.
+  Ceph Jewel and Luminous clusters remain supported.
+
+- Use structlog for logging
+
+- Static typechecking with mypy
+
+- List all manual tags in `backy check`
+
+- Fix crash for non-numeric Ceph version strings
+
+- Fix a missing lock on distrust
+
+- use `scriv` for changelog management
+
+- Restore default value for missing entries on daemon reload
+
+- Crash on invalid config while reloading
+
+- remove find subcommand and nbd-server
+
+- Compute parent revision at runtime
+
+- Remove the `last` and `last.rev` symlink
+
+- Distrust revisions on verification failure
+
+- Quarantine differences between source and backend
+
+- Fix race condition when reloading while generating a status file
+
+- Add nix flake support
+
+- Call configured script on (scheduler triggered) backup completion
+
 2.4.3 (2019-04-17)
 ==================
 

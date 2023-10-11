@@ -1,1 +1,0 @@
-- Call configured script on (scheduler triggered) backup completion

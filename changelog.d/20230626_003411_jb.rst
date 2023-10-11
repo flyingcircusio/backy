@@ -1,1 +1,0 @@
-- use `scriv` for changelog management

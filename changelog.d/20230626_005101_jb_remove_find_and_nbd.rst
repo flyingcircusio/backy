@@ -1,1 +1,0 @@
-- remove find subcommand and nbd-server

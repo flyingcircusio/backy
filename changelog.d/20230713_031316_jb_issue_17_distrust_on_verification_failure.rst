@@ -1,1 +1,0 @@
-- Distrust revisions on verification failure

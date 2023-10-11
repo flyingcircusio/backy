@@ -12,13 +12,15 @@ from typing import Optional
 import structlog
 from structlog.typing import EventDict, WrappedLogger
 
+from backy import utils
+
 try:
     import colorama
 except ImportError:
     colorama = None
 
 _MISSING = "{who} requires the {package} package installed."
-_EVENT_WIDTH = 30  # pad the event name to so many characters
+_EVENT_WIDTH = 35  # pad the event name to so many characters
 
 if sys.stderr.isatty() and colorama:
     COLORIZED_TTY_OUTPUT = True
@@ -230,6 +232,10 @@ class ConsoleFileRenderer:
             + RESET_ALL
             + " "
         )
+        if len(subsystem + event) > self._pad_event and hasattr(
+            utils, "log_data"
+        ):
+            raise RuntimeWarning("logline to long: " + subsystem + event)
 
         logger_name = event_dict.pop("logger", None)
         if logger_name is not None:

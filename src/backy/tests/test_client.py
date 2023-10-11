@@ -166,11 +166,11 @@ async def test_cli_run(daemon, cli_client, monkeypatch):
     assert (
         Ellipsis(
             """\
-... D ~[ABCD]              api/new-conn                   path='/v1/jobs/test01/run' query=''
-... I ~cli[ABCD]           api/get-job                    name='test01'
-... I ~cli[ABCD]           api/run-job                    name='test01'
-... D ~cli[ABCD]           api/request-result             status_code=202
-... I -                    CLIClient/triggered-run        job='test01'
+... D ~[ABCD]              api/new-conn                        path='/v1/jobs/test01/run' query=''
+... I ~cli[ABCD]           api/get-job                         name='test01'
+... I ~cli[ABCD]           api/run-job                         name='test01'
+... D ~cli[ABCD]           api/request-result                  status_code=202
+... I -                    CLIClient/triggered-run             job='test01'
 """
         )
         == utils.log_data
@@ -188,11 +188,11 @@ async def test_cli_run_missing(daemon, cli_client):
     assert (
         Ellipsis(
             """\
-... D ~[ABCD]              api/new-conn                   path='/v1/jobs/aaaa/run' query=''
-... I ~cli[ABCD]           api/get-job                    name='aaaa'
-... I ~cli[ABCD]           api/get-job-not-found          name='aaaa'
-... D ~cli[ABCD]           api/request-result             status_code=404
-... E -                    CLIClient/unknown-job          job='aaaa'
+... D ~[ABCD]              api/new-conn                        path='/v1/jobs/aaaa/run' query=''
+... I ~cli[ABCD]           api/get-job                         name='aaaa'
+... I ~cli[ABCD]           api/get-job-not-found               name='aaaa'
+... D ~cli[ABCD]           api/request-result                  status_code=404
+... E -                    CLIClient/unknown-job               job='aaaa'
 """
         )
         == utils.log_data
@@ -213,19 +213,19 @@ async def test_cli_runall(daemon, cli_client, monkeypatch):
     assert (
         Ellipsis(
             """\
-... D ~[ABCD]              api/new-conn                   path='/v1/jobs' query=''
-... I ~cli[ABCD]           api/get-jobs                   \n\
-... D ~cli[ABCD]           api/request-result             response=... status_code=200
-... D ~[ABCD]              api/new-conn                   path='/v1/jobs/test01/run' query=''
-... I ~cli[ABCD]           api/get-job                    name='test01'
-... I ~cli[ABCD]           api/run-job                    name='test01'
-... D ~cli[ABCD]           api/request-result             status_code=202
-... I -                    CLIClient/triggered-run        job='test01'
-... D ~[ABCD]              api/new-conn                   path='/v1/jobs/foo00/run' query=''
-... I ~cli[ABCD]           api/get-job                    name='foo00'
-... I ~cli[ABCD]           api/run-job                    name='foo00'
-... D ~cli[ABCD]           api/request-result             status_code=202
-... I -                    CLIClient/triggered-run        job='foo00'
+... D ~[ABCD]              api/new-conn                        path='/v1/jobs' query=''
+... I ~cli[ABCD]           api/get-jobs                        \n\
+... D ~cli[ABCD]           api/request-result                  response=... status_code=200
+... D ~[ABCD]              api/new-conn                        path='/v1/jobs/test01/run' query=''
+... I ~cli[ABCD]           api/get-job                         name='test01'
+... I ~cli[ABCD]           api/run-job                         name='test01'
+... D ~cli[ABCD]           api/request-result                  status_code=202
+... I -                    CLIClient/triggered-run             job='test01'
+... D ~[ABCD]              api/new-conn                        path='/v1/jobs/foo00/run' query=''
+... I ~cli[ABCD]           api/get-job                         name='foo00'
+... I ~cli[ABCD]           api/run-job                         name='foo00'
+... D ~cli[ABCD]           api/request-result                  status_code=202
+... I -                    CLIClient/triggered-run             job='foo00'
 """
         )
         == utils.log_data
@@ -243,11 +243,11 @@ async def test_cli_reload(daemon, cli_client, monkeypatch):
     assert (
         Ellipsis(
             """\
-... I -                    CLIClient/reloading-daemon     \n\
-... D ~[ABCD]              api/new-conn                   path='/v1/reload' query=''
-... I ~cli[ABCD]           api/reload-daemon              \n\
-... D ~cli[ABCD]           api/request-result             status_code=204
-... I -                    CLIClient/reloaded-daemon      \n\
+... I -                    CLIClient/reloading-daemon          \n\
+... D ~[ABCD]              api/new-conn                        path='/v1/reload' query=''
+... I ~cli[ABCD]           api/reload-daemon                   \n\
+... D ~cli[ABCD]           api/request-result                  status_code=204
+... I -                    CLIClient/reloaded-daemon           \n\
 """
         )
         == utils.log_data
@@ -263,10 +263,10 @@ async def test_cli_check_ok(daemon, cli_client):
     assert (
         Ellipsis(
             """\
-... D ~[ABCD]              api/new-conn                   path='/v1/status' query='filter='
-... I ~cli[ABCD]           api/get-status                 filter=''
-... D ~cli[ABCD]           api/request-result             response=... status_code=200
-... I -                    CLIClient/check-exit           exitcode=0 jobs=2
+... D ~[ABCD]              api/new-conn                        path='/v1/status' query='filter='
+... I ~cli[ABCD]           api/get-status                      filter=''
+... D ~cli[ABCD]           api/request-result                  response=... status_code=200
+... I -                    CLIClient/check-exit                exitcode=0 jobs=2
 """
         )
         == utils.log_data
@@ -288,11 +288,11 @@ async def test_cli_check_too_old(daemon, clock, cli_client, log):
     assert (
         Ellipsis(
             """\
-... D ~[ABCD]              api/new-conn                   path='/v1/status' query='filter='
-... I ~cli[ABCD]           api/get-status                 filter=''
-... D ~cli[ABCD]           api/request-result             response=... status_code=200
-... C test01               CLIClient/check-sla-violation  last_time='2015-08-30 07:06:47+00:00' sla_overdue=172800.0
-... I -                    CLIClient/check-exit           exitcode=2 jobs=2
+... D ~[ABCD]              api/new-conn                        path='/v1/status' query='filter='
+... I ~cli[ABCD]           api/get-status                      filter=''
+... D ~cli[ABCD]           api/request-result                  response=... status_code=200
+... C test01               CLIClient/check-sla-violation       last_time='2015-08-30 07:06:47+00:00' sla_overdue=172800.0
+... I -                    CLIClient/check-exit                exitcode=2 jobs=2
 """
         )
         == utils.log_data
@@ -313,11 +313,11 @@ async def test_cli_check_manual_tags(daemon, cli_client, log):
     assert (
         Ellipsis(
             """\
-... D ~[ABCD]              api/new-conn                   path='/v1/status' query='filter='
-... I ~cli[ABCD]           api/get-status                 filter=''
-... D ~cli[ABCD]           api/request-result             response=... status_code=200
-... I test01               CLIClient/check-manual-tags    manual_tags='manual:test'
-... I -                    CLIClient/check-exit           exitcode=0 jobs=2
+... D ~[ABCD]              api/new-conn                        path='/v1/status' query='filter='
+... I ~cli[ABCD]           api/get-status                      filter=''
+... D ~cli[ABCD]           api/request-result                  response=... status_code=200
+... I test01               CLIClient/check-manual-tags         manual_tags='manual:test'
+... I -                    CLIClient/check-exit                exitcode=0 jobs=2
 """
         )
         == utils.log_data
@@ -336,11 +336,11 @@ async def test_cli_check_quarantine(daemon, cli_client, log):
     assert (
         Ellipsis(
             """\
-... D ~[ABCD]              api/new-conn                   path='/v1/status' query='filter='
-... I ~cli[ABCD]           api/get-status                 filter=''
-... D ~cli[ABCD]           api/request-result             response=... status_code=200
-... W test01               CLIClient/check-quarantined    reports=1
-... I -                    CLIClient/check-exit           exitcode=1 jobs=2
+... D ~[ABCD]              api/new-conn                        path='/v1/status' query='filter='
+... I ~cli[ABCD]           api/get-status                      filter=''
+... D ~cli[ABCD]           api/request-result                  response=... status_code=200
+... W test01               CLIClient/check-quarantined         reports=1
+... I -                    CLIClient/check-exit                exitcode=1 jobs=2
 """
         )
         == utils.log_data

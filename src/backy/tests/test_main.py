@@ -138,9 +138,9 @@ def test_call_status(capsys, backup, argv, monkeypatch):
     assert (
         Ellipsis(
             """\
-... D command/invoked                args='... -v -b ... status'
-... D command/parsed                 func='status' func_args={'yaml_': False, 'revision': 'all'}
-... D command/successful             \n\
+... D command/invoked                     args='... -v -b ... status'
+... D command/parsed                      func='status' func_args={'yaml_': False, 'revision': 'all'}
+... D command/successful                  \n\
 """
         )
         == utils.log_data
@@ -187,10 +187,10 @@ source:
     assert (
         Ellipsis(
             """\
-... D command/invoked                args='... -v backup manual:test'
-... D command/parsed                 func='backup' func_args={'force': False, 'tags': 'manual:test'}
-... D quarantine/scan                entries=0
-... D command/successful             \n\
+... D command/invoked                     args='... -v backup manual:test'
+... D command/parsed                      func='backup' func_args={'force': False, 'tags': 'manual:test'}
+... D quarantine/scan                     entries=0
+... D command/successful                  \n\
 """
         )
         == utils.log_data
@@ -218,9 +218,9 @@ def test_call_find(capsys, backup, argv, monkeypatch):
     assert (
         Ellipsis(
             """\
-... D command/invoked                args='... -v -b ... find -r 1'
-... D command/parsed                 func='find' func_args={'uuid': False, 'revision': '1'}
-... D command/successful             \n\
+... D command/invoked                     args='... -v -b ... find -r 1'
+... D command/parsed                      func='find' func_args={'uuid': False, 'revision': '1'}
+... D command/successful                  \n\
 """
         )
         == utils.log_data
@@ -278,11 +278,11 @@ jobs: {{}}
     assert (
         Ellipsis(
             f"""\
-... D command/invoked                args='... -v client -c ... {action}{" "*bool(args)}{", ".join(args.values())}'
-... D command/parsed                 func='client' func_args={{'config': PosixPath('...'), 'peer': None, \
+... D command/invoked                     args='... -v client -c ... {action}{" "*bool(args)}{", ".join(args.values())}'
+... D command/parsed                      func='client' func_args={{'config': PosixPath('...'), 'peer': None, \
 'url': None, 'token': None{", "*bool(args)}{str(args)[1:-1]}, 'apifunc': '{action}'}}
-... D daemon/read-config             ...
-... D command/successful             \n\
+... D daemon/read-config                  ...
+... D command/successful                  \n\
 """
         )
         == utils.log_data
@@ -319,9 +319,9 @@ def test_call_scheduler(capsys, backup, argv, monkeypatch, tmp_path):
     assert (
         Ellipsis(
             """\
-... D command/invoked                args='... -v -b ... scheduler'
-... D command/parsed                 func='scheduler' func_args={'config': PosixPath('/etc/backy.conf')}
-... D command/successful             \n\
+... D command/invoked                     args='... -v -b ... scheduler'
+... D command/parsed                      func='scheduler' func_args={'config': PosixPath('/etc/backy.conf')}
+... D command/successful                  \n\
 """
         )
         == utils.log_data
@@ -356,11 +356,11 @@ def test_call_tags(capsys, backup, argv, monkeypatch, action):
     assert (
         Ellipsis(
             f"""\
-... D quarantine/scan                entries=0
-... D command/invoked                args='... -v -b ... tags {action} -r last manual:a'
-... D command/parsed                 func='tags' func_args={{'autoremove': False, 'force': False, 'expect': None, \
+... D quarantine/scan                     entries=0
+... D command/invoked                     args='... -v -b ... tags {action} -r last manual:a'
+... D command/parsed                      func='tags' func_args={{'autoremove': False, 'force': False, 'expect': None, \
 'action': '{action}', 'revision': 'last', 'tags': 'manual:a'}}
-... D command/successful             \n\
+... D command/successful                  \n\
 """
         )
         == utils.log_data
@@ -387,10 +387,10 @@ def test_call_expire(capsys, backup, argv, monkeypatch):
     assert (
         Ellipsis(
             """\
-... D quarantine/scan                entries=0
-... D command/invoked                args='... -v -b ... expire'
-... D command/parsed                 func='expire' func_args={}
-... D command/successful             \n\
+... D quarantine/scan                     entries=0
+... D command/invoked                     args='... -v -b ... expire'
+... D command/parsed                      func='expire' func_args={}
+... D command/successful                  \n\
 """
         )
         == utils.log_data
@@ -420,9 +420,9 @@ def test_call_unexpected_exception(
     assert (
         Ellipsis(
             """\
-... D command/invoked                args='... -l ... -b ... status'
-... D command/parsed                 func='status' func_args={'yaml_': False, 'revision': 'all'}
-... E command/failed                 exception_class='builtins.RuntimeError' exception_msg='test'
+... D command/invoked                     args='... -l ... -b ... status'
+... D command/parsed                      func='status' func_args={'yaml_': False, 'revision': 'all'}
+... E command/failed                      exception_class='builtins.RuntimeError' exception_msg='test'
 exception>\tTraceback (most recent call last):
 exception>\t  File ".../src/backy/main.py", line ..., in main
 exception>\t    func(**func_args)

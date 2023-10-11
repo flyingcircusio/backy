@@ -815,7 +815,7 @@ class Backup(object):
             log.warning("pull-error", exc_info=True)
             remote_revs = []
         log.debug(
-            "pull-found-matching-server",
+            "pull-found-revs",
             revs=len(remote_revs),
         )
 

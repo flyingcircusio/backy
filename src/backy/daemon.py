@@ -431,10 +431,10 @@ class SchedulerShell(object):
                 "SLA",
                 "SLA overdue",
                 "Status",
-                f"Last Backup ({tz.zone})",
+                f"Last Backup ({tz})",
                 "Last Tags",
                 "Last Duration",
-                f"Next Backup ({tz.zone})",
+                f"Next Backup ({tz})",
                 "Next Tags",
             ]
         )

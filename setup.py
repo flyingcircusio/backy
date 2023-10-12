@@ -44,14 +44,9 @@ def long_desc():
     return "\n".join(parts)
 
 
-def version():
-    with open_project_path("version.txt") as f:
-        return f.read().strip()
-
-
 setup(
     name="backy",
-    version=version(),
+    version="2.5.1dev0",
     install_requires=[
         "consulate",
         "packaging",

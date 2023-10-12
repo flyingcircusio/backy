@@ -46,7 +46,7 @@ def long_desc():
 
 setup(
     name="backy",
-    version="2.5.1",
+    version="2.5.2.dev0",
     install_requires=[
         "consulate",
         "packaging",

@@ -11,6 +11,12 @@ See the fragment files in the `changelog.d` directory.
 
 .. _changelog-2.5.1:
 
+2.5.2 (unreleased)
+==================
+
+- Nothing changed yet.
+
+
 2.5.1 (2023-10-12)
 ==================
 

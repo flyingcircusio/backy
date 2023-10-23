@@ -50,4 +50,5 @@ jobs:
 
       - name: check 23.05
         run: |
-          nix run --override-input nixpkgs github:NixOS/nixpkgs/nixos-23.05
+          nix run --override-input nixpkgs github:NixOS/nixpkgs/nixos-23.05 \
+            --override-input poetry2nix github:nix-community/poetry2nix/1.41.0

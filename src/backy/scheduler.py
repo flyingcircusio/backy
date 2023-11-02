@@ -113,6 +113,14 @@ class Job(object):
             if p.exists(config) and filecmp.cmp(config, f.name):
                 raise ValueError("not changed")
 
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "status": self.status,
+            "source": self.source,
+            "schedule": self.schedule.to_dict(),
+        }
+
     async def _wait_for_deadline(self):
         self.update_status("waiting for deadline")
         trigger = await time_or_event(self.next_time, self.run_immediately)

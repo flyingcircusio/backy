@@ -55,16 +55,16 @@ setup(
     install_requires=[
         "consulate",
         "packaging",
-        "prettytable",
         "tzlocal",
         "PyYaml",
         "setuptools",
         "shortuuid",
         "python-lzo",
-        "telnetlib3>=1.0",
         "humanize",
         "mmh3",
         "structlog",
+        "aiohttp",
+        "rich",
     ],
     extras_require={
         "test": [

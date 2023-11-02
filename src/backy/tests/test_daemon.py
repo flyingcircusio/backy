@@ -4,7 +4,6 @@ import os
 import os.path as p
 import re
 import signal
-import time
 from pathlib import Path
 from unittest import mock
 
@@ -14,7 +13,6 @@ import yaml
 from backy import utils
 from backy.backends.chunked import ChunkedFileBackend
 from backy.daemon import BackyDaemon
-from backy.quarantine import QuarantineReport
 from backy.revision import Revision
 from backy.scheduler import Job
 from backy.tests import Ellipsis
@@ -31,9 +29,12 @@ async def daemon(tmpdir, event_loop, log):
 ---
 global:
     base-dir: {base_dir}
-    status-interval: 1
-    telnet_port: 1234
     backup-completed-callback: {Path(__file__).parent / "test_callback.sh"}
+api:
+    port: 1234
+    tokens:
+        "testtoken": "cli"
+        "testtoken2": "cli2"
 schedules:
     default:
         daily:
@@ -76,6 +77,10 @@ def test_reload(daemon, tmpdir):
 ---
 global:
     base-dir: {new_base_dir}
+api:
+    tokens:
+        "newtoken": "cli"
+        "newtoken2": "cli2"
 schedules:
     default2:
         daily:
@@ -96,12 +101,12 @@ jobs:
         )
     daemon.reload()
     assert daemon.base_dir == new_base_dir
+    assert set(daemon.api_tokens) == {"newtoken", "newtoken2"}
     assert set(daemon.jobs) == {"test05", "foo05"}
     assert set(daemon.schedules) == {"default2"}
-    assert daemon.telnet_port == BackyDaemon.telnet_port
+    assert daemon.api_port == BackyDaemon.api_port
 
 
-@pytest.mark.asyncio
 async def test_sighup(daemon, log, monkeypatch):
     """test that a `SIGHUP` causes a reload without interrupting other tasks"""
 
@@ -122,7 +127,6 @@ async def test_sighup(daemon, log, monkeypatch):
     assert signal_task not in all_tasks
 
 
-@pytest.mark.asyncio
 async def test_run_backup(daemon, log):
     job = daemon.jobs["test01"]
 
@@ -241,12 +245,8 @@ def test_incomplete_revs_dont_count_for_sla(daemon, clock, tmpdir, log):
     assert False is job.sla
 
 
-def test_status_should_default_to_basedir(daemon, tmpdir):
-    assert str(tmpdir / "status") == daemon.status_file
-
-
-def test_update_status(log):
-    job = Job(mock.Mock(), "asdf", log)
+def test_update_status(daemon, log):
+    job = Job(daemon, "asdf", log)
     assert job.status == ""
     job.update_status("asdf")
     assert job.status == "asdf"
@@ -258,7 +258,6 @@ async def cancel_and_wait(job):
     job._task = None
 
 
-@pytest.mark.asyncio
 async def test_task_generator(daemon, clock, tmpdir, monkeypatch, tz_berlin):
     # This is really just a smoke tests, but it covers the task pool,
     # so hey, better than nothing.
@@ -288,7 +287,6 @@ async def test_task_generator(daemon, clock, tmpdir, monkeypatch, tz_berlin):
     await wait_for_job_finished()
 
 
-@pytest.mark.asyncio
 async def test_task_generator_backoff(
     daemon, clock, tmpdir, monkeypatch, tz_berlin
 ):
@@ -377,15 +375,6 @@ exception>\tException
     assert job.backoff == 0
 
 
-@pytest.mark.asyncio
-async def test_write_status_file(daemon, event_loop):
-    assert p.exists(daemon.status_file)
-    first = os.stat(daemon.status_file)
-    await asyncio.sleep(1.5)
-    second = os.stat(daemon.status_file)
-    assert first.st_mtime < second.st_mtime
-
-
 def test_daemon_status(daemon):
     assert {"test01", "foo00"} == set([s["job"] for s in daemon.status()])
 
@@ -393,139 +382,3 @@ def test_daemon_status(daemon):
 def test_daemon_status_filter_re(daemon):
     r = re.compile(r"foo\d\d")
     assert {"foo00"} == set([s["job"] for s in daemon.status(r)])
-
-
-def test_check_ok(daemon, setup_structlog):
-    setup_structlog.default_job_name = "-"
-    daemon._write_status_file()
-
-    utils.log_data = ""
-    try:
-        daemon.check()
-    except SystemExit as exit:
-        assert exit.code == 0
-    assert (
-        Ellipsis(
-            """\
-... I -                    daemon/read-config             ...
-... I -                    daemon/check-exit              exitcode=0 jobs=2
-"""
-        )
-        == utils.log_data
-    )
-
-
-def test_check_too_old(daemon, tmpdir, clock, log, setup_structlog):
-    setup_structlog.default_job_name = "-"
-    job = daemon.jobs["test01"]
-    revision = Revision(job.backup, log, "1")
-    revision.timestamp = utils.now() - datetime.timedelta(hours=48)
-    revision.stats["duration"] = 60.0
-    revision.materialize()
-    daemon._write_status_file()
-
-    utils.log_data = ""
-    try:
-        daemon.check()
-    except SystemExit as exit:
-        assert exit.code == 2
-    assert (
-        Ellipsis(
-            """\
-... I -                    daemon/read-config             ...
-... C test01               daemon/check-sla-violation     last_time='2015-08-30 07:06:47+00:00' sla_overdue=172800.0
-... I -                    daemon/check-exit              exitcode=2 jobs=2
-"""
-        )
-        == utils.log_data
-    )
-
-
-def test_check_manual_tags(daemon, setup_structlog, log):
-    setup_structlog.default_job_name = "-"
-    job = daemon.jobs["test01"]
-    revision = Revision.create(job.backup, {"manual:test"}, log)
-    revision.timestamp = utils.now()
-    revision.stats["duration"] = 60.0
-    revision.materialize()
-    daemon._write_status_file()
-
-    utils.log_data = ""
-    try:
-        daemon.check()
-    except SystemExit as exit:
-        assert exit.code == 0
-    assert (
-        Ellipsis(
-            """\
-... I -                    daemon/read-config             ...
-... I test01               daemon/check-manual-tags       manual_tags='manual:test'
-... I -                    daemon/check-exit              exitcode=0 jobs=2
-"""
-        )
-        == utils.log_data
-    )
-
-
-def test_check_quarantine(daemon, setup_structlog, log):
-    setup_structlog.default_job_name = "-"
-    job = daemon.jobs["test01"]
-    job.backup.quarantine.add_report(QuarantineReport(b"a", b"b", 0))
-    daemon._write_status_file()
-
-    utils.log_data = ""
-    try:
-        daemon.check()
-    except SystemExit as exit:
-        assert exit.code == 1
-    assert (
-        Ellipsis(
-            """\
-... I -                    daemon/read-config             ...
-... W test01               daemon/check-quarantined       reports=1
-... I -                    daemon/check-exit              exitcode=1 jobs=2
-"""
-        )
-        == utils.log_data
-    )
-
-
-def test_check_no_status_file(daemon, setup_structlog):
-    setup_structlog.default_job_name = "-"
-    os.unlink(daemon.status_file)
-
-    utils.log_data = ""
-    try:
-        daemon.check()
-    except SystemExit as exit:
-        assert exit.code == 3
-    assert (
-        Ellipsis(
-            """\
-... I -                    daemon/read-config             ...
-... E -                    daemon/check-no-status-file    status_file='...'
-"""
-        )
-        == utils.log_data
-    )
-
-
-def test_check_stale_status_file(daemon, setup_structlog):
-    setup_structlog.default_job_name = "-"
-    open(daemon.status_file, "a").close()
-    os.utime(daemon.status_file, (time.time() - 301, time.time() - 301))
-
-    utils.log_data = ""
-    try:
-        daemon.check()
-    except SystemExit as exit:
-        assert exit.code == 2
-    assert (
-        Ellipsis(
-            """\
-... I -                    daemon/read-config             ...
-... C -                    daemon/check-old-status-file   age=...
-"""
-        )
-        == utils.log_data
-    )

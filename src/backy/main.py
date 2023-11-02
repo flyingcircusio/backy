@@ -21,6 +21,7 @@ import backy.daemon
 from backy.utils import format_datetime_local
 
 from . import logging
+from .backup import RestoreBackend
 from .client import APIClient, CLIClient
 
 
@@ -101,9 +102,9 @@ class Command(object):
         finally:
             b._clean()
 
-    def restore(self, revision, target):
+    def restore(self, revision, target, restore_backend):
         b = backy.backup.Backup(self.path, self.log)
-        b.restore(revision, target)
+        b.restore(revision, target, restore_backend)
 
     def forget(self, revision):
         b = backy.backup.Backup(self.path, self.log)
@@ -279,6 +280,13 @@ Perform a backup.
         help="""\
 Restore (a given revision) to a given target.
 """,
+    )
+    p.add_argument(
+        "--backend",
+        type=RestoreBackend,
+        choices=list(RestoreBackend),
+        default=RestoreBackend.AUTO,
+        dest="restore_backend",
     )
     p.add_argument(
         "-r",

@@ -1,4 +1,6 @@
 import os.path
+import subprocess
+from unittest import mock
 
 import pytest
 import yaml
@@ -7,6 +9,7 @@ import backy.utils
 from backy.backup import Backup
 from backy.revision import Revision
 from backy.sources.file import File
+from backy.utils import CHUNK_SIZE
 
 
 def test_config(simple_file_config, tmpdir):
@@ -58,6 +61,22 @@ def test_restore_stdout(simple_file_config, capfd):
     assert not os.path.exists("-")
     out, err = capfd.readouterr()
     assert "volume contents\n" == out
+
+
+def test_restore_backy_extract(simple_file_config, monkeypatch):
+    check_output = mock.Mock(return_value="backy-extract 1.1.0")
+    monkeypatch.setattr(subprocess, "check_output", check_output)
+    backup = simple_file_config
+    backup.restore_backy_extract = mock.Mock()
+    source = "input-file"
+    with open(source, "wb") as f:
+        f.write(b"a" * CHUNK_SIZE)
+    backup.backup({"daily"})
+    backup.restore(0, "restore.img")
+    check_output.assert_called()
+    backup.restore_backy_extract.assert_called_once_with(
+        backup.find(0), "restore.img"
+    )
 
 
 def test_backup_corrupted(simple_file_config):

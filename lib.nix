@@ -1,10 +1,15 @@
 {
+  lib,
+  stdenv,
   poetry2nix,
   lzo,
   python310,
   mkShellNoCC,
   poetry,
   runCommand,
+  libiconv,
+  darwin,
+  rustPlatform,
   ...
 }:
 let
@@ -34,6 +39,29 @@ let
         # replace poetry to avoid dependency on vulnerable python-cryptography package
         nativeBuildInputs = [ super.poetry-core ] ++ builtins.filter (p: p.pname or "" != "poetry") old.nativeBuildInputs;
       });
+      nh3 =
+        let
+          getCargoHash = version: {
+            "0.2.14" = "sha256-EzlwSic1Qgs4NZAde/KWg0Qjs+PNEPcnE8HyIPoYZQ0=";
+          }.${version} or (
+            lib.warn "Unknown nh3 version: '${version}'. Please update getCargoHash." lib.fakeHash
+          );
+        in
+        super.nh3.overridePythonAttrs (old: {
+          cargoDeps = rustPlatform.fetchCargoTarball {
+            inherit (old) src;
+            name = "${old.pname}-${old.version}";
+            hash = getCargoHash old.version;
+          };
+          nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
+            rustPlatform.cargoSetupHook
+            rustPlatform.maturinBuildHook
+          ];
+          buildInputs = (old.buildInputs or [ ]) ++ lib.optional stdenv.isDarwin [
+            libiconv
+            darwin.apple_sdk.frameworks.Security
+          ];
+        });
     })
   ];
   poetryEnv = poetry2nix.mkPoetryEnv {
@@ -45,11 +73,11 @@ let
     };
   };
   poetryApplication = poetry2nix.mkPoetryApplication {
-      projectDir = ./.;
-      doCheck = true;
-      python = python310;
-      overrides = poetryOverrides;
-    };
+    projectDir = ./.;
+    doCheck = true;
+    python = python310;
+    overrides = poetryOverrides;
+  };
 in
 {
   packages = {

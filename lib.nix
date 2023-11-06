@@ -62,6 +62,28 @@ let
             darwin.apple_sdk.frameworks.Security
           ];
         });
+
+      cryptography =
+        let
+          getCargoHash = version: {
+            "41.0.5" = "sha256-ABCK144//RUJ3AksFHEgqC+kHvoHl1ifpVuqMTkGNH8=";
+          }.${version} or (
+            lib.warn "Unknown cryptography version: '${version}'. Please update getCargoHash." lib.fakeHash
+          );
+          sha256 = getCargoHash super.cryptography.version;
+          isWheel = lib.hasSuffix ".whl" super.cryptography.src;
+        in
+        super.cryptography.overridePythonAttrs (old:
+          lib.optionalAttrs (lib.versionAtLeast old.version "3.5" && !isWheel) {
+            cargoDeps =
+              rustPlatform.fetchCargoTarball {
+                inherit (old) src;
+                sourceRoot = "${old.pname}-${old.version}/${old.cargoRoot}";
+                name = "${old.pname}-${old.version}";
+                inherit sha256;
+              };
+          }
+        );
     })
   ];
   poetryEnv = poetry2nix.mkPoetryEnv {

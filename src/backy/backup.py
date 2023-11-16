@@ -725,7 +725,7 @@ class Backup(object):
         grouped = defaultdict(list)
         for r in self.history:
             if r.pending_changes:
-                grouped[r.location].append(r)
+                grouped[r.server].append(r)
         self.log.info(
             "push-start", changes=sum(len(l) for l in grouped.values())
         )
@@ -742,7 +742,7 @@ class Backup(object):
         purge_required = False
         for r in revs:
             log = self.log.bind(
-                server=r.location,
+                server=r.server,
                 rev_uuid=r.uuid,
             )
             log.debug(
@@ -781,8 +781,12 @@ class Backup(object):
     async def pull_metadata(self, peers: dict, taskid: str):
         async def remove_dead_peer():
             for r in list(self.history):
-                if r.location and r.location not in peers:
-                    self.log.info("pull-removing-dead-peer", rev_uuid=r.uuid)
+                if r.server and r.server not in peers:
+                    self.log.info(
+                        "pull-removing-dead-peer",
+                        rev_uuid=r.uuid,
+                        server=r.server,
+                    )
                     r.remove(force=True)
 
         self.log.info("pull-start")
@@ -820,7 +824,7 @@ class Backup(object):
         )
 
         matching_uuids = {
-            r.uuid for r in self.history if r.location == api.server_name
+            r.uuid for r in self.history if r.server == api.server_name
         }
         remote_uuids = {r.uuid for r in remote_revs}
         for uuid in matching_uuids - remote_uuids:

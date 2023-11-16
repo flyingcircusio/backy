@@ -72,7 +72,7 @@ def test_store_revision_data(backup, clock, log):
             "stats": {"bytes_written": 0},
             "tags": [],
             "orig_tags": [],
-            "location": "",
+            "server": "",
             "trust": "trusted",
             "timestamp": datetime.datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC),
         }
@@ -89,7 +89,7 @@ def test_store_revision_data_no_parent(backup, clock, log):
             "stats": {"bytes_written": 0},
             "tags": [],
             "orig_tags": [],
-            "location": "",
+            "server": "",
             "trust": "trusted",
             "timestamp": datetime.datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC),
         }

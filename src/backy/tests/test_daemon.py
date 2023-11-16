@@ -167,7 +167,7 @@ async def test_run_callback(daemon, log):
         assert isinstance(r["tags"][0], str)
         assert isinstance(r["stats"]["bytes_written"], int)
         assert isinstance(r["stats"]["duration"], float)
-        assert isinstance(r["location"], str)
+        assert isinstance(r["server"], str)
 
 
 def test_spread(daemon):

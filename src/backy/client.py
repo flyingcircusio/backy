@@ -141,7 +141,7 @@ class APIClient:
             for r in revs:
                 r.backend_type = ""
                 r.orig_tags = r.tags
-                r.location = self.server_name
+                r.server = self.server_name
             return revs
 
     async def put_tags(self, rev: Revision, autoremove: bool = False):

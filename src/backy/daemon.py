@@ -1,13 +1,15 @@
 import asyncio
 import fcntl
 import os
-import shutil
+import os.path as p
 import signal
 import sys
 import time
 from pathlib import Path
 from typing import IO, List, Optional, Pattern
 
+import aiofiles.os as aos
+import aioshutil
 import yaml
 from structlog.stdlib import BoundLogger
 
@@ -15,7 +17,7 @@ from .api import BackyAPI
 from .revision import filter_manual_tags
 from .schedule import Schedule
 from .scheduler import Job
-from .utils import has_recent_changes
+from .utils import has_recent_changes, is_dir_no_symlink
 
 daemon: "BackyDaemon"
 
@@ -301,37 +303,33 @@ class BackyDaemon(object):
         return result
 
     async def purge_old_files(self):
-        # `stat` and other file system access things are _not_
-        # properly async, we might want to spawn those off into a separate
-        # thread.
         while True:
             try:
                 self.log.info("purge-scanning")
-                for candidate in os.scandir(self.base_dir):
-                    if not candidate.is_dir(follow_symlinks=False):
+                for candidate in await aos.scandir(self.base_dir):
+                    if not await is_dir_no_symlink(candidate.path):
                         continue
                     self.log.debug("purge-candidate", candidate=candidate.path)
                     reference_time = time.time() - 3 * 31 * 24 * 60 * 60
-                    if not has_recent_changes(candidate, reference_time):
+                    if not await has_recent_changes(
+                        candidate.path, reference_time
+                    ):
                         self.log.info("purging", candidate=candidate.path)
-                        shutil.rmtree(candidate)
+                        await aioshutil.rmtree(candidate)
                 self.log.info("purge-finished")
             except Exception:
                 self.log.exception("purge")
             await asyncio.sleep(24 * 60 * 60)
 
     async def purge_pending_backups(self):
-        # `stat` and other file system access things are _not_
-        # properly async, we might want to spawn those off into a separate
-        # thread.
         while True:
             try:
                 self.log.info("purge-pending-scanning")
-                for candidate in os.scandir(self.base_dir):
+                for candidate in await aos.scandir(self.base_dir):
                     if (
-                        not candidate.is_dir(follow_symlinks=False)
-                        or candidate.name in self.jobs  # will get purged anyway
-                        or not p.exists(
+                        candidate.name in self.jobs  # will get purged anyway
+                        or not await is_dir_no_symlink(candidate.path)
+                        or not await aos.path.exists(
                             p.join(candidate.path, ".purge_pending")
                         )
                     ):
@@ -343,12 +341,12 @@ class BackyDaemon(object):
                 self.log.exception("purge-pending")
             await asyncio.sleep(24 * 60 * 60)
 
-    def find_dead_backups(self) -> List[str]:
+    async def find_dead_backups(self) -> List[str]:
         self.log.debug("scanning-backups")
         return [
             b.name
-            for b in os.scandir(self.base_dir)
-            if b.is_dir(follow_symlinks=False) and b.name not in self.jobs
+            for b in await aos.scandir(self.base_dir)
+            if await is_dir_no_symlink(b.path) and b.name not in self.jobs
         ]
 
 

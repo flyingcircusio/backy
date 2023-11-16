@@ -176,7 +176,7 @@ class BackyAPI:
 
     async def list_backups(self, request: web.Request) -> List[str]:
         request["log"].info("list-backups")
-        return self.daemon.find_dead_backups()
+        return await self.daemon.find_dead_backups()
 
     async def get_backup(self, request: web.Request) -> Backup:
         name = request.match_info.get("backup_name", None)

@@ -15,6 +15,7 @@ from os import DirEntry
 from typing import IO, Callable, Iterable, List, Optional, TypeVar
 from zoneinfo import ZoneInfo
 
+import aiofiles.os as aos
 import humanize
 import structlog
 import tzlocal
@@ -441,7 +442,11 @@ def min_date():
     return datetime.datetime.min.replace(tzinfo=ZoneInfo("UTC"))
 
 
-def has_recent_changes(entry: DirEntry, reference_time: float):
+async def is_dir_no_symlink(p):
+    return await aos.path.isdir(p) and not await aos.path.islink(p)
+
+
+async def has_recent_changes(path: str, reference_time: float) -> bool:
     # This is not efficient on a first look as we may stat things twice, but it
     # makes the recursion easier to read and the VFS will be caching this
     # anyway.
@@ -449,18 +454,20 @@ def has_recent_changes(entry: DirEntry, reference_time: float):
     # higher levels will propagate changed mtimes do to new/deleted files
     # instead of just modified files in our case and looking at stats when
     # traversing a directory level is faster than going depth first.
-    if not entry.is_dir(follow_symlinks=False):
-        return False
-    if entry.stat(follow_symlinks=False).st_mtime >= reference_time:
+    st = await aos.stat(path, follow_symlinks=False)
+    if st.st_mtime >= reference_time:
         return True
-    candidates = list(os.scandir(entry.path))
+    if not await is_dir_no_symlink(path):
+        return False
+    candidates = list(await aos.scandir(path))
     # First pass: stat all direct entries
     for candidate in candidates:
-        if candidate.stat(follow_symlinks=False).st_mtime >= reference_time:
+        st = await aos.stat(candidate.path, follow_symlinks=False)
+        if st.st_mtime >= reference_time:
             return True
     # Second pass: start traversing
     for candidate in candidates:
-        if has_recent_changes(candidate, reference_time):
+        if await has_recent_changes(candidate.path, reference_time):
             return True
     return False
 

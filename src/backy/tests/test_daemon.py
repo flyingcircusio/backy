@@ -18,7 +18,7 @@ from backy.tests import Ellipsis
 
 
 @pytest.fixture
-async def daemon(tmp_path, log):
+async def daemon(tmp_path, monkeypatch, log):
     daemon = BackyDaemon(tmp_path / "config", log)
     source = str(tmp_path / "test01.source")
     with open(str(tmp_path / "config"), "w") as f:
@@ -57,7 +57,13 @@ jobs:
 
     tmp_path.joinpath("dead01").mkdir()
 
-    daemon.start(asyncio.get_running_loop())
+    async def null_coroutine():
+        return
+
+    with monkeypatch.context() as m:
+        m.setattr(daemon, "purge_old_files", null_coroutine)
+        m.setattr(daemon, "purge_pending_backups", null_coroutine)
+        daemon.start(asyncio.get_running_loop())
     yield daemon
     daemon.terminate()
 

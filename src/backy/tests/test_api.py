@@ -138,7 +138,7 @@ async def test_remove_peer(daemons, log):
 
     assert [r.uuid for r in b0.history] == [rev0.uuid]
 
-    rev0.location = "unknown"
+    rev0.server = "unknown"
     rev0.materialize()
     b0.scan()
 
@@ -206,7 +206,7 @@ async def test_simple_sync(daemons, log):
     assert new_rev1.tags == rev1.tags
     assert new_rev1.orig_tags == new_rev1.tags
     assert new_rev1.trust == rev1.trust
-    assert new_rev1.location == "server-1"
+    assert new_rev1.server == "server-1"
 
     new_rev1.remove()
     assert [r.uuid for r in b0.history] == [rev0.uuid, rev1.uuid]

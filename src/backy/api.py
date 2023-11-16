@@ -214,7 +214,7 @@ class BackyAPI:
             revs = backup.clean_history
         else:
             revs = backup.history
-        return [r for r in revs if not r.location]
+        return [r for r in revs if not r.server]
 
     async def put_tags(self, request: web.Request):
         json = await request.json()

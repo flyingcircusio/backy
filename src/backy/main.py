@@ -52,7 +52,7 @@ class Command(object):
             Column("Duration", justify="right"),
             "Tags",
             "Trust",
-            "Location",
+            "Server",
         )
 
         for r in revs:
@@ -72,7 +72,7 @@ class Command(object):
                 duration,
                 ",".join(r.tags),
                 r.trust.value,
-                r.location,
+                r.server,
             )
 
         rprint(t)

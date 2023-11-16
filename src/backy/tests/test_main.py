@@ -439,11 +439,11 @@ def test_commands_wrapper_status(backup, tmpdir, capsys, clock, tz_berlin, log):
     assert err == ""
     assert out == Ellipsis(
         """\
-┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┓
-┃ Date (...) ┃ ID ┃    Size ┃ Duration ┃ Tags ┃ Trust   ┃ Location ┃
-┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━╇━━━━━━━━━╇━━━━━━━━━━┩
-│ ...  │ 1  │ 0 Bytes │        - │      │ trusted │          │
-└──────────────────────┴────┴─────────┴──────────┴──────┴─────────┴──────────┘
+┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
+┃ Date (...) ┃ ID ┃    Size ┃ Duration ┃ Tags ┃ Trust   ┃ Server ┃
+┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
+│ ...  │ 1  │ 0 Bytes │        - │      │ trusted │        │
+└──────────────────────┴────┴─────────┴──────────┴──────┴─────────┴────────┘
 1 revisions containing 0 Bytes data (estimated)
 """
     )
@@ -468,9 +468,9 @@ def test_commands_wrapper_status_yaml(
         out
         == """\
 - backend_type: chunked
-  location: ''
   orig_tags: []
   parent: ''
+  server: ''
   stats:
     bytes_written: 42
     duration: 3.5

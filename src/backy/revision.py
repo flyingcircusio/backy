@@ -39,7 +39,7 @@ class Revision(object):
     orig_tags: set[str]
     trust: Trust = Trust.TRUSTED
     backend_type: str = "chunked"
-    location: str = ""
+    server: str = ""
     log: BoundLogger
 
     def __init__(self, backup, log, uuid=None, timestamp=None):
@@ -82,7 +82,7 @@ class Revision(object):
         r.stats = metadata.get("stats", {})
         r.tags = set(metadata.get("tags", []))
         r.orig_tags = set(metadata.get("orig_tags", []))
-        r.location = metadata.get("location", "")
+        r.server = metadata.get("server", "")
         # Assume trusted by default to support migration
         r.trust = Trust(metadata.get("trust", Trust.TRUSTED.value))
         # If the metadata does not show the backend type, then it's cowfile.
@@ -122,12 +122,12 @@ class Revision(object):
             "trust": self.trust.value,
             "tags": list(self.tags),
             "orig_tags": list(self.orig_tags),
-            "location": self.location,
+            "server": self.server,
         }
 
     @property
     def pending_changes(self):
-        return self.location and self.tags != self.orig_tags
+        return self.server and self.tags != self.orig_tags
 
     def distrust(self):
         self.log.info("distrusted")
@@ -139,8 +139,8 @@ class Revision(object):
 
     def remove(self, force=False):
         self.log.info("remove")
-        if not force and self.location:
-            self.log.debug("remove-remote", location=self.location)
+        if not force and self.server:
+            self.log.debug("remove-remote", server=self.server)
             self.tags = set()
             self.write_info()
         else:

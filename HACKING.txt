@@ -7,15 +7,15 @@ Hacking
 Development setup
 =================
 
-Backy is intended to be compatible with Python 3.4. It is expected to work
+Backy is intended to be compatible with Python 3.10. It is expected to work
 properly on Linux and Mac OS X, even though specific backends may not be
-available on all platforms. Use `zc.buildout` to get a development setup::
+available on all platforms. Use `poetry` to get a development setup::
 
-    $ hg clone https://bitbucket.org/flyingcircus/backy
+    $ git clone https://github.com/flyingcircusio/backy.git
     $ cd backy
-    $ virtualenv --python=python3.4 .
-    $ bin/pip install zc.buildout
-    $ bin/buildout
+    $ poetry install
+    or
+    $ nix develop
 
 
 Running tests
@@ -24,17 +24,16 @@ Running tests
 Backy has some end-to-end tests which take a while. To run only quick unit
 tests::
 
-    $ bin/py.test
+    $ pytest -m "not slow"
 
 To run all tests::
 
-    $ bin/py.test -m 1
+    $ pytest
 
 
 Releasing
 =========
-
-Install `zest.releaser` on your workstation. Then use::
+Install `zest.releaser` (`nix develop`) on your workstation. Then use::
 
     $ fullrelease
 

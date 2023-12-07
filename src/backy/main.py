@@ -106,6 +106,13 @@ class Command(object):
         b = backy.backup.Backup(self.path, self.log)
         b.restore(revision, target, restore_backend)
 
+    def find(self, revision, uuid):
+        b = backy.backup.Backup(self.path, self.log)
+        if uuid:
+            print(b.find(revision).uuid)
+        else:
+            print(b.find(revision).filename)
+
     def forget(self, revision):
         b = backy.backup.Backup(self.path, self.log)
         b.forget_revision(revision)
@@ -312,6 +319,25 @@ Purge the backup store (i.e. chunked) from unused data.
 """,
     )
     p.set_defaults(func="purge")
+
+    # FIND
+    p = subparsers.add_parser(
+        "find",
+        help="Print full path to a given revision's image file",
+    )
+    p.add_argument(
+        "--uuid",
+        action="store_true",
+        help="Print uuid instead of full path",
+    )
+    p.add_argument(
+        "-r",
+        "--revision",
+        metavar="SPEC",
+        default="latest",
+        help="use revision SPEC to find (default: %(default)s)",
+    )
+    p.set_defaults(func="find")
 
     # STATUS
     p = subparsers.add_parser(

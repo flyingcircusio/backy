@@ -44,7 +44,7 @@ def test_smoketest_internal(tmpdir, log):
 
     # Restore first state form newest revision at position 0
     restore_target = str(tmpdir / "image1.restore")
-    backup.restore(0, restore_target)
+    backup.restore("0", restore_target)
     with pytest.raises(IOError):
         open(backup.history[-1].filename, "wb")
     with pytest.raises(IOError):
@@ -57,13 +57,13 @@ def test_smoketest_internal(tmpdir, log):
     assert len(backup.history) == 2
 
     # Restore second state from second backup which is the newest at position 0
-    backup.restore(0, restore_target)
+    backup.restore("0", restore_target)
     d1 = open(source2, "rb").read()
     d2 = open(restore_target, "rb").read()
     assert d1 == d2
 
     # Our original backup is now at position 1. Lets restore that again.
-    backup.restore(1, restore_target)
+    backup.restore("1", restore_target)
     assert open(source1, "rb").read() == open(restore_target, "rb").read()
 
     # Backup second state again
@@ -72,15 +72,15 @@ def test_smoketest_internal(tmpdir, log):
     assert len(backup.history) == 3
 
     # Restore image2 from its most recent at position 0
-    backup.restore(0, restore_target)
+    backup.restore("0", restore_target)
     assert open(source2, "rb").read() == open(restore_target, "rb").read()
 
     # Restore image2 from its previous backup, now at position 1
-    backup.restore(1, restore_target)
+    backup.restore("1", restore_target)
     assert open(source2, "rb").read() == open(restore_target, "rb").read()
 
     # Our original backup is now at position 2. Lets restore that again.
-    backup.restore(2, restore_target)
+    backup.restore("2", restore_target)
     assert open(source1, "rb").read() == open(restore_target, "rb").read()
 
     # Backup third state
@@ -89,18 +89,18 @@ def test_smoketest_internal(tmpdir, log):
     assert len(backup.history) == 4
 
     # Restore image3 from the most curent state
-    backup.restore(0, restore_target)
+    backup.restore("0", restore_target)
     assert open(source3, "rb").read() == open(restore_target, "rb").read()
 
     # Restore image2 from position 1 and 2
-    backup.restore(1, restore_target)
+    backup.restore("1", restore_target)
     assert open(source2, "rb").read() == open(restore_target, "rb").read()
 
-    backup.restore(2, restore_target)
+    backup.restore("2", restore_target)
     assert open(source2, "rb").read() == open(restore_target, "rb").read()
 
     # Restore image1 from position 3
-    backup.restore(3, restore_target)
+    backup.restore("3", restore_target)
     assert open(source1, "rb").read() == open(restore_target, "rb").read()
 
 

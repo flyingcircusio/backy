@@ -3,16 +3,26 @@ import fcntl
 import glob
 import os
 import os.path as p
+import re
 import subprocess
 import time
 from enum import Enum
-from typing import IO, Optional, Type
+from math import ceil, floor
+from typing import IO, List, Optional, Type
 
+import tzlocal
 import yaml
 from structlog.stdlib import BoundLogger
 
 import backy.backends.chunked
-from backy.utils import min_date
+from backy.utils import (
+    duplicates,
+    list_get,
+    list_rindex,
+    list_split,
+    min_date,
+    unique,
+)
 
 from .backends import BackendException, BackyBackend
 from .backends.chunked import ChunkedFileBackend
@@ -56,7 +66,9 @@ def locked(target=None, mode=None):
         raise ValueError("Unknown lock mode '{}'".format(mode))
 
     def wrap(f):
-        def locked_function(self, *args, **kw):
+        def locked_function(self, *args, skip_lock=False, **kw):
+            if skip_lock:
+                return f(self, *args, **kw)
             if target in self._lock_fds:
                 raise RuntimeError("Bug: Locking is not re-entrant.")
             target_path = p.join(self.path, target)
@@ -201,13 +213,13 @@ class Backup(object):
                 revision.remove()
 
     @locked(target=".backup", mode="exclusive")
-    def forget_revision(self, revision):
-        r = self.find(revision)
-        r.remove()
+    def forget(self, revision: str):
+        for r in self.find_revisions(revision):
+            r.remove()
 
     @locked(target=".backup", mode="exclusive")
     @locked(target=".purge", mode="shared")
-    def backup(self, tags, force=False):
+    def backup(self, tags: set[str], force=False):
         if not force:
             missing_tags = (
                 filter_schedule_tags(tags) - self.schedule.schedule.keys()
@@ -250,7 +262,7 @@ class Backup(object):
             except BackendException:
                 self.log.exception("backend-error-distrust-all")
                 verified = False
-                self.distrust_range()
+                self.distrust("all", skip_lock=True)
             if not verified:
                 self.log.error(
                     "verification-failed",
@@ -282,44 +294,16 @@ class Backup(object):
                 break
 
     @locked(target=".backup", mode="exclusive")
-    def distrust(
-        self,
-        revision=None,
-        from_: Optional[datetime.date] = None,
-        until: Optional[datetime.date] = None,
-    ):
-        if revision:
-            r = self.find(revision)
-            r.distrust()
-            r.write_info()
-        else:
-            self.distrust_range(from_, until)
-
-    def distrust_range(
-        self,
-        from_: Optional[datetime.date] = None,
-        until: Optional[datetime.date] = None,
-    ):
-        for r in self.clean_history:
-            if from_ and r.timestamp.date() < from_:
-                continue
-            if until and r.timestamp.date() > until:
-                continue
+    def distrust(self, revision: str):
+        for r in self.find_revisions(revision):
             r.distrust()
             r.write_info()
 
     @locked(target=".purge", mode="shared")
-    def verify(self, revision=None):
-        if revision:
-            r = self.find(revision)
+    def verify(self, revision: str):
+        for r in self.find_revisions(revision):
             backend = self.backend_factory(r, self.log)
             backend.verify()
-        else:
-            for r in list(self.clean_history):
-                if r.trust != Trust.DISTRUSTED:
-                    continue
-                backend = self.backend_factory(r, self.log)
-                backend.verify()
 
     @locked(target=".purge", mode="exclusive")
     def purge(self):
@@ -498,34 +482,131 @@ class Backup(object):
     ######################
     # Looking up revisions
 
-    def last_by_tag(self):
+    def last_by_tag(self) -> dict[str, datetime.datetime]:
         """Return a dictionary showing the last time each tag was
         backed up.
 
         Tags that have never been backed up won't show up here.
 
         """
-        last_times = {}
+        last_times: dict[str, datetime.datetime] = {}
         for revision in self.clean_history:
             for tag in revision.tags:
                 last_times.setdefault(tag, min_date())
                 last_times[tag] = max([last_times[tag], revision.timestamp])
         return last_times
 
-    def find_revisions(self, spec):
+    def find_revisions(
+        self, spec: str | List[str | Revision | List[Revision]]
+    ) -> List[Revision]:
         """Get a sorted list of revisions, oldest first, that match the given
         specification.
         """
-        if isinstance(spec, str) and spec.startswith("tag:"):
-            tag = spec.replace("tag:", "")
-            result = [r for r in self.history if tag in r.tags]
-        elif spec == "all":
-            result = self.history[:]
-        else:
-            result = [self.find(spec)]
-        return result
 
-    def find_by_number(self, spec):
+        tokens: List[str | Revision | List[Revision]]
+        if isinstance(spec, str):
+            tokens = [
+                t.strip()
+                for t in re.split(r"(\(|\)|,|&|\.\.)", spec)
+                if t.strip()
+            ]
+        else:
+            tokens = spec
+        if "(" in tokens and ")" in tokens:
+            i = list_rindex(tokens, "(")
+            j = tokens.index(")", i)
+            prev, middle, next = tokens[:i], tokens[i + 1 : j], tokens[j + 1 :]
+
+            functions = {
+                "first": lambda x: x[0],
+                "last": lambda x: x[-1],
+                "not": lambda x: [r for r in self.history if r not in x],
+                "reverse": lambda x: list(reversed(x)),
+            }
+            if prev and isinstance(prev[-1], str) and prev[-1] in functions:
+                return self.find_revisions(
+                    prev[:-1]
+                    + [functions[prev[-1]](self.find_revisions(middle))]
+                    + next
+                )
+            return self.find_revisions(
+                prev + [self.find_revisions(middle)] + next
+            )
+        elif "," in tokens:
+            i = tokens.index(",")
+            return unique(
+                self.find_revisions(tokens[:i])
+                + self.find_revisions(tokens[i + 1 :])
+            )
+        elif "&" in tokens:
+            i = tokens.index("&")
+            return duplicates(
+                self.find_revisions(tokens[:i]),
+                self.find_revisions(tokens[i + 1 :]),
+            )
+        elif ".." in tokens:
+            _a, _b = list_split(tokens, "..")
+            assert len(_a) <= 1 and len(_b) <= 1
+            a = self.index_by_token(list_get(_a, 0, "first"))
+            b = self.index_by_token(list_get(_b, 0, "last"))
+            return self.history[ceil(min(a, b)) : floor(max(a, b)) + 1]
+        assert len(tokens) == 1
+        token = tokens[0]
+        if isinstance(token, Revision):
+            return [token]
+        elif isinstance(token, list):
+            return token
+        if token.startswith("tag:"):
+            tag = token.removeprefix("tag:")
+            return [r for r in self.history if tag in r.tags]
+        elif token.startswith("trust:"):
+            trust = Trust(token.removeprefix("trust:").lower())
+            return [r for r in self.history if trust == r.trust]
+        elif token == "all":
+            return self.history[:]
+        elif token == "clean":
+            return self.clean_history[:]
+        else:
+            return [self.find(token)]
+
+    def index_by_token(self, spec: str | Revision | List[Revision]):
+        assert not isinstance(
+            spec, list
+        ), "can only index a single revision specifier"
+        if isinstance(spec, str):
+            return self.index_by_date(spec) or self.history.index(
+                self.find(spec)
+            )
+        else:
+            return self.history.index(spec)
+
+    def index_by_date(self, spec: str) -> Optional[float]:
+        """Return index of revision matched by datetime.
+        Index may be fractional if there is no exact datetime match.
+        Index range: [-0.5, len+0.5]
+        """
+        try:
+            date = datetime.datetime.fromisoformat(spec)
+            date = date.replace(tzinfo=date.tzinfo or tzlocal.get_localzone())
+            l = list_get(
+                [i for i, r in enumerate(self.history) if r.timestamp <= date],
+                -1,
+                -1,
+            )
+            r = list_get(
+                [i for i, r in enumerate(self.history) if r.timestamp >= date],
+                0,
+                len(self.history),
+            )
+            print(spec, l, r)
+            assert (
+                0 <= r - l <= 1
+            ), "can not index with date if multiple revision have the same timestamp"
+            return (l + r) / 2.0
+        except ValueError:
+            return None
+
+    def find_by_number(self, _spec: str) -> Revision:
         """Returns revision by relative number.
 
         0 is the newest,
@@ -535,22 +616,23 @@ class Backup(object):
 
         Raises IndexError or ValueError if no revision is found.
         """
-        spec = int(spec)
+        spec = int(_spec)
         if spec < 0:
             raise KeyError("Integer revisions must be positive")
         return self.history[-spec - 1]
 
-    def find_by_tag(self, spec):
+    def find_by_tag(self, spec: str) -> Revision:
         """Returns the latest revision matching a given tag.
 
         Raises IndexError or ValueError if no revision is found.
         """
         if spec in ["last", "latest"]:
             return self.history[-1]
-        matching = [r for r in self.history if spec in r.tags]
-        return max((r.timestamp, r) for r in matching)[1]
+        if spec == "first":
+            return self.history[0]
+        raise ValueError()
 
-    def find_by_uuid(self, spec):
+    def find_by_uuid(self, spec: str) -> Revision:
         """Returns revision matched by UUID.
 
         Raises IndexError if no revision is found.
@@ -560,16 +642,28 @@ class Backup(object):
         except KeyError:
             raise IndexError()
 
-    def find(self, spec) -> Revision:
+    def find_by_function(self, spec: str):
+        m = re.fullmatch(r"(\w+)\(.+\)", spec)
+        if m and m.group(1) in ["first", "last"]:
+            return self.find_revisions(m.group(0))[0]
+        raise ValueError()
+
+    def find(self, spec: str) -> Revision:
         """Flexible revision search.
 
         Locates a revision by relative number, by tag, or by uuid.
 
         """
-        if spec is None or spec == "" or not self.history:
+        spec = spec.strip()
+        if spec == "" or not self.history:
             raise KeyError(spec)
 
-        for find in (self.find_by_number, self.find_by_uuid, self.find_by_tag):
+        for find in (
+            self.find_by_number,
+            self.find_by_uuid,
+            self.find_by_tag,
+            self.find_by_function,
+        ):
             try:
                 return find(spec)
             except (ValueError, IndexError):

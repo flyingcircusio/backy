@@ -26,6 +26,9 @@ let
       execnet = super.execnet.overrideAttrs (old: {
         buildInputs = (old.buildInputs or []) ++ [ super.hatchling super.hatch-vcs ];
       });
+      pygments = super.pygments.overrideAttrs (old: {
+        buildInputs = (old.buildInputs or []) ++ [ super.hatchling super.hatch-vcs ];
+      });
       attrs = super.attrs.overrideAttrs (old: {
         buildInputs = (old.buildInputs or []) ++ [ super.hatchling super.hatch-vcs super.hatch-fancy-pypi-readme ];
       });
@@ -35,6 +38,12 @@ let
       consulate-fc-nix-test = super.consulate-fc-nix-test.overrideAttrs (old: {
         buildInputs = (old.buildInputs or []) ++ [ super.setuptools super.setuptools-scm ];
       });
+      yarl = super.yarl.overrideAttrs (old: {
+        buildInputs = (old.buildInputs or []) ++ [ super.tomli ];
+      });
+      frozenlist = super.frozenlist.overrideAttrs (old: {
+        buildInputs = (old.buildInputs or []) ++ [ super.tomli ];
+      });
       shortuuid = super.shortuuid.overrideAttrs (old: {
         # replace poetry to avoid dependency on vulnerable python-cryptography package
         nativeBuildInputs = [ super.poetry-core ] ++ builtins.filter (p: p.pname or "" != "poetry") old.nativeBuildInputs;
@@ -42,7 +51,7 @@ let
       nh3 =
         let
           getCargoHash = version: {
-            "0.2.14" = "sha256-EzlwSic1Qgs4NZAde/KWg0Qjs+PNEPcnE8HyIPoYZQ0=";
+            "0.2.15" = "sha256-fetAE3cj9hh4SoPE72Bqco5ytUMiDqbazeS2MHdUibM=";
           }.${version} or (
             lib.warn "Unknown nh3 version: '${version}'. Please update getCargoHash." lib.fakeHash
           );
@@ -66,7 +75,7 @@ let
       cryptography =
         let
           getCargoHash = version: {
-            "41.0.5" = "sha256-ABCK144//RUJ3AksFHEgqC+kHvoHl1ifpVuqMTkGNH8=";
+            "41.0.7" = "sha256-VeZhKisCPDRvmSjGNwCgJJeVj65BZ0Ge+yvXbZw86Rw";
           }.${version} or (
             lib.warn "Unknown cryptography version: '${version}'. Please update getCargoHash." lib.fakeHash
           );

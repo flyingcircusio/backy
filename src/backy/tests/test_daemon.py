@@ -19,7 +19,7 @@ from backy.tests import Ellipsis
 
 
 @pytest.fixture
-async def daemon(tmpdir, event_loop, log):
+async def daemon(tmpdir, log):
     daemon = BackyDaemon(str(tmpdir / "config"), log)
     base_dir = str(tmpdir)
     source = str(tmpdir / "test01.source")
@@ -57,7 +57,7 @@ jobs:
     with open(source, "w") as f:
         f.write("I am your father, Luke!")
 
-    daemon.start(event_loop)
+    daemon.start(asyncio.get_running_loop())
     yield daemon
     daemon.terminate()
 

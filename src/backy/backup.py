@@ -3,17 +3,21 @@ import fcntl
 import glob
 import os
 import os.path as p
+import subprocess
 import time
+from enum import Enum
 from typing import IO, Optional, Type
 
 import yaml
 from structlog.stdlib import BoundLogger
 
+import backy.backends.chunked
 from backy.utils import min_date
 
 from .backends import BackendException, BackyBackend
 from .backends.chunked import ChunkedFileBackend
 from .backends.cowfile import COWFileBackend
+from .ext_deps import BACKY_EXTRACT
 from .quarantine import QuarantineStore
 from .revision import Revision, Trust, filter_schedule_tags
 from .schedule import Schedule
@@ -32,6 +36,15 @@ from .utils import CHUNK_SIZE, copy, posix_fadvise
 #   immediately give up.
 # - Locking is not re-entrant. It's forbidden and protected to call another
 #   locking main function.
+
+
+class RestoreBackend(Enum):
+    AUTO = "auto"
+    PYTHON = "python"
+    RUST = "rust"
+
+    def __str__(self):
+        return self.value
 
 
 def locked(target=None, mode=None):
@@ -318,15 +331,66 @@ class Backup(object):
 
     # This needs no locking as it's only a wrapper for restore_file and
     # restore_stdout and locking isn't re-entrant.
-    def restore(self, revision, target):
+    def restore(
+        self,
+        revision: str,
+        target: str,
+        restore_backend: RestoreBackend = RestoreBackend.AUTO,
+    ):
         r = self.find(revision)
         backend = self.backend_factory(r, self.log)
         s = backend.open("rb")
-        with s as source:
-            if target != "-":
-                self.restore_file(source, target)
+        if restore_backend == RestoreBackend.AUTO:
+            if self.backy_extract_supported(s):
+                restore_backend = RestoreBackend.RUST
             else:
-                self.restore_stdout(source)
+                restore_backend = RestoreBackend.PYTHON
+            self.log.info("restore-backend", backend=restore_backend.value)
+        if restore_backend == RestoreBackend.PYTHON:
+            with s as source:
+                if target != "-":
+                    self.restore_file(source, target)
+                else:
+                    self.restore_stdout(source)
+        elif restore_backend == RestoreBackend.RUST:
+            self.restore_backy_extract(r, target)
+
+    def backy_extract_supported(self, file: IO) -> bool:
+        log = self.log.bind(subsystem="backy-extract")
+        if not isinstance(file, backy.backends.chunked.File):
+            log.debug("unsupported-backend")
+            return False
+        if file.size % CHUNK_SIZE != 0:
+            log.debug("not-chunk-aligned")
+            return False
+        try:
+            version = subprocess.check_output(
+                [BACKY_EXTRACT, "--version"], encoding="utf-8", errors="replace"
+            )
+            if not version.startswith("backy-extract"):
+                log.debug("unknown-version")
+                return False
+        except:
+            log.debug("unavailable")
+            return False
+        return True
+
+    # backy-extract acquires lock
+    def restore_backy_extract(self, rev: Revision, target: str):
+        log = self.log.bind(subsystem="backy-extract")
+        cmd = [BACKY_EXTRACT, p.join(self.path, rev.uuid), target]
+        log.debug("started", cmd=cmd)
+        proc = subprocess.Popen(cmd)
+        return_code = proc.wait()
+        log.info(
+            "finished",
+            return_code=return_code,
+            subprocess_pid=proc.pid,
+        )
+        if return_code:
+            raise RuntimeError(
+                f"backy-extract failed with return code {return_code}. Maybe try `--backend python`?"
+            )
 
     @locked(target=".purge", mode="shared")
     def restore_file(self, source, target):

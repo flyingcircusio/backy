@@ -12,4 +12,5 @@ BACKY_CMD = os.environ.get(
 )
 CP = os.environ.get("BACKY_CP", "cp")
 RBD = os.environ.get("BACKY_RBD", "rbd")
+BACKY_EXTRACT = os.environ.get("BACKY_EXTRACT", "backy-extract")
 BASH = os.environ.get("BACKY_BASH", "bash")

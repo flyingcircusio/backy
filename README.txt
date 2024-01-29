@@ -48,12 +48,16 @@ Restore the full image through a Pipe::
 
   $ backy restore -r <revision> - | rbd import - <pool>/<rootimage>
 
+Restoring individual files
+--------------------------
+
+Take a look at `backy-extract`_ to mount a backup via fuse and extract
+single files.
 
 Setting up backy
 ----------------
 
-#. Create a sufficiently large backup partition using a COW-capable filesystem
-   like btrfs and mount it under `/srv/backy`.
+#. Create a sufficiently large backup partition and mount it under `/srv/backy`.
 
 #. Create a configuration file at `/etc/backy.conf`. See man page for details.
 
@@ -63,7 +67,7 @@ Setting up backy
 
    The scheduler runs in the foreground until it is shot by SIGTERM.
 
-#. Set up monitoring using `backy check`.
+#. Set up monitoring using `backy client -c /path/to/backy.conf check`.
 
 #. Set up log rotation for `/var/log/backy.conf` and `/srv/backy/*/backy.log`.
 
@@ -77,13 +81,13 @@ Features
 Self-check
 ----------
 
-Backy includes a self-checking facility. Invoke `backy check` to see if there is
-a recent revision present for all configured backup jobs::
+Backy includes a self-checking facility. Invoke `backy client check` to see if
+there is a recent revision present for all configured backup jobs::
 
-   $ backy check
-   OK: 9 jobs within SLA
+   $ backy client check
+   [...] CLIClient/check-exit                exitcode=0 jobs=9
 
-Both output and exit code are suited for processing with Nagios-compatible
+The exit code is suited for processing with Nagios-compatible
 monitoring systems.
 
 
@@ -188,9 +192,9 @@ GPLv3
 Links
 =====
 
-* `Bitbucket repository <https://bitbucket.org/flyingcircus/backy>`_
+* `Github repository <https://github.com/flyingcircusio/backy>`_
 * `PyPI page <https://pypi.python.org/pypi/backy>`_
 * `Online docs <http://pythonhosted.org/backy/>`_
-* `Build server <https://builds.flyingcircus.io/job/backy/>`_
+* `backy-extract <https://github.com/flyingcircusio/backy-extract>`_
 
 .. vim: set ft=rst spell spelllang=en sw=3:

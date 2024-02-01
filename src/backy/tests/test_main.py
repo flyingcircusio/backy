@@ -1,3 +1,4 @@
+import datetime
 import os
 import pprint
 import sys
@@ -440,8 +441,20 @@ def test_commands_wrapper_status(
 ):
     commands = backy.main.Command(tmp_path, "AAAA", log)
 
-    revision = Revision.create(backup, set(), log, uuid="1")
-    revision.materialize()
+    revision1 = Revision.create(backup, {"daily"}, log, uuid="1")
+    revision1.materialize()
+
+    revision2 = Revision.create(backup, {"daily"}, log, uuid="2")
+    revision2.timestamp = backy.utils.now() + datetime.timedelta(hours=1)
+    revision2.server = "remote"
+    revision2.orig_tags = {"daily"}
+    revision2.materialize()
+
+    revision3 = Revision.create(backup, {"new", "same"}, log, uuid="3")
+    revision3.timestamp = backy.utils.now() + datetime.timedelta(hours=2)
+    revision3.server = "remote"
+    revision3.orig_tags = {"old", "same"}
+    revision3.materialize()
 
     commands.status(yaml_=False, revision="all")
     out, err = capsys.readouterr()
@@ -449,12 +462,19 @@ def test_commands_wrapper_status(
     assert err == ""
     assert out == Ellipsis(
         """\
-┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
-┃ Date (...) ┃ ID ┃    Size ┃ Duration ┃ Tags ┃ Trust   ┃ Server ┃
-┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
-│ ...  │ 1  │ 0 Bytes │        - │      │ trusted │        │
-└──────────────────────┴────┴─────────┴──────────┴──────┴─────────┴────────┘
-1 revisions containing 0 Bytes data (estimated)
+┏━━━━━━━━━━━━━━━━┳━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
+┃ Date           ┃    ┃         ┃          ┃                ┃         ┃        ┃
+┃ (Europe/Berli… ┃ ID ┃    Size ┃ Duration ┃ Tags           ┃ Trust   ┃ Server ┃
+┡━━━━━━━━━━━━━━━━╇━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
+│ 2015-09-01     │ 1  │ 0 Bytes │        - │ daily          │ trusted │        │
+│ 09:06:47       │    │         │          │                │         │        │
+│ 2015-09-01     │ 2  │ 0 Bytes │        - │ daily          │ trusted │ remote │
+│ 10:06:47       │    │         │          │                │         │        │
+│ 2015-09-01     │ 3  │ 0 Bytes │        - │ +new,-old,same │ trusted │ remote │
+│ 11:06:47       │    │         │          │                │         │        │
+└────────────────┴────┴─────────┴──────────┴────────────────┴─────────┴────────┘
+3 revisions containing 0 Bytes data (estimated)
+1 pending change(s) (Push changes with `backy push`)
 """
     )
 

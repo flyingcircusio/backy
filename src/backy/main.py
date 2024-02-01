@@ -62,6 +62,14 @@ class Command(object):
             else:
                 duration = "-"
 
+            if r.pending_changes:
+                added = [f"+[on green]{t}[/]" for t in r.tags - r.orig_tags]
+                removed = [f"-[on red]{t}[/]" for t in r.orig_tags - r.tags]
+                same = list(r.orig_tags & r.tags)
+                tags = ",".join(added + removed + same)
+            else:
+                tags = ",".join(r.tags)
+
             t.add_row(
                 format_datetime_local(r.timestamp)[0],
                 r.uuid,
@@ -69,9 +77,11 @@ class Command(object):
                     r.stats.get("bytes_written", 0), binary=True
                 ),
                 duration,
-                ",".join(r.tags),
+                tags,
                 r.trust.value,
-                r.server,
+                f"[underline italic]{r.server}[/]"
+                if r.pending_changes
+                else r.server,
             )
 
         rprint(t)
@@ -81,6 +91,11 @@ class Command(object):
                 len(revs), humanize.naturalsize(total_bytes, binary=True)
             )
         )
+        pending_changes = sum(1 for r in revs if r.pending_changes)
+        if pending_changes:
+            rprint(
+                f"[yellow]{pending_changes} pending change(s)[/] (Push changes with `backy push`)"
+            )
 
     def backup(self, tags: str, force: bool) -> None:
         b = Backup(self.path, self.log)
@@ -313,7 +328,7 @@ def setup_argparser():
         choices=list(RestoreBackend),
         default=RestoreBackend.AUTO,
         dest="restore_backend",
-        help="(default: %(default)s)"
+        help="(default: %(default)s)",
     )
     p.add_argument(
         "-r",

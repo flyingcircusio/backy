@@ -31,7 +31,7 @@ def test_display_usage(capsys, argv):
         """\
 usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR] [-t TASKID]
               {client,backup,restore,purge,find,status,\
-upgrade,scheduler,distrust,verify,forget,tags,expire}
+upgrade,scheduler,distrust,verify,forget,tags,expire,push,pull}
               ...
 """
         == out
@@ -66,7 +66,7 @@ def test_display_help(capsys, argv):
             """\
 usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR] [-t TASKID]
               {client,backup,restore,purge,find,status,\
-upgrade,scheduler,distrust,verify,forget,tags,expire}
+upgrade,scheduler,distrust,verify,forget,tags,expire,push,pull}
               ...
 
 Backup and restore for block devices.
@@ -391,6 +391,54 @@ def test_call_expire(capsys, backup, argv, monkeypatch):
 ... D quarantine/scan                     entries=0
 ... D command/invoked                     args='... -v -b ... expire'
 ... D command/parsed                      func='expire' func_args={}
+... D command/successful                  \n\
+"""
+        )
+        == utils.log_data
+    )
+    assert exit.value.code == 0
+
+
+@pytest.mark.parametrize("action", ["pull", "push"])
+def test_call_pull_push(capsys, backup, argv, monkeypatch, tmp_path, action):
+    monkeypatch.setattr(backy.main.Command, action, print_args)
+    conf = tmp_path / "conf"
+    with open(conf, "w") as c:
+        c.write(
+            f"""\
+global:
+    base-dir: {str(tmp_path)}
+api:
+    addrs: "127.0.0.1, ::1"
+    port: 1234
+    cli-default:
+        token: "test"
+peers : {{}}
+schedules: {{}}
+jobs: {{}}
+"""
+        )
+
+    argv.extend(["-v", "-b", str(backup.path), action, "-c", str(conf)])
+    utils.log_data = ""
+    with pytest.raises(SystemExit) as exit:
+        backy.main.main()
+    assert exit.value.code == 0
+    out, err = capsys.readouterr()
+    assert (
+        Ellipsis(
+            f"""\
+(<backy.main.Command object at ...>,)
+{{'config': {repr(conf)}}}
+"""
+        )
+        == out
+    )
+    assert (
+        Ellipsis(
+            f"""\
+... D command/invoked                     args='... -v -b {backup.path} {action} -c {conf}'
+... D command/parsed                      func='{action}' func_args={{'config': {repr(conf)}}}
 ... D command/successful                  \n\
 """
         )

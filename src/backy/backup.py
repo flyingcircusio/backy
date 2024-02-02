@@ -752,7 +752,6 @@ class Backup(object):
 
     ###################
     # Syncing Revisions
-    # called by the scheduler without a subprocess
 
     @locked(target=".backup", mode="exclusive")
     async def push_metadata(self, peers, taskid: str):

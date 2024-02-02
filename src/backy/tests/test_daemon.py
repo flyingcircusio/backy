@@ -321,6 +321,8 @@ async def test_task_generator_backoff(
     monkeypatch.setattr(job, "run_purge", null_coroutine)
     monkeypatch.setattr(job, "run_callback", null_coroutine)
     monkeypatch.setattr(job, "run_backup", failing_coroutine)
+    monkeypatch.setattr(job, "pull_metadata", failing_coroutine)
+    monkeypatch.setattr(job, "push_metadata", failing_coroutine)
 
     # This patch causes a single run through the generator loop.
     def update_status(status):
@@ -375,8 +377,6 @@ exception>\tException
 ... W test01[...]         job/backoff                         backoff=480
 ... D test01[...]         quarantine/scan                     entries=0
 ... I test01[...]         job/waiting                         next_tags='daily' next_time='2015-09-01 09:14:47'
-... I test01[...]         backup/pull-start                   \n\
-... I test01[...]         backup/push-start                   \n\
 ... I test01[...]         job/stop                            \n\
 ... D test01[...]         quarantine/scan                     entries=0
 ... I test01[...]         job/waiting                         next_tags='daily' next_time='2015-09-02 07:32:51'

@@ -221,6 +221,29 @@ class Backup(object):
             )
             raise RuntimeError("Unknown tags")
 
+    def warn_pending_changes(self, revs: Optional[List[Revision]] = None):
+        revs = revs if revs is not None else self.history
+        pending = [r for r in revs if r.pending_changes]
+        if pending:
+            self.log.warning(
+                "pending-changes",
+                _fmt_msg="Synchronize with remote server (backy push) or risk loosing changes",
+                revisions=",".join(r.uuid for r in pending),
+            )
+
+    def prevent_remote_rev(self, revs: Optional[List[Revision]] = None):
+        revs = revs if revs is not None else self.history
+        remote = [r for r in revs if r.server]
+        if remote:
+            self.log.error(
+                "remote-revs-disallowed",
+                _fmt_msg="Can not modify trust state of remote revisions locally.\n"
+                "Either include a filter to exclude them (local)\n"
+                "or edit them on the origin server and pull the changes (backy pull)",
+                revisions=",".join(r.uuid for r in remote),
+            )
+            raise RuntimeError("Remote revs disallowed")
+
     #################
     # Making backups
 
@@ -341,13 +364,17 @@ class Backup(object):
 
     @locked(target=".backup", mode="exclusive")
     def distrust(self, revision: str) -> None:
-        for r in self.find_revisions(revision):
+        revs = self.find_revisions(revision)
+        self.prevent_remote_rev(revs)
+        for r in revs:
             r.distrust()
             r.write_info()
 
     @locked(target=".purge", mode="shared")
     def verify(self, revision: str) -> None:
-        for r in self.find_revisions(revision):
+        revs = self.find_revisions(revision)
+        self.prevent_remote_rev(revs)
+        for r in revs:
             r.backend.verify()
 
     @locked(target=".purge", mode="exclusive")

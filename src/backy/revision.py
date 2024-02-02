@@ -143,10 +143,12 @@ class Revision(object):
         return self.server and self.tags != self.orig_tags
 
     def distrust(self) -> None:
+        assert not self.server
         self.log.info("distrusted")
         self.trust = Trust.DISTRUSTED
 
     def verify(self) -> None:
+        assert not self.server
         self.log.info("verified")
         self.trust = Trust.VERIFIED
 

@@ -127,6 +127,7 @@ class Command(object):
     def forget(self, revision: str) -> None:
         b = Backup(self.path, self.log)
         b.forget(revision)
+        b.warn_pending_changes()
 
     def scheduler(self, config: Path) -> None:
         backy.daemon.main(config, self.log)
@@ -203,11 +204,13 @@ class Command(object):
             autoremove=autoremove,
             force=force,
         )
+        b.warn_pending_changes()
         return int(not success)
 
     def expire(self) -> None:
         b = backy.backup.Backup(self.path, self.log)
         b.expire()
+        b.warn_pending_changes()
 
 
 def setup_argparser():

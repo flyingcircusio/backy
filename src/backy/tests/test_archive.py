@@ -23,6 +23,7 @@ uuid: 123-1
 timestamp: 2015-08-30 01:00:00+00:00
 parent: 123-0
 stats: {bytes_written: 1486880, duration: 3.7}
+server: remote2
 tags: [daily, weekly]
 """
         )
@@ -33,6 +34,7 @@ uuid: 123-2
 timestamp: 2015-08-30 02:00:00+00:00
 parent: 123-1
 stats: {}
+server: remote1
 tags: [daily]
 """
         )
@@ -122,6 +124,17 @@ def test_find_revisions(backup_with_revisions):
     ]
     assert a.find_revisions("( (first( (123-0, 123-1)) ))") == [
         a.find("123-0"),
+    ]
+    assert a.find_revisions("server:aaaa") == []
+    assert a.find_revisions("server:remote1") == [
+        a.find("123-2"),
+    ]
+    assert a.find_revisions("local") == [
+        a.find("123-0"),
+    ]
+    assert a.find_revisions("remote") == [
+        a.find("123-1"),
+        a.find("123-2"),
     ]
 
 

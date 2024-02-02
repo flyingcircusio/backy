@@ -309,7 +309,7 @@ class Backup(object):
             except BackendException:
                 self.log.exception("backend-error-distrust-all")
                 verified = False
-                self.distrust("all", skip_lock=True)
+                self.distrust("local", skip_lock=True)
             if not verified:
                 self.log.error(
                     "verification-failed",
@@ -601,7 +601,10 @@ class Backup(object):
             return [token]
         elif isinstance(token, list):
             return token
-        if token.startswith("tag:"):
+        if token.startswith("server:"):
+            server = token.removeprefix("server:")
+            return [r for r in self.history if server == r.server]
+        elif token.startswith("tag:"):
             tag = token.removeprefix("tag:")
             return [r for r in self.history if tag in r.tags]
         elif token.startswith("trust:"):
@@ -611,6 +614,10 @@ class Backup(object):
             return self.history[:]
         elif token == "clean":
             return self.clean_history[:]
+        elif token == "local":
+            return self.find_revisions("server:")
+        elif token == "remote":
+            return self.find_revisions("not(server:)")
         else:
             return [self.find(token)]
 

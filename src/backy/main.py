@@ -393,7 +393,7 @@ def setup_argparser():
         "-r",
         "--revision",
         metavar="SPEC",
-        default="all",
+        default="local",
         help="use revision SPEC to distrust (default: %(default)s)",
     )
     p.set_defaults(func="distrust")
@@ -407,7 +407,7 @@ def setup_argparser():
         "-r",
         "--revision",
         metavar="SPEC",
-        default="trust:distrusted",
+        default="trust:distrusted&local",
         help="use revision SPEC to verify (default: %(default)s)",
     )
     p.set_defaults(func="verify")

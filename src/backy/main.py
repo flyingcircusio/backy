@@ -192,6 +192,18 @@ class Command(object):
         b.expire()
         b.warn_pending_changes()
 
+    def push(self, config):
+        d = backy.daemon.BackyDaemon(config, self.log)
+        d._read_config()
+        b = backy.backup.Backup(self.path, self.log)
+        asyncio.run(b.push_metadata(d.peers, self.taskid))
+
+    def pull(self, config):
+        d = backy.daemon.BackyDaemon(config, self.log)
+        d._read_config()
+        b = backy.backup.Backup(self.path, self.log)
+        asyncio.run(b.pull_metadata(d.peers, self.taskid))
+
 
 def setup_argparser():
     parser = argparse.ArgumentParser(
@@ -471,6 +483,32 @@ def setup_argparser():
         help="Expire tags according to schedule",
     )
     p.set_defaults(func="expire")
+
+    # PUSH
+    p = subparsers.add_parser(
+        "push",
+        help="Push pending changes to remote servers",
+    )
+    p.add_argument(
+        "-c",
+        "--config",
+        default="/etc/backy.conf",
+        help="(default: %(default)s)",
+    )
+    p.set_defaults(func="push")
+
+    # PULL
+    p = subparsers.add_parser(
+        "pull",
+        help="Push pending changes to remote servers",
+    )
+    p.add_argument(
+        "-c",
+        "--config",
+        default="/etc/backy.conf",
+        help="(default: %(default)s)",
+    )
+    p.set_defaults(func="pull")
 
     return parser, client
 

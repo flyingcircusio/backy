@@ -270,7 +270,7 @@ async def test_split_brain(daemons, log):
         revs[3].uuid,
     ]
 
-    bs[1].history[0].tags.add("manual:new1")
+    bs[1].tags("add", bs[1].history[0].uuid, {"manual:new1"})
     bs[3].history[0].remove()
 
     await js[1].push_metadata()

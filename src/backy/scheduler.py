@@ -225,10 +225,72 @@ class Job(object):
                 self.update_status("finished")
 
     async def pull_metadata(self):
-        await self.backup.pull_metadata(self.daemon.peers, self.taskid)
+        self.log.info("pull-metadata-started")
+        proc = await asyncio.create_subprocess_exec(
+            BACKY_CMD,
+            "-t",
+            self.taskid,
+            "-b",
+            self.path,
+            "-l",
+            self.logfile,
+            "pull",
+            "-c",
+            self.daemon.config_file,
+            close_fds=True,
+            start_new_session=True,  # Avoid signal propagation like Ctrl-C
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            return_code = await proc.wait()
+            self.log.info(
+                "pull-metadata-finished",
+                return_code=return_code,
+                subprocess_pid=proc.pid,
+            )
+        except asyncio.CancelledError:
+            self.log.warning("pull-metadata-cancelled")
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+            raise
 
     async def push_metadata(self):
-        await self.backup.push_metadata(self.daemon.peers, self.taskid)
+        self.log.info("push-metadata-started")
+        proc = await asyncio.create_subprocess_exec(
+            BACKY_CMD,
+            "-t",
+            self.taskid,
+            "-b",
+            self.path,
+            "-l",
+            self.logfile,
+            "push",
+            "-c",
+            self.daemon.config_file,
+            close_fds=True,
+            start_new_session=True,  # Avoid signal propagation like Ctrl-C
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            return_code = await proc.wait()
+            self.log.info(
+                "push-metadata-finished",
+                return_code=return_code,
+                subprocess_pid=proc.pid,
+            )
+        except asyncio.CancelledError:
+            self.log.warning("push-metadata-cancelled")
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+            raise
 
     async def run_backup(self, tags):
         self.log.info("backup-started", tags=", ".join(tags))

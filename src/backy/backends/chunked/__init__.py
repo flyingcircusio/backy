@@ -56,7 +56,7 @@ class ChunkedFileBackend(BackyBackend):
     def purge(self):
         self.log.debug("purge")
         self.store.users = []
-        for revision in self.backup.history:
+        for revision in self.backup.local_history:
             try:
                 self.store.users.append(
                     self.backup.backend_factory(revision, self.log).open()
@@ -73,7 +73,7 @@ class ChunkedFileBackend(BackyBackend):
         verified_chunks = set()
 
         # Load verified chunks to avoid duplicate work
-        for revision in self.backup.clean_history:
+        for revision in self.backup.get_history(clean=True, local=True):
             if revision.trust != Trust.VERIFIED:
                 continue
             f = self.backup.backend_factory(revision, log).open()
@@ -137,7 +137,7 @@ class ChunkedFileBackend(BackyBackend):
     def scrub_light(self, backup):
         errors = 0
         self.log.info("scrub-light")
-        for revision in backup.history:
+        for revision in backup.local_history:
             self.log.info("scrub-light-rev", revision_uuid=revision.uuid)
             backend = backup.backend_factory(revision, self.log).open()
             for hash in backend._mapping.values():

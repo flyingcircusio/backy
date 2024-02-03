@@ -37,6 +37,9 @@ def test_purge(simple_file_config, log):
     f.write(b"asdf")
     f.close()
     r.materialize()
+    remote = Revision(b, log)  # remote revision without local data
+    remote.server = "remote"
+    remote.materialize()
     b.scan()
     # Reassign as the scan will create a new reference
     r = b.history[0]

@@ -170,6 +170,8 @@ class Revision(object):
         """defaults to last rev if not in history"""
         prev = None
         for r in self.backup.history:
+            if r.server != self.server:
+                continue
             if r.uuid == self.uuid:
                 break
             prev = r

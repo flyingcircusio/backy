@@ -210,11 +210,9 @@ class BackyAPI:
     async def get_revs(self, request: web.Request) -> List[Revision]:
         backup = await self.get_backup(request)
         request["log"].info("get-revs", name=backup.name)
-        if request.query.get("only_clean", "") == "1":
-            revs = backup.clean_history
-        else:
-            revs = backup.history
-        return [r for r in revs if not r.server]
+        return backup.get_history(
+            local=True, clean=request.query.get("only_clean", "") == "1"
+        )
 
     async def put_tags(self, request: web.Request):
         json = await request.json()

@@ -159,13 +159,13 @@ class Backup(object):
         # Initialize our backend
         self.backend_type = self.config["source"].get("backend", None)
         if self.backend_type is None:
-            if not self.history:
+            if not self.local_history:
                 # Start fresh backups with our new default.
                 self.backend_type = "chunked"
             else:
                 # Choose to continue existing backups with whatever format
                 # they are in.
-                self.backend_type = self.history[-1].backend_type
+                self.backend_type = self.local_history[-1].backend_type
 
         self.schedule = Schedule()
         self.schedule.configure(self.config["schedule"])
@@ -213,14 +213,34 @@ class Backup(object):
         if p.exists(path):
             os.remove(path)
 
+    def get_history(
+        self, *, clean: bool = False, local: bool = False
+    ) -> list[Revision]:
+        return [
+            rev
+            for rev in self.history
+            if (not clean or "duration" in rev.stats)
+            and (not local or not rev.server)
+        ]
+
     @property
     def clean_history(self):
         """History without incomplete revisions."""
-        return [rev for rev in self.history if "duration" in rev.stats]
+        return self.get_history(clean=True)
+
+    @property
+    def local_history(self):
+        """History without incomplete revisions."""
+        return self.get_history(local=True)
 
     @property
     def contains_distrusted(self):
-        return any((r == Trust.DISTRUSTED for r in self.clean_history))
+        return any(
+            (
+                r == Trust.DISTRUSTED
+                for r in self.get_history(clean=True, local=True)
+            )
+        )
 
     def validate_tags(self, tags):
         missing_tags = (
@@ -264,7 +284,7 @@ class Backup(object):
     @locked(target=".backup", mode="exclusive")
     def _clean(self):
         """Clean-up incomplete revisions."""
-        for revision in self.history:
+        for revision in self.local_history:
             if "duration" not in revision.stats:
                 self.log.warning(
                     "clean-incomplete", revision_uuid=revision.uuid
@@ -373,7 +393,7 @@ class Backup(object):
         # moving along automatically. This could also be moved into the
         # scheduler.
         self.scan()
-        for revision in reversed(self.clean_history):
+        for revision in reversed(self.get_history(clean=True, local=True)):
             if revision.trust == Trust.DISTRUSTED:
                 self.log.warning("inconsistent")
                 backend = self.backend_factory(revision, self.log)
@@ -398,7 +418,7 @@ class Backup(object):
 
     @locked(target=".purge", mode="exclusive")
     def purge(self):
-        backend = self.backend_factory(self.history[0], self.log)
+        backend = self.backend_factory(self.local_history[0], self.log)
         backend.purge()
         self.clear_purge_pending()
 
@@ -514,7 +534,9 @@ class Backup(object):
         while True:
             self.scan()
             to_upgrade = [
-                r for r in self.clean_history if r.backend_type == "cowfile"
+                r
+                for r in self.get_history(clean=True, local=True)
+                if r.backend_type == "cowfile"
             ]
             if not to_upgrade:
                 break
@@ -660,7 +682,7 @@ class Backup(object):
         elif token == "all":
             return self.history[:]
         elif token == "clean":
-            return self.clean_history[:]
+            return self.clean_history
         elif token == "local":
             return self.find_revisions("server:")
         elif token == "remote":
@@ -776,7 +798,7 @@ class Backup(object):
     @locked(target=".backup", mode="exclusive")
     async def push_metadata(self, peers, taskid: str):
         grouped = defaultdict(list)
-        for r in self.history:
+        for r in self.clean_history:
             if r.pending_changes:
                 grouped[r.server].append(r)
         self.log.info(

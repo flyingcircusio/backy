@@ -156,13 +156,13 @@ class Backup(object):
         # Initialize our backend
         self.default_backend_type = self.config["source"].get("backend", None)
         if self.default_backend_type is None:
-            if not self.history:
+            if not self.local_history:
                 # Start fresh backups with our new default.
                 self.default_backend_type = "chunked"
             else:
                 # Choose to continue existing backups with whatever format
                 # they are in.
-                self.default_backend_type = self.history[-1].backend_type
+                self.default_backend_type = self.local_history[-1].backend_type
 
         self.schedule = Schedule()
         self.schedule.configure(self.config["schedule"])
@@ -199,14 +199,34 @@ class Backup(object):
     def clear_purge_pending(self):
         self.path.joinpath(".purge_pending").unlink(missing_ok=True)
 
+    def get_history(
+        self, *, clean: bool = False, local: bool = False
+    ) -> list[Revision]:
+        return [
+            rev
+            for rev in self.history
+            if (not clean or "duration" in rev.stats)
+            and (not local or not rev.server)
+        ]
+
     @property
     def clean_history(self) -> List[Revision]:
         """History without incomplete revisions."""
-        return [rev for rev in self.history if "duration" in rev.stats]
+        return self.get_history(clean=True)
+
+    @property
+    def local_history(self):
+        """History without incomplete revisions."""
+        return self.get_history(local=True)
 
     @property
     def contains_distrusted(self) -> bool:
-        return any((r == Trust.DISTRUSTED for r in self.clean_history))
+        return any(
+            (
+                r == Trust.DISTRUSTED
+                for r in self.get_history(clean=True, local=True)
+            )
+        )
 
     def validate_tags(self, tags):
         missing_tags = (
@@ -250,7 +270,7 @@ class Backup(object):
     @locked(target=".backup", mode="exclusive")
     def _clean(self) -> None:
         """Clean-up incomplete revisions."""
-        for revision in self.history:
+        for revision in self.local_history:
             if "duration" not in revision.stats:
                 self.log.warning(
                     "clean-incomplete", revision_uuid=revision.uuid
@@ -356,7 +376,7 @@ class Backup(object):
         # moving along automatically. This could also be moved into the
         # scheduler.
         self.scan()
-        for revision in reversed(self.clean_history):
+        for revision in reversed(self.get_history(clean=True, local=True)):
             if revision.trust == Trust.DISTRUSTED:
                 self.log.warning("inconsistent")
                 revision.backend.verify()
@@ -379,7 +399,7 @@ class Backup(object):
 
     @locked(target=".purge", mode="exclusive")
     def purge(self) -> None:
-        self.history[-1].backend.purge()
+        self.local_history[-1].backend.purge()
         self.clear_purge_pending()
 
     #################
@@ -493,7 +513,9 @@ class Backup(object):
         while True:
             self.scan()
             to_upgrade: List[Revision] = [
-                r for r in self.clean_history if r.backend_type == "cowfile"
+                r
+                for r in self.get_history(clean=True, local=True)
+                if r.backend_type == "cowfile"
             ]
             if not to_upgrade:
                 break
@@ -640,7 +662,7 @@ class Backup(object):
         elif token == "all":
             return self.history[:]
         elif token == "clean":
-            return self.clean_history[:]
+            return self.clean_history
         elif token == "local":
             return self.find_revisions("server:")
         elif token == "remote":
@@ -756,7 +778,7 @@ class Backup(object):
     @locked(target=".backup", mode="exclusive")
     async def push_metadata(self, peers, taskid: str):
         grouped = defaultdict(list)
-        for r in self.history:
+        for r in self.clean_history:
             if r.pending_changes:
                 grouped[r.server].append(r)
         self.log.info(

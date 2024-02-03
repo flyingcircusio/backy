@@ -187,6 +187,8 @@ class Revision(object):
                 continue
             if not ignore_trust and r.trust == Trust.DISTRUSTED:
                 continue
+            if r.server != self.server:
+                continue
             if r.uuid == self.uuid:
                 break
             prev = r

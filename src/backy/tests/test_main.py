@@ -283,7 +283,7 @@ jobs: {{}}
 ... D command/parsed                      func='client' func_args={{'config': PosixPath('...'), 'peer': None, \
 'url': None, 'token': None{", "*bool(args)}{str(args)[1:-1]}, 'apifunc': '{action}'}}
 ... D daemon/read-config                  ...
-... D command/successful                  \n\
+... D command/return-code                 code=0
 """
         )
         == utils.log_data
@@ -474,7 +474,7 @@ def test_call_unexpected_exception(
 ... E command/failed                      exception_class='builtins.RuntimeError' exception_msg='test'
 exception>\tTraceback (most recent call last):
 exception>\t  File ".../src/backy/main.py", line ..., in main
-exception>\t    func(**func_args)
+exception>\t    ret = func(**func_args)
 exception>\t  File ".../src/backy/tests/test_main.py", line ..., in do_raise
 exception>\t    raise RuntimeError("test")
 exception>\tRuntimeError: test

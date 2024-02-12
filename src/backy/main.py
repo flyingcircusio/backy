@@ -156,30 +156,58 @@ class Command(object):
         token: str,
         apifunc: str,
         **kwargs,
-    ) -> None:
-        async def run():
+    ) -> int:
+        async def run() -> int:
+            if peer and (url or token):
+                self.log.error(
+                    "client-argparse-error",
+                    _fmt_msg="--peer conflicts with --url and --token",
+                )
+                return 1
+            if bool(url) ^ bool(token):
+                self.log.error(
+                    "client-argparse-error",
+                    _fmt_msg="--url and --token require each other",
+                )
+                return 1
             if url and token:
                 api = APIClient("<server>", url, token, self.taskid, self.log)
             else:
                 d = backy.daemon.BackyDaemon(config, self.log)
                 d._read_config()
                 if peer:
+                    if peer not in d.peers:
+                        self.log.error(
+                            "client-peer-unknown",
+                            _fmt_msg="The peer {peer} is not known. Select a known peer or specify --url and --token.\n"
+                            "The following peers are known: {known}",
+                            peer=peer,
+                            known=", ".join(d.peers.keys()),
+                        )
+                        return 1
                     api = APIClient.from_conf(
                         peer, d.peers[peer], self.taskid, self.log
                     )
                 else:
+                    if "token" not in d.api_cli_default:
+                        self.log.error(
+                            "client-missing-defaults",
+                            _fmt_msg="The config file is missing default parameters. Please specify --url and --token",
+                        )
+                        return 1
                     api = APIClient.from_conf(
                         "<server>", d.api_cli_default, self.taskid, self.log
                     )
             async with CLIClient(api, self.log) as c:
                 try:
                     await getattr(c, apifunc)(**kwargs)
-                except ClientConnectionError as e:
+                except ClientConnectionError:
                     c.log.error("connection-error", exc_style="banner")
                     c.log.debug("connection-error", exc_info=True)
-                    sys.exit(1)
+                    return 1
+            return 0
 
-        asyncio.run(run())
+        return asyncio.run(run())
 
     def tags(
         self,
@@ -212,17 +240,19 @@ class Command(object):
         b.expire()
         b.warn_pending_changes()
 
-    def push(self, config: Path):
+    def push(self, config: Path) -> int:
         d = backy.daemon.BackyDaemon(config, self.log)
         d._read_config()
         b = backy.backup.Backup(self.path, self.log)
-        asyncio.run(b.push_metadata(d.peers, self.taskid))
+        errors = asyncio.run(b.push_metadata(d.peers, self.taskid))
+        return int(bool(errors))
 
-    def pull(self, config: Path):
+    def pull(self, config: Path) -> int:
         d = backy.daemon.BackyDaemon(config, self.log)
         d._read_config()
         b = backy.backup.Backup(self.path, self.log)
-        asyncio.run(b.pull_metadata(d.peers, self.taskid))
+        errors = asyncio.run(b.pull_metadata(d.peers, self.taskid))
+        return int(bool(errors))
 
 
 def setup_argparser():
@@ -587,7 +617,10 @@ def main():
 
     try:
         log.debug("parsed", func=args.func, func_args=func_args)
-        func(**func_args)
+        ret = func(**func_args)
+        if isinstance(ret, int):
+            log.debug("return-code", code=ret)
+            sys.exit(ret)
         log.debug("successful")
         sys.exit(0)
     except Exception:

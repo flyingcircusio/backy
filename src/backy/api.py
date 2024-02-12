@@ -88,7 +88,7 @@ class BackyAPI:
             )
             await site.start()
             self.log.info("added-site", site=site.name)
-        for bind_addr, site in self.sites.items():
+        for bind_addr, site in list(self.sites.items()):
             if bind_addr in bind_addrs:
                 continue
             await site.stop()

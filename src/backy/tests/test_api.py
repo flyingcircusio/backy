@@ -208,6 +208,24 @@ async def test_simple_sync(daemons, log):
     assert new_rev1.trust == rev1.trust
     assert new_rev1.server == "server-1"
 
+    rev1.distrust()
+    rev1.tags = {"manual:new"}
+    rev1.write_info()
+
+    await j0.pull_metadata()
+    b0.scan()
+
+    assert [r.uuid for r in b0.history] == [rev0.uuid, rev1.uuid]
+    new_rev1 = b0.history[1]
+    assert new_rev1.backup == b0
+    assert new_rev1.timestamp == rev1.timestamp
+    assert new_rev1.backend_type == ""
+    assert new_rev1.stats == rev1.stats
+    assert new_rev1.tags == rev1.tags
+    assert new_rev1.orig_tags == rev1.tags
+    assert new_rev1.trust == rev1.trust
+    assert new_rev1.server == "server-1"
+
     new_rev1.remove()
     assert [r.uuid for r in b0.history] == [rev0.uuid, rev1.uuid]
     assert new_rev1.tags == set()

@@ -877,7 +877,7 @@ class Backup(object):
         try:
             await api.touch_backup(self.name)
             remote_revs = await api.get_revs(self)
-
+            log.debug("pull-found-revs", revs=len(remote_revs))
         except ClientResponseError as e:
             if e.status in [
                 HTTPNotFound.status_code,
@@ -893,22 +893,20 @@ class Backup(object):
         except ClientError:
             log.warning("pull-error", exc_info=True)
             remote_revs = []
-        log.debug(
-            "pull-found-revs",
-            revs=len(remote_revs),
-        )
 
-        matching_uuids = {
+        local_uuids = {
             r.uuid for r in self.history if r.server == api.server_name
         }
         remote_uuids = {r.uuid for r in remote_revs}
-        for uuid in matching_uuids - remote_uuids:
+        for uuid in local_uuids - remote_uuids:
             log.warning("pull-removing-unknown-rev", rev_uuid=uuid)
             self.find_by_uuid(uuid).remove(force=True)
 
         for r in remote_revs:
+            if r.uuid in local_uuids:
+                if r.to_dict() == self.find_by_uuid(r.uuid).to_dict():
+                    continue
+                log.debug("pull-updating-rev", rev_uid=r.uuid)
+            else:
+                log.debug("pull-new-rev", rev_uid=r.uuid)
             r.write_info()
-            log.debug(
-                "pull-updated-rev",
-                rev_uid=r.uuid,
-            )

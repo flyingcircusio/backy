@@ -149,16 +149,43 @@ class Command(object):
 
     def client(self, config, peer, url, token, apifunc, **kwargs):
         async def run():
+            if peer and (url or token):
+                self.log.error(
+                    "client-argparse-error",
+                    _fmt_msg="--peer conflicts with --url and --token",
+                )
+                sys.exit(1)
+            if bool(url) ^ bool(token):
+                self.log.error(
+                    "client-argparse-error",
+                    _fmt_msg="--url and --token require each other",
+                )
+                sys.exit(1)
             if url and token:
                 api = APIClient("<server>", url, token, self.taskid, self.log)
             else:
                 d = backy.daemon.BackyDaemon(config, self.log)
                 d._read_config()
                 if peer:
+                    if peer not in d.peers:
+                        self.log.error(
+                            "client-peer-unknown",
+                            _fmt_msg="The peer {peer} is not known. Select a known peer or specify --url and --token.\n"
+                            "The following peers are known: {known}",
+                            peer=peer,
+                            known=", ".join(d.peers.keys()),
+                        )
+                        sys.exit(1)
                     api = APIClient.from_conf(
                         peer, d.peers[peer], self.taskid, self.log
                     )
                 else:
+                    if "token" not in d.api_cli_default:
+                        self.log.error(
+                            "client-missing-defaults",
+                            _fmt_msg="The config file is missing default parameters. Please specify --url and --token",
+                        )
+                        sys.exit(1)
                     api = APIClient.from_conf(
                         "<server>", d.api_cli_default, self.taskid, self.log
                     )

@@ -26,7 +26,7 @@ def test_find(simple_file_config, tmpdir, log):
     rev.timestamp = backy.utils.now()
     rev.materialize()
     backup.scan()
-    assert str(tmpdir / "123-456") == backup.find(0).filename
+    assert str(tmpdir / "123-456") == backup.find("0").filename
 
 
 def test_find_should_raise_if_not_found(simple_file_config, log):
@@ -46,7 +46,7 @@ def test_restore_target(simple_file_config):
     with open(source, "wb") as f:
         f.write(b"volume contents\n")
     backup.backup({"daily"})
-    backup.restore(0, target)
+    backup.restore("0", target)
     with open(source, "rb") as s, open(target, "rb") as t:
         assert s.read() == t.read()
 
@@ -57,7 +57,7 @@ def test_restore_stdout(simple_file_config, capfd):
     with open(source, "wb") as f:
         f.write(b"volume contents\n")
     backup.backup({"daily"})
-    backup.restore(0, "-")
+    backup.restore("0", "-")
     assert not os.path.exists("-")
     out, err = capfd.readouterr()
     assert "volume contents\n" == out
@@ -72,10 +72,10 @@ def test_restore_backy_extract(simple_file_config, monkeypatch):
     with open(source, "wb") as f:
         f.write(b"a" * CHUNK_SIZE)
     backup.backup({"daily"})
-    backup.restore(0, "restore.img")
+    backup.restore("0", "restore.img")
     check_output.assert_called()
     backup.restore_backy_extract.assert_called_once_with(
-        backup.find(0), "restore.img"
+        backup.find("0"), "restore.img"
     )
 
 

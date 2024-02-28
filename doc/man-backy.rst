@@ -141,16 +141,48 @@ Subcommand-specific options
     Valid for **scheduler** and **check** subcommands.
 
 **-r** *REVISION*
-    Selects a revision other than the last revision.
+    Selects one or more revisions other than the default.
 
-    Revisions can be specified in the following ways:
+    A single revision can be specified in the following ways:
 
-    * A full revision ID as printed with **backy status**. ID prefixes are OK as
-      long as they are unique.
+    * A full revision ID as printed with **backy status**.
     * A relative revision count: 0 is the last revision, 1 the one before, ...
-    * The key word **last** or **latest** as alias for the last revision.
-    * A revision tag. If several revisions with the given tag exist, the newest
-      one will be given.
+    * The key word **last** or **latest** is an alias for the last revision.
+    * The key word **first** is an alias for the first revision.
+    * The function **first** followed by a revision specifier in parentheses.
+      This returns the first value in the list, not the earliest by date.
+    * The function **last** followed by a revision specifier in parentheses.
+      This returns the last value in the list, not the latest by date.
+
+    Multiple revisions can be specified in the following ways:
+
+    * A multi revision specifier enclosed in parentheses.
+    * The function **not** followed by a revision specifier in parentheses.
+      This returns every revision which is not in the list.
+      Ordered by date, oldest first.
+    * The function **reverse** followed by a revision specifier in parentheses.
+      This returns the list in reversed order.
+    * The key word **all** is an alias for all revisions.
+      Ordered by date, oldest first.
+    * The key word **clean** is an alias for all clean/completed revisions.
+      Ordered by date, oldest first.
+    * A Trust state with the **trust:** prefix: Selects all revisions with this
+      Trust state. Ordered by date, oldest first.
+    * A tag with the **tag:** prefix. Selects all revisions with this tag.
+      Ordered by date, oldest first.
+    * An inclusive range using two single revision specifiers separated with two
+      dots. The singe revision specifiers may be omitted, in which case the
+      **first** and/or **last** revision is assumed.
+      In addition to the single revision specifiers iso dates are also
+      supported (YYYY-MM-DD[THH:MM:SS[.ffffff]+HH:MM[:SS[.ffffff]]). The time
+      defaults to 00:00 and the timezone to the local timezone. The result is
+      ordered by date, oldest first, regardless of the provided argument order.
+    * An intersection using an ampersand separated list of all the above
+      specifiers. The order will be preserved.
+    * A comma separated list of all the above specifiers. The order will be
+      preserved and duplicates removed.
+
+    All subcommands except restore accept multiple revisions.
 
     Valid for **find** and **restore** subcommands.
 

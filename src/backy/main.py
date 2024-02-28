@@ -25,16 +25,6 @@ from .backup import RestoreBackend
 from .client import APIClient, CLIClient
 
 
-def valid_date(s):
-    if s is None:
-        return None
-    try:
-        return datetime.datetime.strptime(s, "%Y-%m-%d").date()
-    except ValueError:
-        msg = "Not a valid date: '{0}'.".format(s)
-        raise argparse.ArgumentTypeError(msg)
-
-
 class Command(object):
     """Proxy between CLI calls and actual backup code."""
 
@@ -45,10 +35,10 @@ class Command(object):
         self.path = path
         self.log = log
 
-    def status(self, yaml_: bool):
-        b = backy.backup.Backup(self.path, self.log)
+    def status(self, yaml_: bool, revision):
+        revs = backy.backup.Backup(self.path, self.log).find_revisions(revision)
         if yaml_:
-            print(yaml.safe_dump([r.to_dict() for r in b.clean_history]))
+            print(yaml.safe_dump([r.to_dict() for r in revs]))
             return
         total_bytes = 0
 
@@ -62,7 +52,7 @@ class Command(object):
             "Trust",
         )
 
-        for r in b.history:
+        for r in revs:
             total_bytes += r.stats.get("bytes_written", 0)
             duration = r.stats.get("duration")
             if duration:
@@ -85,7 +75,7 @@ class Command(object):
 
         print(
             "{} revisions containing {} data (estimated)".format(
-                len(b.history), humanize.naturalsize(total_bytes, binary=True)
+                len(revs), humanize.naturalsize(total_bytes, binary=True)
             )
         )
 
@@ -106,9 +96,17 @@ class Command(object):
         b = backy.backup.Backup(self.path, self.log)
         b.restore(revision, target, restore_backend)
 
+    def find(self, revision, uuid):
+        b = backy.backup.Backup(self.path, self.log)
+        for r in b.find_revisions(revision):
+            if uuid:
+                print(r.uuid)
+            else:
+                print(r.filename)
+
     def forget(self, revision):
         b = backy.backup.Backup(self.path, self.log)
-        b.forget_revision(revision)
+        b.forget(revision)
 
     def scheduler(self, config):
         backy.daemon.main(config, self.log)
@@ -121,9 +119,9 @@ class Command(object):
         b = backy.backup.Backup(self.path, self.log)
         b.upgrade()
 
-    def distrust(self, revision, from_, until):
+    def distrust(self, revision):
         b = backy.backup.Backup(self.path, self.log)
-        b.distrust(revision, from_, until)
+        b.distrust(revision)
 
     def verify(self, revision):
         b = backy.backup.Backup(self.path, self.log)
@@ -313,6 +311,25 @@ Purge the backup store (i.e. chunked) from unused data.
     )
     p.set_defaults(func="purge")
 
+    # FIND
+    p = subparsers.add_parser(
+        "find",
+        help="Print full path or uuid of specified revisions",
+    )
+    p.add_argument(
+        "--uuid",
+        action="store_true",
+        help="Print uuid instead of full path",
+    )
+    p.add_argument(
+        "-r",
+        "--revision",
+        metavar="SPEC",
+        default="latest",
+        help="use revision SPEC to find (default: %(default)s)",
+    )
+    p.set_defaults(func="find")
+
     # STATUS
     p = subparsers.add_parser(
         "status",
@@ -321,6 +338,13 @@ Show backup status. Show inventory and summary information.
 """,
     )
     p.add_argument("--yaml", dest="yaml_", action="store_true")
+    p.add_argument(
+        "-r",
+        "--revision",
+        metavar="SPEC",
+        default="all",
+        help="use revision SPEC as filter (default: %(default)s)",
+    )
     p.set_defaults(func="status")
 
     # upgrade
@@ -346,30 +370,15 @@ Run the scheduler.
     p = subparsers.add_parser(
         "distrust",
         help="""\
-Distrust one or all revisions.
+Distrust specified revisions.
 """,
     )
     p.add_argument(
         "-r",
         "--revision",
         metavar="SPEC",
-        default="",
-        help="use revision SPEC to distrust, distrusting all if not given",
-    )
-    p.add_argument(
-        "-f",
-        "--from",
-        metavar="DATE",
-        type=valid_date,
-        help="Mark revisions on or after this date as distrusted",
-        dest="from_",
-    )
-    p.add_argument(
-        "-u",
-        "--until",
-        metavar="DATE",
-        type=valid_date,
-        help="Mark revisions on or before this date as distrusted",
+        default="all",
+        help="use revision SPEC to distrust (default: %(default)s)",
     )
     p.set_defaults(func="distrust")
 
@@ -377,15 +386,15 @@ Distrust one or all revisions.
     p = subparsers.add_parser(
         "verify",
         help="""\
-Verify one or all revisions.
+Verify specified revisions.
 """,
     )
     p.add_argument(
         "-r",
         "--revision",
         metavar="SPEC",
-        default="",
-        help="use revision SPEC to verify, verifying all if not given",
+        default="trust:distrusted",
+        help="use revision SPEC to verify (default: %(default)s)",
     )
     p.set_defaults(func="verify")
 
@@ -393,7 +402,7 @@ Verify one or all revisions.
     p = subparsers.add_parser(
         "forget",
         help="""\
-Forget revision.
+Forget specified revisions.
 """,
     )
     p.add_argument(

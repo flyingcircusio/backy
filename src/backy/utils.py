@@ -10,7 +10,8 @@ import subprocess
 import sys
 import tempfile
 import time
-from typing import IO, Callable
+import typing
+from typing import IO, Callable, Iterable, List, TypeVar
 from zoneinfo import ZoneInfo
 
 import humanize
@@ -19,6 +20,9 @@ import tzlocal
 
 from .ext_deps import CP
 from .fallocate import punch_hole
+
+_T = TypeVar("_T")
+_U = TypeVar("_U")
 
 log = structlog.stdlib.get_logger(subsystem="utils")
 
@@ -467,3 +471,39 @@ def format_datetime_local(dt):
         dt.astimezone(tz).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S"),
         tz,
     )
+
+
+def unique(iterable: Iterable[_T]) -> List[_T]:
+    return list(dict.fromkeys(iterable))
+
+
+def duplicates(a: List[_T], b: List[_T]) -> List[_T]:
+    return unique(i for i in a if i in b)
+
+
+def list_rindex(l: List[_T], v: _T) -> int:
+    return len(l) - l[-1::-1].index(v) - 1
+
+
+@typing.overload
+def list_get(l: List[_T], i: int) -> _T | None:
+    ...
+
+
+@typing.overload
+def list_get(l: List[_T], i: int, default: _U) -> _T | _U:
+    ...
+
+
+def list_get(l, i, default=None):
+    return l[i] if -len(l) <= i < len(l) else default
+
+
+def list_split(l: List[_T], v: _T) -> List[List[_T]]:
+    res: List[List[_T]] = [[]]
+    for i in l:
+        if i == v:
+            res.append([])
+        else:
+            res[-1].append(i)
+    return res

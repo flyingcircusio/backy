@@ -190,7 +190,7 @@ def test_choose_diff_with_snapshot(
     "backend_factory", [COWFileBackend, ChunkedFileBackend]
 )
 def test_diff_backup(
-    ceph_rbd_imagesource, backup, tmpdir, backend_factory, log
+    ceph_rbd_imagesource, backup, tmp_path, backend_factory, log
 ):
     """When doing a diff backup between two revisions with snapshot, the RBDDiff needs
     to be called properly, a snapshot for the new revision needs to be created and the
@@ -250,7 +250,7 @@ def test_diff_backup(
     "backend_factory", [COWFileBackend, ChunkedFileBackend]
 )
 def test_full_backup(
-    ceph_rbd_imagesource, backup, tmpdir, backend_factory, log
+    ceph_rbd_imagesource, backup, tmp_path, backend_factory, log
 ):
     source = ceph_rbd_imagesource
 
@@ -298,7 +298,7 @@ def test_full_backup(
     "backend_factory", [COWFileBackend, ChunkedFileBackend]
 )
 def test_full_backup_integrates_changes(
-    ceph_rbd_imagesource, backup, tmpdir, backend_factory, log
+    ceph_rbd_imagesource, backup, tmp_path, backend_factory, log
 ):
     # The backup source changes between two consecutive full backups. Both
     # backup images should reflect the state of the source at the time the
@@ -334,7 +334,7 @@ def test_full_backup_integrates_changes(
     "backend_factory", [COWFileBackend, ChunkedFileBackend]
 )
 def test_verify_fail(
-    backup, tmpdir, backend_factory, ceph_rbd_imagesource, log
+    backup, tmp_path, backend_factory, ceph_rbd_imagesource, log
 ):
     source = ceph_rbd_imagesource
 
@@ -345,7 +345,7 @@ def test_verify_fail(
 
     backup.scan()
 
-    rbd_source = str(tmpdir / "-dev-rbd0")
+    rbd_source = str(tmp_path / "-dev-rbd0")
     with open(rbd_source, "w") as f:
         f.write("Han likes Leia.")
 
@@ -364,7 +364,7 @@ def test_verify_fail(
 def test_verify(
     ceph_rbd_imagesource,
     backup,
-    tmpdir,
+    tmp_path,
     backend_factory,
     log,
 ):

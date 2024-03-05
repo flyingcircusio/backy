@@ -12,21 +12,21 @@ from backy.sources.file import File
 from backy.utils import CHUNK_SIZE
 
 
-def test_config(simple_file_config, tmpdir):
+def test_config(simple_file_config, tmp_path):
     backup = simple_file_config
 
-    assert backup.path == str(tmpdir)
+    assert backup.path == tmp_path
     assert isinstance(backup.source, File)
     assert backup.source.filename == "input-file"
 
 
-def test_find(simple_file_config, tmpdir, log):
+def test_find(simple_file_config, tmp_path, log):
     backup = simple_file_config
     rev = Revision(backup, log, "123-456", backup)
     rev.timestamp = backy.utils.now()
     rev.materialize()
     backup.scan()
-    assert str(tmpdir / "123-456") == backup.find("0").filename
+    assert tmp_path / "123-456" == backup.find("0").filename
 
 
 def test_find_should_raise_if_not_found(simple_file_config, log):

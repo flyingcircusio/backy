@@ -2,11 +2,11 @@ from backy.quarantine import QuarantineReport, QuarantineStore
 from backy.tests import Ellipsis
 
 
-def test_quarantine(tmpdir, log, clock):
-    store = QuarantineStore(tmpdir, log)
+def test_quarantine(tmp_path, log, clock):
+    store = QuarantineStore(tmp_path, log)
     store.add_report(QuarantineReport(b"source", b"target", 3))
     with open(
-        tmpdir / "quarantine" / store.report_ids[0] + ".report"
+        (tmp_path / "quarantine" / store.report_ids[0]).with_suffix(".report")
     ) as report:
         assert (
             Ellipsis(
@@ -28,11 +28,11 @@ traceback: |-
         )
 
     with open(
-        tmpdir / "quarantine" / "chunks" / "36cd38f49b9afa08222c0dc9ebfe35eb"
+        tmp_path / "quarantine" / "chunks" / "36cd38f49b9afa08222c0dc9ebfe35eb"
     ) as source:
         assert "source" == source.read()
 
     with open(
-        tmpdir / "quarantine" / "chunks" / "42aefbae01d2dfd981f7da7d823d689e"
+        tmp_path / "quarantine" / "chunks" / "42aefbae01d2dfd981f7da7d823d689e"
     ) as target:
         assert "target" == target.read()

@@ -41,8 +41,14 @@ class File(object):
     _mapping: dict[int, str]
     _chunks: dict[int, Chunk]
 
-    def __init__(self, name, store, mode="rw", overlay=False):
-        self.name = name
+    def __init__(
+        self,
+        name: str | os.PathLike,
+        store: "backy.backends.chunked.Store",
+        mode: str = "rw",
+        overlay: bool = False,
+    ):
+        self.name = str(name)
         self.store = store
         self.closed = False
         # This indicates that writes should be temporary and no modify

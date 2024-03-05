@@ -4,13 +4,13 @@ import datetime
 import hashlib
 import mmap
 import os
-import os.path
 import random
 import subprocess
 import sys
 import tempfile
 import time
 import typing
+from pathlib import Path
 from typing import IO, Callable, Iterable, List, TypeVar
 from zoneinfo import ZoneInfo
 
@@ -93,7 +93,7 @@ class SafeFile(object):
 
     protected_mode = 0o440
 
-    def __init__(self, filename, encoding=None, sync=True):
+    def __init__(self, filename: str | os.PathLike, encoding=None, sync=True):
         self.filename = filename
         self.encoding = encoding
         self.sync = sync
@@ -233,7 +233,7 @@ else:
 
 
 @report_status
-def copy_overwrite(source, target):
+def copy_overwrite(source: IO, target: IO):
     """Efficiently overwrites `target` with a copy of `source`.
 
     Identical regions won't be touched so this is COW-friendly. Assumes
@@ -249,8 +249,8 @@ def copy_overwrite(source, target):
     source.seek(0)
     yield size / punch_size
     try:
-        posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-        posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+        posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)  # type: ignore
+        posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)  # type: ignore
     except Exception:
         pass
     with zeroes(punch_size) as z:
@@ -285,7 +285,7 @@ def copy_overwrite(source, target):
 
 
 @report_status
-def copy(source, target):
+def copy(source: IO, target: IO):
     """Efficiently overwrites `target` with a copy of `source`.
 
     Identical regions will be touched - so this is not CoW-friendly.
@@ -299,8 +299,8 @@ def copy(source, target):
     source.seek(0)
 
     try:
-        posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
-        posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+        posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)  # type: ignore
+        posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)  # type: ignore
     except Exception:
         pass
     while True:
@@ -324,10 +324,13 @@ def copy(source, target):
     yield size
 
 
-def cp_reflink(source, target):
+def cp_reflink(source: str | os.PathLike, target: str | os.PathLike):
     """Makes as COW copy of `source` if COW is supported."""
     # We can't tell if reflink is really supported. It depends on the
     # filesystem.
+
+    source = str(source)
+    target = str(target)
     try:
         subprocess.check_call(
             [CP, "--reflink=always", source, target], stderr=subprocess.PIPE
@@ -431,7 +434,7 @@ def min_date():
     return datetime.datetime.min.replace(tzinfo=ZoneInfo("UTC"))
 
 
-def has_recent_changes(entry, reference_time):
+def has_recent_changes(entry: Path, reference_time: float):
     # This is not efficient on a first look as we may stat things twice, but it
     # makes the recursion easier to read and the VFS will be caching this
     # anyway.
@@ -442,15 +445,14 @@ def has_recent_changes(entry, reference_time):
     st = entry.stat(follow_symlinks=False)
     if st.st_mtime >= reference_time:
         return True
-    if not entry.is_dir(follow_symlinks=False):
+    if not entry.is_dir() or entry.is_symlink():
         return False
-    candidates = list(os.scandir(entry.path))
     # First pass: stat all direct entries
-    for candidate in candidates:
+    for candidate in entry.iterdir():
         if candidate.stat(follow_symlinks=False).st_mtime >= reference_time:
             return True
     # Second pass: start traversing
-    for candidate in os.scandir(entry.path):
+    for candidate in entry.iterdir():
         if has_recent_changes(candidate, reference_time):
             return True
     return False

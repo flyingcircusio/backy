@@ -9,8 +9,8 @@ from backy.sources.ceph.rbd import RBDClient
 
 
 class CephCLIBase:
-    def __init__(self, tmpdir):
-        self.tmpdir = tmpdir
+    def __init__(self, tmp_path):
+        self.tmp_path = tmp_path
         self.parser = parser = argparse.ArgumentParser()
 
         subparsers = parser.add_subparsers()
@@ -178,8 +178,8 @@ class CephCLIBase:
 
 
 class CephJewelCLI(CephCLIBase):
-    def __init__(self, tmpdir):
-        super().__init__(tmpdir)
+    def __init__(self, tmp_path):
+        super().__init__(tmp_path)
         self.mapped_images = {}
 
     def version(self):
@@ -199,7 +199,7 @@ class CephJewelCLI(CephCLIBase):
     def map(self, snapspec, read_only):
         image = self._parse_snapspec(snapspec)
         id = len(self.mapped_images)
-        image["device"] = f"{self.tmpdir}/rbd{id}"
+        image["device"] = f"{self.tmp_path}/rbd{id}"
         if not self._freeze_mapped:
             with open(image["device"], "a"):
                 pass
@@ -213,8 +213,8 @@ class CephLuminousCLI(CephJewelCLI):
 
 
 class CephNautilusCLI(CephCLIBase):
-    def __init__(self, tmpdir):
-        super().__init__(tmpdir)
+    def __init__(self, tmp_path):
+        super().__init__(tmp_path)
         self.mapped_images = []
 
     def version(self):
@@ -225,7 +225,7 @@ class CephNautilusCLI(CephCLIBase):
         id = len(self.mapped_images)
         image["id"] = str(id)
         image["namespace"] = ""
-        image["device"] = f"{self.tmpdir}/rbd{id}"
+        image["device"] = f"{self.tmp_path}/rbd{id}"
         if not self._freeze_mapped:
             with open(image["device"], "a"):
                 pass
@@ -243,12 +243,12 @@ class CephNautilusCLI(CephCLIBase):
 
 
 @pytest.fixture(params=[CephJewelCLI, CephLuminousCLI, CephNautilusCLI])
-def rbdclient(request, tmpdir, monkeypatch, log):
+def rbdclient(request, tmp_path, monkeypatch, log):
     monkeypatch.setattr(
         backy.sources.ceph, "CEPH_RBD_SUPPORTS_WHOLE_OBJECT_DIFF", True
     )
 
     client = RBDClient(log)
-    client._ceph_cli = request.param(tmpdir)
+    client._ceph_cli = request.param(tmp_path)
 
     return client

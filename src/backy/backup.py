@@ -1,13 +1,12 @@
 import datetime
 import fcntl
-import glob
 import os
-import os.path as p
 import re
 import subprocess
 import time
 from enum import Enum
 from math import ceil, floor
+from pathlib import Path
 from typing import IO, List, Optional, Type
 
 import tzlocal
@@ -71,10 +70,10 @@ def locked(target=None, mode=None):
                 return f(self, *args, **kw)
             if target in self._lock_fds:
                 raise RuntimeError("Bug: Locking is not re-entrant.")
-            target_path = p.join(self.path, target)
-            if not os.path.exists(target_path):
-                open(target_path, "wb").close()
-            self._lock_fds[target] = os.open(target_path, os.O_RDONLY)
+            target_path = self.path / target
+            if not target_path.exists():
+                target_path.touch()
+            self._lock_fds[target] = target_path.open()
             try:
                 fcntl.flock(self._lock_fds[target], mode)
             except BlockingIOError:
@@ -90,6 +89,7 @@ def locked(target=None, mode=None):
                 finally:
                     fcntl.flock(self._lock_fds[target], fcntl.LOCK_UN)
             finally:
+                self._lock_fds[target].close()
                 del self._lock_fds[target]
 
         locked_function.__name__ = "locked({}, {})".format(f.__name__, target)
@@ -107,7 +107,7 @@ class Backup(object):
 
     """
 
-    path: str
+    path: Path
     config: dict
     schedule: Schedule
     source: BackySourceFactory
@@ -120,22 +120,22 @@ class Backup(object):
     _by_uuid: dict[str, Revision]
     _lock_fds: dict[str, IO]
 
-    def __init__(self, path, log):
+    def __init__(self, path: Path, log: BoundLogger):
         self.log = log.bind(subsystem="backup")
         self._lock_fds = {}
 
-        self.path = p.realpath(path)
+        self.path = path.resolve()
         self.scan()
 
         # Load config from file
         try:
-            with open(p.join(self.path, "config"), encoding="utf-8") as f:
+            with self.path.joinpath("config").open(encoding="utf-8") as f:
                 self.config = yaml.safe_load(f)
         except IOError:
             self.log.error(
                 "could-not-read-config",
                 _fmt_msg="Could not read config file. Is --backupdir correct?",
-                config_path=p.join(self.path, "config"),
+                config_path=str(self.path / "config"),
             )
             raise
 
@@ -179,8 +179,8 @@ class Backup(object):
     def scan(self):
         self.history = []
         self._by_uuid = {}
-        for f in glob.glob(p.join(self.path, "*.rev")):
-            if os.path.islink(f):
+        for f in self.path.glob("*.rev"):
+            if f.is_symlink():
                 # Ignore links that are used to create readable pointers
                 continue
             r = Revision.load(f, self, self.log)
@@ -233,11 +233,8 @@ class Backup(object):
                 )
                 raise RuntimeError("Unknown tags")
 
-        try:  # cleanup old symlinks
-            os.unlink(p.join(self.path, "last"))
-            os.unlink(p.join(self.path, "last.rev"))
-        except OSError:
-            pass
+        self.path.joinpath("last").unlink(missing_ok=True)
+        self.path.joinpath("last.rev").unlink(missing_ok=True)
 
         start = time.time()
 
@@ -362,7 +359,7 @@ class Backup(object):
     # backy-extract acquires lock
     def restore_backy_extract(self, rev: Revision, target: str):
         log = self.log.bind(subsystem="backy-extract")
-        cmd = [BACKY_EXTRACT, p.join(self.path, rev.uuid), target]
+        cmd = [BACKY_EXTRACT, str(self.path / rev.uuid), target]
         log.debug("started", cmd=cmd)
         proc = subprocess.Popen(cmd)
         return_code = proc.wait()
@@ -569,7 +566,7 @@ class Backup(object):
         else:
             return [self.find(token)]
 
-    def index_by_token(self, spec: str | Revision | List[Revision]):
+    def index_by_token(self, spec: str | Revision | List[Revision]) -> float:
         assert not isinstance(
             spec, list
         ), "can only index a single revision specifier"
@@ -642,7 +639,7 @@ class Backup(object):
         except KeyError:
             raise IndexError()
 
-    def find_by_function(self, spec: str):
+    def find_by_function(self, spec: str) -> Revision:
         m = re.fullmatch(r"(\w+)\(.+\)", spec)
         if m and m.group(1) in ["first", "last"]:
             return self.find_revisions(m.group(0))[0]

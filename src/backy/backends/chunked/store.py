@@ -1,5 +1,4 @@
-import glob
-import os.path
+from pathlib import Path
 
 import lzo
 from structlog.stdlib import BoundLogger
@@ -24,44 +23,40 @@ class Store(object):
     # wanting to perform new backups.
     force_writes = False
 
-    path: str
+    path: Path
     users: list[File]
     seen_forced: set[str]
     known: set[str]
     log: BoundLogger
 
-    def __init__(self, path, log):
+    def __init__(self, path: Path, log):
         self.path = path
         self.users = []
         self.seen_forced = set()
         self.known = set()
         self.log = log.bind(subsystem="chunked-store")
         for x in range(256):
-            subdir = os.path.join(self.path, f"{x:02x}")
-            if not os.path.exists(subdir):
-                try:
-                    os.makedirs(subdir)
-                except FileExistsError:
-                    pass
-        if not os.path.exists(os.path.join(self.path, "store")):
+            subdir = self.path / f"{x:02x}"
+            subdir.mkdir(parents=True, exist_ok=True)
+        if not self.path.joinpath("store").exists():
             self.convert_to_v2()
 
-        for c in glob.iglob(os.path.join(self.path, "*/*.chunk.lzo")):
-            hash = os.path.basename(c).replace(".chunk.lzo", "")
+        for c in self.path.glob("*/*.chunk.lzo"):
+            hash = c.name.replace(".chunk.lzo", "")
             self.known.add(hash)
         self.log.debug("init", known_chunks=len(self.known))
 
     def convert_to_v2(self):
         self.log.info("to-v2")
-        for path in glob.iglob(os.path.join(self.path, "*/*/*.chunk.lzo")):
-            new = path.replace(self.path + "/", "", 1)
-            dir, _, c = new.split("/")
-            new = os.path.join(self.path, dir, c)
-            os.rename(path, new)
-        for path in glob.iglob(os.path.join(self.path, "*/??")):
-            if os.path.isdir(path):
-                os.rmdir(path)
-        with open(os.path.join(self.path, "store"), "wb") as f:
+        for path in self.path.glob("*/*/*.chunk.lzo"):
+            new = path.relative_to(self.path)
+            dir, _, c = new.parts
+            new = self.path / dir / c
+            path.rename(new)
+        for path in self.path.glob("*/??"):
+            if path.is_dir():
+                path.rmdir()
+        with self.path.joinpath("store").open("wb") as f:
             f.write(b"v2")
         self.log.info("to-v2-finished")
 
@@ -92,12 +87,11 @@ class Store(object):
 
     def ls(self):
         # XXX this is fucking expensive
-        pattern = os.path.join(self.path, "*/*.chunk.lzo")
-        for file in glob.iglob(pattern):
-            hash = rreplace(os.path.split(file)[1], ".chunk.lzo", "")
+        for file in self.path.glob("*/*.chunk.lzo"):
+            hash = file.name.removesuffix(".chunk.lzo")
             yield file, hash, lambda f: lzo.decompress(open(f, "rb").read())
 
-    def purge(self):
+    def purge(self) -> None:
         # This assumes exclusive lock on the store. This is guaranteed by
         # backy's main locking.
         to_delete = self.known.copy()
@@ -105,11 +99,10 @@ class Store(object):
             to_delete = to_delete - set(user._mapping.values())
         self.log.info("purge", purging=len(to_delete))
         for file_hash in sorted(to_delete):
-            if os.path.exists(self.chunk_path(file_hash)):
-                os.unlink(self.chunk_path(file_hash))
+            self.chunk_path(file_hash).unlink(missing_ok=True)
         self.known -= to_delete
 
-    def chunk_path(self, hash):
+    def chunk_path(self, hash: str) -> Path:
         dir1 = hash[:2]
         extension = ".chunk.lzo"
-        return os.path.join(self.path, dir1, hash + extension)
+        return self.path.joinpath(dir1).joinpath(hash).with_suffix(extension)

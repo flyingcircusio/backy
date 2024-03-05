@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
+from typing import IO, TYPE_CHECKING
 
 from structlog.stdlib import BoundLogger
 
-import backy.backup
-import backy.revision
+if TYPE_CHECKING:
+    from backy.backup import Backup
+    from backy.revision import Revision
 
 
 class BackendException(IOError):
@@ -12,13 +14,11 @@ class BackendException(IOError):
 
 class BackyBackend(ABC):
     @abstractmethod
-    def __init__(
-        self, revision: "backy.revision.Revision", log: BoundLogger
-    ) -> None:
+    def __init__(self, revision: "Revision", log: BoundLogger) -> None:
         ...
 
     @abstractmethod
-    def open(self, mode="rb"):
+    def open(self, mode: str = "rb") -> IO:
         ...
 
     def purge(self) -> None:
@@ -27,5 +27,5 @@ class BackyBackend(ABC):
     def verify(self) -> None:
         pass
 
-    def scrub(self, backup: "backy.backup.Backup", type: str) -> None:
+    def scrub(self, backup: "Backup", type: str) -> None:
         pass

@@ -144,7 +144,7 @@ class Chunk(object):
             # Create the tempfile in the right directory to increase locality
             # of our change - avoid renaming between multiple directories to
             # reduce traffic on the directory nodes.
-            fd, tmpfile_name = tempfile.mkstemp(dir=os.path.dirname(target))
+            fd, tmpfile_name = tempfile.mkstemp(dir=target.parent)
             posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
             with os.fdopen(fd, mode="wb") as f:
                 data = lzo.compress(self.data.getvalue())

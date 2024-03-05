@@ -1,5 +1,6 @@
 from structlog.stdlib import BoundLogger
 
+import backy.backends
 from backy.quarantine import QuarantineReport
 from backy.revision import Revision
 from backy.sources import BackySource, BackySourceContext, BackySourceFactory
@@ -25,7 +26,7 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
     def __enter__(self):
         return self
 
-    def ready(self):
+    def ready(self) -> bool:
         """Check whether the source can be backed up.
 
         For files this means the file exists and is readable.
@@ -38,10 +39,10 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
             return False
         return True
 
-    def backup(self, target):
+    def backup(self, target_: "backy.backends.BackyBackend") -> None:
         self.log.debug("backup")
         s = open(self.filename, "rb")
-        t = target.open("r+b")
+        t = target_.open("r+b")
         with s as source, t as target:
             if self.revision.backup.contains_distrusted:
                 self.log.info("backup-forcing-full")
@@ -55,10 +56,10 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
 
         self.revision.stats["bytes_written"] = bytes
 
-    def verify(self, target) -> bool:
+    def verify(self, target_: "backy.backends.BackyBackend") -> bool:
         self.log.info("verify")
         s = open(self.filename, "rb")
-        t = target.open("rb")
+        t = target_.open("rb")
         with s as source, t as target:
             return files_are_equal(
                 source,

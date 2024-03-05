@@ -2,8 +2,8 @@ from backy.backup import Backup
 from backy.sources.ceph.source import CephRBD
 
 
-def test_configure_ceph_source(tmpdir, log):
-    with open(str(tmpdir / "config"), "w") as f:
+def test_configure_ceph_source(tmp_path, log):
+    with open(str(tmp_path / "config"), "w") as f:
         f.write(
             """\
 ---
@@ -17,7 +17,7 @@ def test_configure_ceph_source(tmpdir, log):
         image: test04
 """
         )
-    backup = Backup(str(tmpdir), log)
+    backup = Backup(tmp_path, log)
     assert isinstance(backup.source, CephRBD)
     assert backup.source.pool == "test"
     assert backup.source.image == "test04"

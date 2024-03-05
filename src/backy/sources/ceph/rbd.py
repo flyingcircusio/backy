@@ -1,6 +1,7 @@
 import contextlib
 import json
 import subprocess
+from typing import IO, BinaryIO, Iterator
 
 from structlog.stdlib import BoundLogger
 
@@ -45,7 +46,7 @@ class RBDClient(object):
 
         return result
 
-    def exists(self, snapspec):
+    def exists(self, snapspec: str):
         try:
             return self._rbd(["info", snapspec], format="json")
         except subprocess.CalledProcessError as e:
@@ -53,7 +54,7 @@ class RBDClient(object):
                 return False
             raise
 
-    def map(self, image, readonly=False):
+    def map(self, image: str, readonly=False):
         def parse_mappings_pre_nautilus(mappings):
             """The parser code for Ceph release Luminous and earlier."""
             for mapping in mappings.values():
@@ -84,7 +85,7 @@ class RBDClient(object):
             mapping = parse_mappings_pre_nautilus(mappings_raw)
 
         def scrub_mapping(mapping):
-            SPEC = set(["pool", "name", "snap", "device"])
+            SPEC = {"pool", "name", "snap", "device"}
             # Ensure all specced keys exist
             for key in SPEC:
                 if key not in mapping:
@@ -112,7 +113,7 @@ class RBDClient(object):
         return self._rbd(["snap", "rm", image])
 
     @contextlib.contextmanager
-    def export_diff(self, new, old):
+    def export_diff(self, new: str, old: str) -> Iterator[RBDDiffV1]:
         self.log.info("export-diff")
         if backy.sources.ceph.CEPH_RBD_SUPPORTS_WHOLE_OBJECT_DIFF:
             EXPORT_WHOLE_OBJECT = ["--whole-object"]
@@ -128,6 +129,7 @@ class RBDClient(object):
             # push its data to, when we are busy writing.
             bufsize=8 * CHUNK_SIZE,
         )
+        assert proc.stdout is not None
         try:
             yield RBDDiffV1(proc.stdout)
         finally:
@@ -135,7 +137,7 @@ class RBDClient(object):
             proc.wait()
 
     @contextlib.contextmanager
-    def image_reader(self, image):
+    def image_reader(self, image: str) -> Iterator[BinaryIO]:
         mapped = self.map(image, readonly=True)
         source = open(mapped["device"], "rb", buffering=CHUNK_SIZE)
         try:
@@ -145,7 +147,7 @@ class RBDClient(object):
             self.unmap(mapped["device"])
 
     @contextlib.contextmanager
-    def export(self, image):
+    def export(self, image: str) -> Iterator[IO]:
         self.log.info("export")
         proc = subprocess.Popen(
             [RBD, "export", image, "-"],
@@ -155,6 +157,7 @@ class RBDClient(object):
             # push its data to, when we are busy writing.
             bufsize=4 * CHUNK_SIZE,
         )
+        assert proc.stdout is not None
         try:
             yield proc.stdout
         finally:

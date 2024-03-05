@@ -1,4 +1,5 @@
-import os.path
+from pathlib import Path
+from typing import IO, cast
 
 from structlog.stdlib import BoundLogger
 
@@ -18,26 +19,24 @@ class ChunkedFileBackend(BackyBackend):
     clone_parent = True
 
     # multiple Backends may share the same store
-    STORES: dict[str, Store] = dict()
+    STORES: dict[Path, Store] = dict()
 
     def __init__(self, revision: Revision, log: BoundLogger):
         self.backup = revision.backup
         self.revision = revision
-        path = self.revision.backup.path + "/chunks"
+        path = self.revision.backup.path / "chunks"
         if path not in self.STORES:
-            self.STORES[path] = Store(
-                self.revision.backup.path + "/chunks", log
-            )
+            self.STORES[path] = Store(self.revision.backup.path / "chunks", log)
         self.store = self.STORES[path]
         self.log = log.bind(subsystem="chunked")
 
-    def open(self, mode="rb"):
+    def open(self, mode: str = "rb") -> IO:
         if "w" in mode or "+" in mode and self.clone_parent:
             parent = self.revision.get_parent()
-            if parent and not os.path.exists(self.revision.filename):
-                with open(self.revision.filename, "wb") as new, open(
-                    parent.filename, "rb"
-                ) as old:
+            if parent and not self.revision.filename.exists():
+                with self.revision.filename.open(
+                    "wb"
+                ) as new, parent.filename.open("rb") as old:
                     # This is ok, this is just metadata, not the actual data.
                     new.write(old.read())
         overlay = False
@@ -51,7 +50,7 @@ class ChunkedFileBackend(BackyBackend):
             self.log.warn("forcing-full")
             self.store.force_writes = True
 
-        return file
+        return cast(IO, file)
 
     def purge(self):
         self.log.debug("purge")
@@ -96,9 +95,9 @@ class ChunkedFileBackend(BackyBackend):
             except Exception:
                 log.exception("verify-error", chunk=candidate)
                 errors = True
-                if os.path.exists(self.store.chunk_path(candidate)):
+                if self.store.chunk_path(candidate).exists():
                     try:
-                        os.unlink(self.store.chunk_path(candidate))
+                        self.store.chunk_path(candidate).unlink()
                     except Exception:
                         log.exception("verify-remove-error", chunk=candidate)
                 # This is an optimisation: we can skip this revision, purge it
@@ -141,7 +140,7 @@ class ChunkedFileBackend(BackyBackend):
             self.log.info("scrub-light-rev", revision_uuid=revision.uuid)
             backend = backup.backend_factory(revision, self.log).open()
             for hash in backend._mapping.values():
-                if os.path.exists(backend.store.chunk_path(hash)):
+                if backend.store.chunk_path(hash).exists():
                     continue
                 self.log.error(
                     "scrub-light-missing-chunk",

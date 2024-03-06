@@ -3,10 +3,8 @@ import subprocess
 from unittest import mock
 
 import pytest
-import yaml
 
 import backy.utils
-from backy.backup import Backup
 from backy.revision import Revision
 from backy.sources.file import File
 from backy.utils import CHUNK_SIZE

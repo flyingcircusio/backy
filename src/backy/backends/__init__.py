@@ -27,5 +27,5 @@ class BackyBackend(ABC):
     def verify(self) -> None:
         pass
 
-    def scrub(self, backup: "Backup", type: str) -> None:
-        pass
+    def scrub(self, backup: "Backup", type: str) -> int:
+        return 0

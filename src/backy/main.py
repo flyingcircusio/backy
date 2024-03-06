@@ -422,6 +422,7 @@ def main():
     if not hasattr(args, "logfile"):
         args.logfile = None
 
+    default_logfile: Optional[Path]
     match args.func:
         case "scheduler":
             default_logfile = Path("/var/log/backy.log")

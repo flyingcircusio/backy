@@ -1,7 +1,7 @@
 import datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 import shortuuid
 import yaml
@@ -38,7 +38,7 @@ class Revision(object):
     stats: dict
     tags: set[str]
     trust: Trust = Trust.TRUSTED
-    backend_type: str = "chunked"
+    backend_type: Literal["cowfile", "chunked"] = "chunked"
     log: BoundLogger
 
     def __init__(

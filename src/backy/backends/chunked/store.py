@@ -1,11 +1,12 @@
 from pathlib import Path
+from typing import Set
 
 import lzo
 from structlog.stdlib import BoundLogger
 
 from backy.utils import END, report_status
 
-from . import File, chunk
+from . import chunk
 
 # A chunkstore, is responsible for all revisions for a single backup, for now.
 # We can start having statistics later how much reuse between images is
@@ -24,14 +25,12 @@ class Store(object):
     force_writes = False
 
     path: Path
-    users: list[File]
     seen_forced: set[str]
     known: set[str]
     log: BoundLogger
 
     def __init__(self, path: Path, log):
         self.path = path
-        self.users = []
         self.seen_forced = set()
         self.known = set()
         self.log = log.bind(subsystem="chunked-store")
@@ -91,12 +90,10 @@ class Store(object):
             hash = file.name.removesuffix(".chunk.lzo")
             yield file, hash, lambda f: lzo.decompress(open(f, "rb").read())
 
-    def purge(self) -> None:
+    def purge(self, used_chunks: Set[str]) -> None:
         # This assumes exclusive lock on the store. This is guaranteed by
         # backy's main locking.
-        to_delete = self.known.copy()
-        for user in self.users:
-            to_delete = to_delete - set(user._mapping.values())
+        to_delete = self.known - used_chunks
         self.log.info("purge", purging=len(to_delete))
         for file_hash in sorted(to_delete):
             self.chunk_path(file_hash).unlink(missing_ok=True)

@@ -75,7 +75,7 @@ class Chunk(object):
             chunk_file = self.store.chunk_path(self.hash)
             try:
                 with open(chunk_file, "rb") as f:
-                    posix_fadvise(f.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+                    posix_fadvise(f.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)  # type: ignore
                     data = f.read()
                     data = lzo.decompress(data)
             except (lzo.error, IOError) as e:
@@ -97,6 +97,7 @@ class Chunk(object):
         Return the data and the remaining size that should be read.
         """
         self._read_existing()
+        assert self.data is not None
         self._touch()
 
         self.data.seek(offset)
@@ -124,6 +125,7 @@ class Chunk(object):
             chunk_stats["write_full"] += 1
         else:
             self._read_existing()
+            assert self.data is not None
             self.data.seek(offset)
             self.data.write(data)
             chunk_stats["write_partial"] += 1
@@ -145,7 +147,7 @@ class Chunk(object):
             # of our change - avoid renaming between multiple directories to
             # reduce traffic on the directory nodes.
             fd, tmpfile_name = tempfile.mkstemp(dir=target.parent)
-            posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+            posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)  # type: ignore
             with os.fdopen(fd, mode="wb") as f:
                 data = lzo.compress(self.data.getvalue())
                 f.write(data)
@@ -160,6 +162,7 @@ class Chunk(object):
     def _update_hash(self):
         # I'm not using read() here to a) avoid cache accounting and b)
         # use a faster path to get the data.
+        assert self.data is not None
         data = self.data.getvalue()
         self.hash = hash(data)
         self.file._mapping[self.id] = self.hash

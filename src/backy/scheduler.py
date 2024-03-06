@@ -27,9 +27,9 @@ class Job(object):
     status: str = ""
     next_time: Optional[datetime.datetime] = None
     next_tags: Optional[set[str]] = None
-    path: Optional[Path] = None
-    backup: Optional[Backup] = None
-    logfile: Optional[Path] = None
+    path: Path
+    backup: Backup
+    logfile: Path
     last_config: Optional[dict] = None
     daemon: "backy.daemon.BackyDaemon"
     run_immediately: asyncio.Event
@@ -341,6 +341,7 @@ class Job(object):
 
     def start(self):
         assert self._task is None
+        assert self.daemon.loop
         self._task = self.daemon.loop.create_task(
             self.run_forever(), name=f"backup-loop-{self.name}"
         )

@@ -7,7 +7,7 @@ import time
 from enum import Enum
 from math import ceil, floor
 from pathlib import Path
-from typing import IO, List, Optional, Type
+from typing import IO, List, Literal, Optional, Type
 
 import tzlocal
 import yaml
@@ -111,7 +111,7 @@ class Backup(object):
     config: dict
     schedule: Schedule
     source: BackySourceFactory
-    backend_type: str
+    backend_type: Literal["cowfile", "chunked"]
     backend_factory: Type[BackyBackend]
     history: list[Revision]
     quarantine: QuarantineStore
@@ -380,7 +380,7 @@ class Backup(object):
         open(target, "ab").close()  # touch into existence
         with open(target, "r+b", buffering=CHUNK_SIZE) as target:
             try:
-                posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+                posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)  # type: ignore
             except Exception:
                 pass
             copy(source, target)
@@ -390,7 +390,7 @@ class Backup(object):
         """Emit restore data to stdout (for pipe processing)."""
         self.log.debug("restore-stdout", source=source.name)
         try:
-            posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+            posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)  # type: ignore
         except Exception:
             pass
         with os.fdopen(os.dup(1), "wb") as target:
@@ -414,11 +414,11 @@ class Backup(object):
         from backy.backends.chunked import ChunkedFileBackend
         from backy.sources.file import File
 
-        last_worklist = []
+        last_worklist: List[Revision] = []
 
         while True:
             self.scan()
-            to_upgrade = [
+            to_upgrade: List[Revision] = [
                 r for r in self.clean_history if r.backend_type == "cowfile"
             ]
             if not to_upgrade:
@@ -442,7 +442,9 @@ class Backup(object):
                     revision_uuid=revision.uuid,
                     timestamp=revision.timestamp,
                 )
-                original_file = revision.filename + ".old"
+                original_file = revision.filename.with_suffix(
+                    revision.filename.suffix + ".old"
+                )
                 if not os.path.exists(original_file):
                     # We may be resuming a partial upgrade. Only move the file
                     # if our .old doesn't exist.

@@ -128,7 +128,7 @@ class BackyDaemon(object):
 
         if (
             not self.backup_semaphores
-            or self.backup_semaphores["slow"]._bound_value != self.worker_limit
+            or self.backup_semaphores["slow"]._bound_value != self.worker_limit  # type: ignore
         ):
             # Adjusting the settings of a semaphore is not obviously simple. So
             # here is a simplified version with hopefully clear semantics:
@@ -187,6 +187,7 @@ class BackyDaemon(object):
             loop.add_signal_handler(sig, handle_signals, sig)
 
     def run_forever(self):
+        assert self.loop
         self.log.info("starting-loop")
         self.loop.run_forever()
         self.loop.close()
@@ -227,20 +228,21 @@ class BackyDaemon(object):
     def terminate(self):
         self.log.info("terminating")
         for task in asyncio.all_tasks():
-            if task.get_coro().__name__ == "async_finalizer":
+            if task.get_coro().__name__ == "async_finalizer":  # type: ignore
                 # Support pytest-asyncio integration.
                 continue
-            if task.get_coro().__name__.startswith("test_"):
+            if task.get_coro().__name__.startswith("test_"):  # type: ignore
                 # Support pytest-asyncio integration.
                 continue
             self.log.debug(
                 "cancelling-task",
                 name=task.get_name(),
-                coro_name=task.get_coro().__name__,
+                coro_name=task.get_coro().__name__,  # type: ignore
             )
             task.cancel()
 
     async def shutdown_loop(self):
+        assert self.loop
         self.log.debug("waiting-shutdown")
         while True:
             try:

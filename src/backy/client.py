@@ -1,6 +1,7 @@
 import datetime
 import sys
 from asyncio import get_running_loop
+from typing import Dict
 
 import aiohttp
 import humanize
@@ -149,7 +150,7 @@ class CLIClient:
     async def status(self):
         """Show job status overview"""
         t = Table("Status", "#")
-        state_summary = {}
+        state_summary: Dict[str, int] = {}
         jobs = await self.api.get_jobs()
         for job in jobs:
             state_summary.setdefault(job["status"], 0)

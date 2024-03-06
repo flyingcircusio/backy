@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import IO, cast
+from typing import Set
 
 from structlog.stdlib import BoundLogger
 
@@ -24,13 +24,13 @@ class ChunkedFileBackend(BackyBackend):
     def __init__(self, revision: Revision, log: BoundLogger):
         self.backup = revision.backup
         self.revision = revision
-        path = self.revision.backup.path / "chunks"
+        path = self.backup.path / "chunks"
         if path not in self.STORES:
-            self.STORES[path] = Store(self.revision.backup.path / "chunks", log)
+            self.STORES[path] = Store(self.backup.path / "chunks", log)
         self.store = self.STORES[path]
         self.log = log.bind(subsystem="chunked")
 
-    def open(self, mode: str = "rb") -> IO:
+    def open(self, mode: str = "rb") -> File:  # type: ignore[override]
         if "w" in mode or "+" in mode and self.clone_parent:
             parent = self.revision.get_parent()
             if parent and not self.revision.filename.exists():
@@ -50,32 +50,32 @@ class ChunkedFileBackend(BackyBackend):
             self.log.warn("forcing-full")
             self.store.force_writes = True
 
-        return cast(IO, file)
+        return file
 
-    def purge(self):
+    def purge(self) -> None:
         self.log.debug("purge")
-        self.store.users = []
+        used_chunks: Set[str] = set()
         for revision in self.backup.history:
             try:
-                self.store.users.append(
-                    self.backup.backend_factory(revision, self.log).open()
+                used_chunks |= set(
+                    type(self)(revision, self.log).open()._mapping.values()
                 )
             except ValueError:
                 # Invalid format, like purging non-chunked with chunked backend
                 pass
-        self.store.purge()
+        self.store.purge(used_chunks)
 
     @report_status
     def verify(self):
         log = self.log.bind(revision_uuid=self.revision.uuid)
         log.info("verify-start")
-        verified_chunks = set()
+        verified_chunks: Set[str] = set()
 
         # Load verified chunks to avoid duplicate work
         for revision in self.backup.clean_history:
             if revision.trust != Trust.VERIFIED:
                 continue
-            f = self.backup.backend_factory(revision, log).open()
+            f = type(self)(revision, log).open()
             verified_chunks.update(f._mapping.values())
 
         log.debug("verify-loaded-chunks", verified_chunks=len(verified_chunks))
@@ -125,7 +125,7 @@ class ChunkedFileBackend(BackyBackend):
         yield END
         yield None
 
-    def scrub(self, backup, type):
+    def scrub(self, backup, type: str) -> int:
         if type == "light":
             return self.scrub_light(backup)
         elif type == "deep":
@@ -133,12 +133,12 @@ class ChunkedFileBackend(BackyBackend):
         else:
             raise RuntimeError("Invalid scrubbing type {}".format(type))
 
-    def scrub_light(self, backup):
+    def scrub_light(self, backup) -> int:
         errors = 0
         self.log.info("scrub-light")
         for revision in backup.history:
             self.log.info("scrub-light-rev", revision_uuid=revision.uuid)
-            backend = backup.backend_factory(revision, self.log).open()
+            backend = type(self)(revision, self.log).open()
             for hash in backend._mapping.values():
                 if backend.store.chunk_path(hash).exists():
                     continue
@@ -150,7 +150,7 @@ class ChunkedFileBackend(BackyBackend):
                 errors += 1
         return errors
 
-    def scrub_deep(self, backup):
+    def scrub_deep(self, backup) -> int:
         errors = self.scrub_light(backup)
         self.log.info("scrub-deep")
         errors += self.store.validate_chunks()

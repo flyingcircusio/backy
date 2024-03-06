@@ -116,7 +116,7 @@ def test_file_seek(tmp_path, log):
     assert f.tell() == 10
     f.close()
     f = File(tmp_path / "asdf", store, mode="r")
-    f.read() == b"asdf\x00\x00\x00\x00\x00\x00"
+    assert f.read() == b"asdf\x00\x00\x00\x00\x00\x00"
 
     f.close()
 
@@ -151,8 +151,7 @@ def test_continuously_updated_file(tmp_path, log):
 
     store.validate_chunks()
 
-    store.users.append(f)
-    store.purge()
+    store.purge(set(f._mapping.values()))
 
     sample.close()
     f.close()
@@ -192,8 +191,7 @@ def test_seeky_updated_file(tmp_path, log):
 
     store.validate_chunks()
 
-    store.users.append(f)
-    store.purge()
+    store.purge(set(f._mapping.values()))
 
     sample.close()
     f.close()

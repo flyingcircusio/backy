@@ -4,7 +4,6 @@ import os
 import re
 import signal
 from pathlib import Path
-from unittest import mock
 
 import pytest
 import yaml
@@ -108,6 +107,8 @@ jobs:
 async def test_sighup(daemon, log, monkeypatch):
     """test that a `SIGHUP` causes a reload without interrupting other tasks"""
 
+    all_tasks = set()
+
     def reload():
         nonlocal all_tasks
         all_tasks = asyncio.all_tasks()
@@ -116,7 +117,6 @@ async def test_sighup(daemon, log, monkeypatch):
     async def send_sighup():
         os.kill(os.getpid(), signal.SIGHUP)
 
-    all_tasks = []
     reloaded = asyncio.Event()
     monkeypatch.setattr(daemon, "reload", reload)
 

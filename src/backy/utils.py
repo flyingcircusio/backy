@@ -11,7 +11,7 @@ import tempfile
 import time
 import typing
 from pathlib import Path
-from typing import IO, Callable, Iterable, List, TypeVar
+from typing import IO, Callable, Iterable, List, Optional, TypeVar
 from zoneinfo import ZoneInfo
 
 import humanize
@@ -92,6 +92,7 @@ class SafeFile(object):
     """
 
     protected_mode = 0o440
+    f: Optional[IO]
 
     def __init__(self, filename: str | os.PathLike, encoding=None, sync=True):
         self.filename = filename
@@ -119,7 +120,7 @@ class SafeFile(object):
             os.fsync(self.f)
         self.f.close()
 
-        if self.use_write_protection:
+        if self.write_protected:
             os.chmod(self.f.name, self.protected_mode)
             if os.path.exists(self.filename):
                 os.chmod(self.filename, self.protected_mode)
@@ -136,7 +137,7 @@ class SafeFile(object):
 
     def open_new(self, mode):
         """Open this as a new (temporary) file that will be renamed on close."""
-        assert not self.f
+        assert self.f is None
         self.f = tempfile.NamedTemporaryFile(
             mode, dir=os.path.dirname(self.filename), delete=False
         )
@@ -144,19 +145,17 @@ class SafeFile(object):
 
     def open_copy(self, mode):
         """Open an existing file, make a copy first, rename on close."""
-        assert not self.f
-
+        self.open_new("wb")
+        assert self.f is not None
         if os.path.exists(self.filename):
-            self.open_new("wb")
             cp_reflink(self.filename, self.f.name)
-            self.f.close()
-
+        self.f.close()
         self.f = open(self.f.name, mode)
 
     def open_inplace(self, mode):
         """Open as an existing file, in-place."""
         assert not self.f
-        if self.use_write_protection and os.path.exists(self.filename):
+        if self.write_protected and os.path.exists(self.filename):
             # This is kinda dangerous, but this is a tool that only protects
             # you so far and doesn't try to get in your way if you really need
             # to do this.
@@ -177,29 +176,36 @@ class SafeFile(object):
 
     @property
     def name(self):
+        assert self.f is not None
         return self.f.name
 
     def read(self, *args, **kw):
+        assert self.f is not None
         data = self.f.read(*args, **kw)
         if self.encoding:
             data = data.decode(self.encoding)
         return data
 
     def write(self, data):
+        assert self.f is not None
         if self.encoding:
             data = data.encode(self.encoding)
         self.f.write(data)
 
     def seek(self, offset, whence=0):
+        assert self.f is not None
         return self.f.seek(offset, whence)
 
     def tell(self):
+        assert self.f is not None
         return self.f.tell()
 
     def truncate(self, size=None):
+        assert self.f is not None
         return self.f.truncate(size)
 
     def fileno(self):
+        assert self.f is not None
         return self.f.fileno()
 
 

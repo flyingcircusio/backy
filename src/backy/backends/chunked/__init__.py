@@ -7,7 +7,7 @@ from backy.revision import Revision, Trust
 from backy.utils import END, report_status
 
 from .. import BackyBackend
-from .chunk import Chunk
+from .chunk import Chunk, Hash
 from .file import File
 from .store import Store
 
@@ -54,7 +54,7 @@ class ChunkedFileBackend(BackyBackend):
 
     def purge(self) -> None:
         self.log.debug("purge")
-        used_chunks: Set[str] = set()
+        used_chunks: Set[Hash] = set()
         for revision in self.backup.history:
             try:
                 used_chunks |= set(
@@ -90,7 +90,7 @@ class ChunkedFileBackend(BackyBackend):
             if candidate in verified_chunks:
                 continue
             try:
-                c = Chunk(f, 0, self.store, candidate)
+                c = Chunk(self.store, candidate)
                 c._read_existing()
             except Exception:
                 log.exception("verify-error", chunk=candidate)
@@ -124,34 +124,3 @@ class ChunkedFileBackend(BackyBackend):
 
         yield END
         yield None
-
-    def scrub(self, backup, type: str) -> int:
-        if type == "light":
-            return self.scrub_light(backup)
-        elif type == "deep":
-            return self.scrub_deep(backup)
-        else:
-            raise RuntimeError("Invalid scrubbing type {}".format(type))
-
-    def scrub_light(self, backup) -> int:
-        errors = 0
-        self.log.info("scrub-light")
-        for revision in backup.history:
-            self.log.info("scrub-light-rev", revision_uuid=revision.uuid)
-            backend = type(self)(revision, self.log).open()
-            for hash in backend._mapping.values():
-                if backend.store.chunk_path(hash).exists():
-                    continue
-                self.log.error(
-                    "scrub-light-missing-chunk",
-                    hash=hash,
-                    revision_uuid=revision.uuid,
-                )
-                errors += 1
-        return errors
-
-    def scrub_deep(self, backup) -> int:
-        errors = self.scrub_light(backup)
-        self.log.info("scrub-deep")
-        errors += self.store.validate_chunks()
-        return errors

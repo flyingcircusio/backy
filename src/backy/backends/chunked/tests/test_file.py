@@ -149,7 +149,8 @@ def test_continuously_updated_file(tmp_path, log):
     chunked_data = f.read()
     assert data == chunked_data
 
-    store.validate_chunks()
+    for h in store.ls():
+        Chunk(store, h)._read_existing()
 
     store.purge(set(f._mapping.values()))
 
@@ -189,7 +190,8 @@ def test_seeky_updated_file(tmp_path, log):
     chunked_data = f.read()
     assert data == chunked_data
 
-    store.validate_chunks()
+    for h in store.ls():
+        Chunk(store, h)._read_existing()
 
     store.purge(set(f._mapping.values()))
 

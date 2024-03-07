@@ -1,12 +1,9 @@
 from pathlib import Path
-from typing import Set
+from typing import Iterable, Set
 
-import lzo
 from structlog.stdlib import BoundLogger
 
-from backy.utils import END, report_status
-
-from . import chunk
+from backy.backends.chunked.chunk import Hash
 
 # A chunkstore, is responsible for all revisions for a single backup, for now.
 # We can start having statistics later how much reuse between images is
@@ -25,14 +22,13 @@ class Store(object):
     force_writes = False
 
     path: Path
-    seen_forced: set[str]
-    known: set[str]
+    seen_forced: set[Hash]
+    known: set[Hash]
     log: BoundLogger
 
-    def __init__(self, path: Path, log):
+    def __init__(self, path: Path, log: BoundLogger):
         self.path = path
         self.seen_forced = set()
-        self.known = set()
         self.log = log.bind(subsystem="chunked-store")
         for x in range(256):
             subdir = self.path / f"{x:02x}"
@@ -40,12 +36,10 @@ class Store(object):
         if not self.path.joinpath("store").exists():
             self.convert_to_v2()
 
-        for c in self.path.glob("*/*.chunk.lzo"):
-            hash = c.name.replace(".chunk.lzo", "")
-            self.known.add(hash)
+        self.known = set(self.ls())
         self.log.debug("init", known_chunks=len(self.known))
 
-    def convert_to_v2(self):
+    def convert_to_v2(self) -> None:
         self.log.info("to-v2")
         for path in self.path.glob("*/*/*.chunk.lzo"):
             new = path.relative_to(self.path)
@@ -59,38 +53,12 @@ class Store(object):
             f.write(b"v2")
         self.log.info("to-v2-finished")
 
-    @report_status
-    def validate_chunks(self):
-        errors = 0
-        chunks = list(self.ls())
-        yield len(chunks)
-        for file, file_hash, read in chunks:
-            try:
-                data = read(file)
-            except Exception:
-                # Typical Exceptions would be IOError, TypeError (lzo)
-                hash = None
-            else:
-                hash = chunk.hash(data)
-            if file_hash != hash:
-                errors += 1
-                yield (
-                    "Content mismatch. Expected {} got {}".format(
-                        file_hash, hash
-                    ),
-                    errors,
-                )
-            yield
-        yield END
-        yield errors
-
-    def ls(self):
+    def ls(self) -> Iterable[Hash]:
         # XXX this is fucking expensive
         for file in self.path.glob("*/*.chunk.lzo"):
-            hash = file.name.removesuffix(".chunk.lzo")
-            yield file, hash, lambda f: lzo.decompress(open(f, "rb").read())
+            yield file.name.removesuffix(".chunk.lzo")
 
-    def purge(self, used_chunks: Set[str]) -> None:
+    def purge(self, used_chunks: Set[Hash]) -> None:
         # This assumes exclusive lock on the store. This is guaranteed by
         # backy's main locking.
         to_delete = self.known - used_chunks
@@ -99,7 +67,7 @@ class Store(object):
             self.chunk_path(file_hash).unlink(missing_ok=True)
         self.known -= to_delete
 
-    def chunk_path(self, hash: str) -> Path:
+    def chunk_path(self, hash: Hash) -> Path:
         dir1 = hash[:2]
         extension = ".chunk.lzo"
         return self.path.joinpath(dir1).joinpath(hash).with_suffix(extension)

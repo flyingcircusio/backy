@@ -4,7 +4,6 @@ from typing import IO, TYPE_CHECKING
 from structlog.stdlib import BoundLogger
 
 if TYPE_CHECKING:
-    from backy.backup import Backup
     from backy.revision import Revision
 
 
@@ -26,6 +25,3 @@ class BackyBackend(ABC):
 
     def verify(self) -> None:
         pass
-
-    def scrub(self, backup: "Backup", type: str) -> int:
-        return 0

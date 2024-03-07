@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import fcntl
 import glob
@@ -6,12 +7,15 @@ import os.path as p
 import re
 import subprocess
 import time
+from collections import defaultdict
 from enum import Enum
 from math import ceil, floor
-from typing import IO, List, Optional, Type
+from typing import IO, List, Literal, Optional, Type
 
 import tzlocal
 import yaml
+from aiohttp import ClientConnectionError, ClientError, ClientResponseError
+from aiohttp.web_exceptions import HTTPForbidden, HTTPNotFound
 from structlog.stdlib import BoundLogger
 
 import backy.backends.chunked
@@ -27,6 +31,7 @@ from backy.utils import (
 from .backends import BackendException, BackyBackend
 from .backends.chunked import ChunkedFileBackend
 from .backends.cowfile import COWFileBackend
+from .client import APIClient, APIClientManager
 from .ext_deps import BACKY_EXTRACT
 from .quarantine import QuarantineStore
 from .revision import Revision, Trust, filter_schedule_tags
@@ -80,10 +85,10 @@ def locked(target=None, mode=None):
             except BlockingIOError:
                 self.log.warning(
                     "lock-no-exclusive",
-                    _fmt_msg="Failed to get exclusive lock for '{function}'. Continuing.",
+                    _fmt_msg="Failed to get exclusive lock for '{function}'.",
                     function=f.__name__,
                 )
-                return
+                raise
             else:
                 try:
                     return f(self, *args, **kw)
@@ -154,13 +159,13 @@ class Backup(object):
         # Initialize our backend
         self.backend_type = self.config["source"].get("backend", None)
         if self.backend_type is None:
-            if not self.history:
+            if not self.local_history:
                 # Start fresh backups with our new default.
                 self.backend_type = "chunked"
             else:
                 # Choose to continue existing backups with whatever format
                 # they are in.
-                self.backend_type = self.history[-1].backend_type
+                self.backend_type = self.local_history[-1].backend_type
 
         self.schedule = Schedule()
         self.schedule.configure(self.config["schedule"])
@@ -176,6 +181,13 @@ class Backup(object):
 
         self.quarantine = QuarantineStore(self.path, self.log)
 
+    @property
+    def name(self) -> str:
+        return p.basename(self.path)
+
+    def to_dict(self):
+        return self.config
+
     def scan(self):
         self.history = []
         self._by_uuid = {}
@@ -190,14 +202,81 @@ class Backup(object):
         # The history is stored: oldest first. newest last.
         self.history.sort(key=lambda r: r.timestamp)
 
+    def touch(self):
+        os.utime(self.path, None)
+
+    def set_purge_pending(self):
+        open(p.join(self.path, ".purge_pending"), "w").close()
+
+    def clear_purge_pending(self):
+        path = p.join(self.path, ".purge_pending")
+        if p.exists(path):
+            os.remove(path)
+
+    def get_history(
+        self, *, clean: bool = False, local: bool = False
+    ) -> list[Revision]:
+        return [
+            rev
+            for rev in self.history
+            if (not clean or "duration" in rev.stats)
+            and (not local or not rev.server)
+        ]
+
     @property
     def clean_history(self):
         """History without incomplete revisions."""
-        return [rev for rev in self.history if "duration" in rev.stats]
+        return self.get_history(clean=True)
+
+    @property
+    def local_history(self):
+        """History without incomplete revisions."""
+        return self.get_history(local=True)
 
     @property
     def contains_distrusted(self):
-        return any((r == Trust.DISTRUSTED for r in self.clean_history))
+        return any(
+            (
+                r == Trust.DISTRUSTED
+                for r in self.get_history(clean=True, local=True)
+            )
+        )
+
+    def validate_tags(self, tags):
+        missing_tags = (
+            filter_schedule_tags(tags) - self.schedule.schedule.keys()
+        )
+        if missing_tags:
+            self.log.error(
+                "unknown-tags",
+                _fmt_msg="The following tags are missing from the schedule: {unknown_tags}\n"
+                "Check the config file, add the `manual:` prefix or disable tag validation (-f)",
+                unknown_tags=", ".join(missing_tags),
+            )
+            raise RuntimeError("Unknown tags")
+
+    def warn_pending_changes(self, revs: Optional[List[Revision]] = None):
+        revs = revs if revs is not None else self.history
+        pending = [r for r in revs if r.pending_changes]
+        if pending:
+            self.log.warning(
+                "pending-changes",
+                _fmt_msg="Synchronize with remote server (backy push) or risk loosing changes",
+                revisions=",".join(r.uuid for r in pending),
+            )
+
+    def prevent_remote_rev(self, revs: Optional[List[Revision]] = None):
+        revs = revs if revs is not None else self.history
+        remote = [r for r in revs if r.server]
+        if remote:
+            self.log.error(
+                "remote-revs-disallowed",
+                _fmt_msg="Can not modify trust state of remote revisions locally.\n"
+                "Either include a filter to exclude them (local)\n"
+                "or edit them on the origin server and pull the changes (backy pull)",
+                revisions=",".join(r.uuid for r in remote),
+            )
+            raise RuntimeError("Remote revs disallowed")
 
     #################
     # Making backups
@@ -205,7 +284,7 @@ class Backup(object):
     @locked(target=".backup", mode="exclusive")
     def _clean(self):
         """Clean-up incomplete revisions."""
-        for revision in self.history:
+        for revision in self.local_history:
             if "duration" not in revision.stats:
                 self.log.warning(
                     "clean-incomplete", revision_uuid=revision.uuid
@@ -218,20 +297,48 @@ class Backup(object):
             r.remove()
 
     @locked(target=".backup", mode="exclusive")
+    def expire(self):
+        self.schedule.expire(self)
+
+    @locked(target=".backup", mode="exclusive")
+    def tags(
+        self,
+        action: Literal["set", "add", "remove"],
+        revision: str,
+        tags: set[str],
+        expect: Optional[set[str]] = None,
+        autoremove: bool = False,
+        force=False,
+    ) -> bool:
+        self.scan()
+        revs = self.find_revisions(revision)
+        if not force and action != "remove":
+            self.validate_tags(tags)
+        for r in revs:
+            if expect is not None and expect != r.tags:
+                self.log.info("tags-expectation-failed")
+                return False
+        for r in revs:
+            match action:
+                case "set":
+                    r.tags = tags
+                case "add":
+                    r.tags |= tags
+                case "remove":
+                    r.tags -= tags
+                case _:
+                    raise ValueError(f"invalid action '{action}'")
+            if not r.tags and autoremove:
+                r.remove()
+            else:
+                r.write_info()
+        return True
+
+    @locked(target=".backup", mode="exclusive")
     @locked(target=".purge", mode="shared")
     def backup(self, tags: set[str], force=False):
         if not force:
-            missing_tags = (
-                filter_schedule_tags(tags) - self.schedule.schedule.keys()
-            )
-            if missing_tags:
-                self.log.error(
-                    "unknown-tags",
-                    _fmt_msg="The following tags are missing from the schedule: {unknown_tags}\n"
-                    "Check the config file, add the `manual:` prefix or disable tag validation (-f)",
-                    unknown_tags=", ".join(missing_tags),
-                )
-                raise RuntimeError("Unknown tags")
+            self.validate_tags(tags)
 
         try:  # cleanup old symlinks
             os.unlink(p.join(self.path, "last"))
@@ -262,7 +369,7 @@ class Backup(object):
             except BackendException:
                 self.log.exception("backend-error-distrust-all")
                 verified = False
-                self.distrust("all", skip_lock=True)
+                self.distrust("local", skip_lock=True)
             if not verified:
                 self.log.error(
                     "verification-failed",
@@ -286,7 +393,7 @@ class Backup(object):
         # moving along automatically. This could also be moved into the
         # scheduler.
         self.scan()
-        for revision in reversed(self.clean_history):
+        for revision in reversed(self.get_history(clean=True, local=True)):
             if revision.trust == Trust.DISTRUSTED:
                 self.log.warning("inconsistent")
                 backend = self.backend_factory(revision, self.log)
@@ -295,20 +402,25 @@ class Backup(object):
 
     @locked(target=".backup", mode="exclusive")
     def distrust(self, revision: str):
-        for r in self.find_revisions(revision):
+        revs = self.find_revisions(revision)
+        self.prevent_remote_rev(revs)
+        for r in revs:
             r.distrust()
             r.write_info()
 
     @locked(target=".purge", mode="shared")
     def verify(self, revision: str):
-        for r in self.find_revisions(revision):
+        revs = self.find_revisions(revision)
+        self.prevent_remote_rev(revs)
+        for r in revs:
             backend = self.backend_factory(r, self.log)
             backend.verify()
 
     @locked(target=".purge", mode="exclusive")
     def purge(self):
-        backend = self.backend_factory(self.history[0], self.log)
+        backend = self.backend_factory(self.local_history[0], self.log)
         backend.purge()
+        self.clear_purge_pending()
 
     #################
     # Restoring
@@ -422,7 +534,9 @@ class Backup(object):
         while True:
             self.scan()
             to_upgrade = [
-                r for r in self.clean_history if r.backend_type == "cowfile"
+                r
+                for r in self.get_history(clean=True, local=True)
+                if r.backend_type == "cowfile"
             ]
             if not to_upgrade:
                 break
@@ -556,7 +670,10 @@ class Backup(object):
             return [token]
         elif isinstance(token, list):
             return token
-        if token.startswith("tag:"):
+        if token.startswith("server:"):
+            server = token.removeprefix("server:")
+            return [r for r in self.history if server == r.server]
+        elif token.startswith("tag:"):
             tag = token.removeprefix("tag:")
             return [r for r in self.history if tag in r.tags]
         elif token.startswith("trust:"):
@@ -565,7 +682,11 @@ class Backup(object):
         elif token == "all":
             return self.history[:]
         elif token == "clean":
-            return self.clean_history[:]
+            return self.clean_history
+        elif token == "local":
+            return self.find_revisions("server:")
+        elif token == "remote":
+            return self.find_revisions("not(server:)")
         else:
             return [self.find(token)]
 
@@ -670,3 +791,122 @@ class Backup(object):
                 pass
         self.log.warning("find-rev-not-found", spec=spec)
         raise KeyError(spec)
+
+    ###################
+    # Syncing Revisions
+
+    @locked(target=".backup", mode="exclusive")
+    async def push_metadata(self, peers, taskid: str):
+        grouped = defaultdict(list)
+        for r in self.clean_history:
+            if r.pending_changes:
+                grouped[r.server].append(r)
+        self.log.info(
+            "push-start", changes=sum(len(l) for l in grouped.values())
+        )
+        async with APIClientManager(peers, taskid, self.log) as apis:
+            await asyncio.gather(
+                *[
+                    self._push_metadata(apis[server], grouped[server])
+                    for server in apis
+                ]
+            )
+        self.log.info("push-end")
+
+    async def _push_metadata(self, api: APIClient, revs: List[Revision]):
+        purge_required = False
+        for r in revs:
+            log = self.log.bind(
+                server=r.server,
+                rev_uuid=r.uuid,
+            )
+            log.debug(
+                "push-updating-tags",
+                old_tags=r.orig_tags,
+                new_tags=r.tags,
+            )
+            try:
+                await api.put_tags(r, autoremove=True)
+                if r.tags:
+                    r.orig_tags = r.tags
+                    r.write_info()
+                else:
+                    r.remove(force=True)
+                    purge_required = True
+            except ClientResponseError:
+                log.warning("push-client-error", exc_style="short")
+            except ClientConnectionError:
+                log.info("push-connection-error", exc_style="short")
+            except ClientError:
+                log.warning("push-error", exc_info=True)
+
+        if purge_required:
+            log = self.log.bind(server=api.server_name)
+            log.debug("push-purging-remote")
+            try:
+                await api.run_purge(self.name)
+            except ClientResponseError:
+                log.warning("push-purge-client-error", exc_style="short")
+            except ClientConnectionError:
+                log.info("push-purge-connection-error", exc_style="short")
+            except ClientError:
+                log.warning("push-purge-error", exc_info=True)
+
+    @locked(target=".backup", mode="exclusive")
+    async def pull_metadata(self, peers: dict, taskid: str):
+        async def remove_dead_peer():
+            for r in list(self.history):
+                if r.server and r.server not in peers:
+                    self.log.info(
+                        "pull-removing-dead-peer",
+                        rev_uuid=r.uuid,
+                        server=r.server,
+                    )
+                    r.remove(force=True)
+
+        self.log.info("pull-start")
+        async with APIClientManager(peers, taskid, self.log) as apis:
+            await asyncio.gather(
+                remove_dead_peer(),
+                *[self._pull_metadata(apis[server]) for server in apis],
+            )
+        self.log.info("pull-end")
+
+    async def _pull_metadata(self, api: APIClient):
+        log = self.log.bind(server=api.server_name)
+        try:
+            await api.touch_backup(self.name)
+            remote_revs = await api.get_revs(self)
+            log.debug("pull-found-revs", revs=len(remote_revs))
+        except ClientResponseError as e:
+            if e.status in [
+                HTTPNotFound.status_code,
+                HTTPForbidden.status_code,
+            ]:
+                log.debug("pull-not-found")
+            else:
+                log.warning("pull-client-error", exc_style="short")
+            remote_revs = []
+        except ClientConnectionError:
+            log.info("pull-connection-error", exc_style="short")
+            return
+        except ClientError:
+            log.warning("pull-error", exc_info=True)
+            remote_revs = []
+
+        local_uuids = {
+            r.uuid for r in self.history if r.server == api.server_name
+        }
+        remote_uuids = {r.uuid for r in remote_revs}
+        for uuid in local_uuids - remote_uuids:
+            log.warning("pull-removing-unknown-rev", rev_uuid=uuid)
+            self.find_by_uuid(uuid).remove(force=True)
+
+        for r in remote_revs:
+            if r.uuid in local_uuids:
+                if r.to_dict() == self.find_by_uuid(r.uuid).to_dict():
+                    continue
+                log.debug("pull-updating-rev", rev_uid=r.uuid)
+            else:
+                log.debug("pull-new-rev", rev_uid=r.uuid)
+            r.write_info()

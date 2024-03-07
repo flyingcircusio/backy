@@ -19,7 +19,7 @@ from backy.tests import Ellipsis
 
 
 @pytest.fixture
-async def daemon(tmpdir, log):
+async def daemon(tmpdir, monkeypatch, log):
     daemon = BackyDaemon(str(tmpdir / "config"), log)
     base_dir = str(tmpdir)
     source = str(tmpdir / "test01.source")
@@ -57,7 +57,15 @@ jobs:
     with open(source, "w") as f:
         f.write("I am your father, Luke!")
 
-    daemon.start(asyncio.get_running_loop())
+    os.mkdir(tmpdir / "dead01")
+
+    async def null_coroutine():
+        return
+
+    with monkeypatch.context() as m:
+        m.setattr(daemon, "purge_old_files", null_coroutine)
+        m.setattr(daemon, "purge_pending_backups", null_coroutine)
+        daemon.start(asyncio.get_running_loop())
     yield daemon
     daemon.terminate()
 
@@ -166,7 +174,7 @@ async def test_run_callback(daemon, log):
         assert isinstance(r["tags"][0], str)
         assert isinstance(r["stats"]["bytes_written"], int)
         assert isinstance(r["stats"]["duration"], float)
-        # assert isinstance(r["location"], str)
+        assert isinstance(r["server"], str)
 
 
 def test_spread(daemon):
@@ -314,6 +322,8 @@ async def test_task_generator_backoff(
     monkeypatch.setattr(job, "run_purge", null_coroutine)
     monkeypatch.setattr(job, "run_callback", null_coroutine)
     monkeypatch.setattr(job, "run_backup", failing_coroutine)
+    monkeypatch.setattr(job, "pull_metadata", failing_coroutine)
+    monkeypatch.setattr(job, "push_metadata", failing_coroutine)
 
     # This patch causes a single run through the generator loop.
     def update_status(status):
@@ -335,37 +345,42 @@ async def test_task_generator_backoff(
     assert (
         Ellipsis(
             """\
-... D test01               job/loop-started               \n\
-... I test01               job/waiting                    next_tags='daily' next_time='2015-09-02 07:32:51'
-... E test01               job/exception                  exception_class='builtins.Exception' exception_msg=''
+... D test01[...]         job/loop-started                    \n\
+... D test01[...]         quarantine/scan                     entries=0
+... I test01[...]         job/waiting                         next_tags='daily' next_time='2015-09-02 07:32:51'
+... E test01[...]         job/exception                       exception_class='builtins.Exception' exception_msg=''
 exception>\tTraceback (most recent call last):
 exception>\t  File "/.../src/backy/scheduler.py", line ..., in run_forever
 exception>\t    await self.run_backup(next_tags)
 exception>\t  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
 exception>\t    raise Exception()
 exception>\tException
-... W test01               job/backoff                    backoff=120
-... I test01               job/waiting                    next_tags='daily' next_time='2015-09-01 09:08:47'
-... E test01               job/exception                  exception_class='builtins.Exception' exception_msg=''
+... W test01[...]         job/backoff                         backoff=120
+... D test01[...]         quarantine/scan                     entries=0
+... I test01[...]         job/waiting                         next_tags='daily' next_time='2015-09-01 09:08:47'
+... E test01[...]         job/exception                       exception_class='builtins.Exception' exception_msg=''
 exception>\tTraceback (most recent call last):
 exception>\t  File "/.../src/backy/scheduler.py", line ..., in run_forever
 exception>\t    await self.run_backup(next_tags)
 exception>\t  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
 exception>\t    raise Exception()
 exception>\tException
-... W test01               job/backoff                    backoff=240
-... I test01               job/waiting                    next_tags='daily' next_time='2015-09-01 09:10:47'
-... E test01               job/exception                  exception_class='builtins.Exception' exception_msg=''
+... W test01[...]         job/backoff                         backoff=240
+... D test01[...]         quarantine/scan                     entries=0
+... I test01[...]         job/waiting                         next_tags='daily' next_time='2015-09-01 09:10:47'
+... E test01[...]         job/exception                       exception_class='builtins.Exception' exception_msg=''
 exception>\tTraceback (most recent call last):
 exception>\t  File "/.../src/backy/scheduler.py", line ..., in run_forever
 exception>\t    await self.run_backup(next_tags)
 exception>\t  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
 exception>\t    raise Exception()
 exception>\tException
-... W test01               job/backoff                    backoff=480
-... I test01               job/waiting                    next_tags='daily' next_time='2015-09-01 09:14:47'
-... I test01               job/stop                       \n\
-... I test01               job/waiting                    next_tags='daily' next_time='2015-09-02 07:32:51'
+... W test01[...]         job/backoff                         backoff=480
+... D test01[...]         quarantine/scan                     entries=0
+... I test01[...]         job/waiting                         next_tags='daily' next_time='2015-09-01 09:14:47'
+... I test01[...]         job/stop                            \n\
+... D test01[...]         quarantine/scan                     entries=0
+... I test01[...]         job/waiting                         next_tags='daily' next_time='2015-09-02 07:32:51'
 """
         )
         == utils.log_data
@@ -382,3 +397,19 @@ def test_daemon_status(daemon):
 def test_daemon_status_filter_re(daemon):
     r = re.compile(r"foo\d\d")
     assert {"foo00"} == set([s["job"] for s in daemon.status(r)])
+
+
+async def test_purge_pending(daemon, monkeypatch):
+    run_purge = mock.Mock()
+    monkeypatch.setattr("backy.scheduler.Job.run_purge", run_purge)
+    monkeypatch.setattr(
+        "asyncio.sleep", mock.Mock(side_effect=asyncio.CancelledError())
+    )
+
+    daemon.jobs["test01"].backup.set_purge_pending()
+    del daemon.jobs["test01"]
+
+    with pytest.raises(asyncio.CancelledError):
+        await daemon.purge_pending_backups()
+
+    run_purge.assert_called_once()

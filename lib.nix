@@ -48,6 +48,9 @@ let
         # replace poetry to avoid dependency on vulnerable python-cryptography package
         nativeBuildInputs = [ super.poetry-core ] ++ builtins.filter (p: p.pname or "" != "poetry") old.nativeBuildInputs;
       });
+      aiofiles = super.aiofiles.overrideAttrs (old: {
+        buildInputs = (old.buildInputs or []) ++ [ super.hatchling super.hatch-vcs ];
+      });
       nh3 =
         let
           getCargoHash = version: {

@@ -17,7 +17,12 @@ import backy.utils
 
 from .backup import Backup
 from .ext_deps import BACKY_CMD
-from .utils import SafeFile, format_datetime_local, time_or_event
+from .utils import (
+    SafeFile,
+    format_datetime_local,
+    generate_taskid,
+    time_or_event,
+)
 
 
 class Job(object):
@@ -27,14 +32,15 @@ class Job(object):
     status: str = ""
     next_time: Optional[datetime.datetime] = None
     next_tags: Optional[set[str]] = None
-    path: Optional[str] = None
-    backup: Optional[Backup] = None
-    logfile: Optional[str] = None
+    path: str
+    backup: Backup
+    logfile: str
     last_config: Optional[dict] = None
     daemon: "backy.daemon.BackyDaemon"
     run_immediately: asyncio.Event
     errors: int = 0
     backoff: int = 0
+    taskid: str = ""
     log: BoundLogger
 
     _task: Optional[asyncio.Task] = None
@@ -44,12 +50,12 @@ class Job(object):
         self.name = name
         self.log = log.bind(job_name=name, subsystem="job")
         self.run_immediately = asyncio.Event()
+        self.path = p.join(self.daemon.base_dir, self.name)
+        self.logfile = p.join(self.path, "backy.log")
 
     def configure(self, config):
         self.source = config["source"]
         self.schedule_name = config["schedule"]
-        self.path = p.join(self.daemon.base_dir, self.name)
-        self.logfile = p.join(self.path, "backy.log")
         self.update_config()
         self.backup = Backup(self.path, self.log)
         self.last_config = config
@@ -146,7 +152,10 @@ class Job(object):
         self.backoff = 0
         self.log.debug("loop-started")
         while True:
-            self.backup.scan()
+            self.taskid = generate_taskid()
+            self.log = self.log.bind(job_name=self.name, sub_taskid=self.taskid)
+
+            self.backup = Backup(self.path, self.log)
 
             next_time, next_tags = self.schedule.next(
                 backy.utils.now(), self.spread, self.backup
@@ -188,9 +197,10 @@ class Job(object):
                 async with self.daemon.backup_semaphores[speed]:
                     self.update_status(f"running ({speed})")
 
-                    self.update_config()
                     await self.run_backup(next_tags)
+                    await self.pull_metadata()
                     await self.run_expiry()
+                    await self.push_metadata()
                     await self.run_purge()
                     await self.run_callback()
             except asyncio.CancelledError:
@@ -214,10 +224,80 @@ class Job(object):
                 self.backoff = 0
                 self.update_status("finished")
 
+    async def pull_metadata(self):
+        self.log.info("pull-metadata-started")
+        proc = await asyncio.create_subprocess_exec(
+            BACKY_CMD,
+            "-t",
+            self.taskid,
+            "-b",
+            self.path,
+            "-l",
+            self.logfile,
+            "pull",
+            "-c",
+            self.daemon.config_file,
+            close_fds=True,
+            start_new_session=True,  # Avoid signal propagation like Ctrl-C
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            return_code = await proc.wait()
+            self.log.info(
+                "pull-metadata-finished",
+                return_code=return_code,
+                subprocess_pid=proc.pid,
+            )
+        except asyncio.CancelledError:
+            self.log.warning("pull-metadata-cancelled")
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+            raise
+
+    async def push_metadata(self):
+        self.log.info("push-metadata-started")
+        proc = await asyncio.create_subprocess_exec(
+            BACKY_CMD,
+            "-t",
+            self.taskid,
+            "-b",
+            self.path,
+            "-l",
+            self.logfile,
+            "push",
+            "-c",
+            self.daemon.config_file,
+            close_fds=True,
+            start_new_session=True,  # Avoid signal propagation like Ctrl-C
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            return_code = await proc.wait()
+            self.log.info(
+                "push-metadata-finished",
+                return_code=return_code,
+                subprocess_pid=proc.pid,
+            )
+        except asyncio.CancelledError:
+            self.log.warning("push-metadata-cancelled")
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+            raise
+
     async def run_backup(self, tags):
         self.log.info("backup-started", tags=", ".join(tags))
         proc = await asyncio.create_subprocess_exec(
             BACKY_CMD,
+            "-t",
+            self.taskid,
             "-b",
             self.path,
             "-l",
@@ -250,13 +330,47 @@ class Job(object):
             raise
 
     async def run_expiry(self):
-        self.log.info("expiring-revs")
-        self.schedule.expire(self.backup)
+        self.log.info("expiry-started")
+        proc = await asyncio.create_subprocess_exec(
+            BACKY_CMD,
+            "-t",
+            self.taskid,
+            "-b",
+            self.path,
+            "-l",
+            self.logfile,
+            "expire",
+            close_fds=True,
+            start_new_session=True,  # Avoid signal propagation like Ctrl-C
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            return_code = await proc.wait()
+            self.log.info(
+                "expiry-finished",
+                return_code=return_code,
+                subprocess_pid=proc.pid,
+            )
+            if return_code:
+                raise RuntimeError(
+                    f"Expiry failed with return code {return_code}"
+                )
+        except asyncio.CancelledError:
+            self.log.warning("expiry-cancelled")
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+            raise
 
     async def run_purge(self):
         self.log.info("purge-started")
         proc = await asyncio.create_subprocess_exec(
             BACKY_CMD,
+            "-t",
+            self.taskid,
             "-b",
             self.path,
             "-l",

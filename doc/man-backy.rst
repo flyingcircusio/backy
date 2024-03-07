@@ -170,6 +170,13 @@ Subcommand-specific options
       Trust state. Ordered by date, oldest first.
     * A tag with the **tag:** prefix. Selects all revisions with this tag.
       Ordered by date, oldest first.
+    * A server with the **server:** prefix: Selects all revisions located on
+      this server. The current server can be selected with an empty string.
+      Ordered by date, oldest first.
+    * The key word **local** selects all revisions located on the current
+      server (`server:`).
+    * The key word **local** selects all revisions located on remote servers
+      (`not(server:)`).
     * An inclusive range using two single revision specifiers separated with two
       dots. The singe revision specifiers may be omitted, in which case the
       **first** and/or **last** revision is assumed.

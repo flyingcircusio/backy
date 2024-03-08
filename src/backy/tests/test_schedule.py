@@ -152,10 +152,9 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
     schedule, backup, clock, log
 ):
     def add_revision(timestamp):
-        revision = Revision(
-            backup, log, str(len(backup.history) + 1), timestamp=timestamp
-        )
-        revision.tags = {"daily"}
+        revision = Revision.create(backup, {"daily"}, log)
+        revision.uuid = str(len(backup.history) + 1)
+        revision.timestamp = timestamp
         revision.materialize()
         backup.history.append(revision)
         backup.history.sort(key=lambda x: x.timestamp)

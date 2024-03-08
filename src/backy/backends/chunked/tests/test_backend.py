@@ -7,7 +7,7 @@ from backy.revision import Revision
 
 
 def test_overlay(simple_file_config, log):
-    r = Revision(simple_file_config, log)
+    r = Revision.create(simple_file_config, set(), log)
     assert isinstance(r.backend, ChunkedFileBackend)
     # Write 1 version to the file
     f = r.open("w")
@@ -31,7 +31,7 @@ def test_overlay(simple_file_config, log):
 
 def test_purge(simple_file_config, log):
     b = simple_file_config
-    r = Revision(b, log)
+    r = Revision.create(b, set(), log)
     # Write 1 version to the file
     f = r.open("w")
     f.write(b"asdf")

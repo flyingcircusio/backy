@@ -1,4 +1,5 @@
 import datetime
+import json
 import os
 import shutil
 from unittest import mock
@@ -77,12 +78,19 @@ def schedule():
     return schedule
 
 
-@pytest.fixture
-def backup(schedule, tmp_path, log):
-    with open(str(tmp_path / "config"), "wb") as f:
-        f.write(
-            b"{'source': {'type': 'file', 'filename': 'test'},"
-            b"'schedule': {'daily': {'interval': '1d', 'keep': 7}}}"
+@pytest.fixture(params=["chunked", "cowfile"])
+def backup(request, schedule, tmp_path, log):
+    with open(str(tmp_path / "config"), "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "source": {
+                    "type": "file",
+                    "filename": "test",
+                    "backend": request.param,
+                },
+                "schedule": schedule.to_dict(),
+            },
+            f,
         )
     return backy.backup.Backup(tmp_path, log)
 

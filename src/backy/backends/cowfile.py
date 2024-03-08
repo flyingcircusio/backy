@@ -9,6 +9,7 @@ class COWFileBackend(BackyBackend):
     revision: "backy.revision.Revision"
 
     def __init__(self, revision, log):
+        assert revision.backend_type == "cowfile"
         self.revision = revision
 
     def open(self, mode: str = "rb") -> IO:

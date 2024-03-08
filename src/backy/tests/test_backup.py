@@ -20,8 +20,7 @@ def test_config(simple_file_config, tmp_path):
 
 def test_find(simple_file_config, tmp_path, log):
     backup = simple_file_config
-    rev = Revision(backup, log, "123-456", backup)
-    rev.timestamp = backy.utils.now()
+    rev = Revision.create(backup, set(), log, uuid="123-456")
     rev.materialize()
     backup.scan()
     assert tmp_path / "123-456" == backup.find("0").filename
@@ -29,8 +28,7 @@ def test_find(simple_file_config, tmp_path, log):
 
 def test_find_should_raise_if_not_found(simple_file_config, log):
     backup = simple_file_config
-    rev = Revision(backup, log, "123-456")
-    rev.timestamp = backy.utils.now()
+    rev = Revision.create(backup, set(), log)
     rev.materialize()
     backup.scan()
     with pytest.raises(KeyError):
@@ -93,3 +91,28 @@ def test_backup_corrupted(simple_file_config):
 
     assert backup.history == []
     assert not os.path.exists(chunk_path)
+
+
+def test_restore_mixed_backend(simple_file_config):
+    backup = simple_file_config
+    backup.default_backend_type = "cowfile"
+    source = "input-file"
+    out = "output-file"
+    with open(source, "wb") as f:
+        f.write(b"volume contents\n")
+    backup.backup({"daily"})
+
+    with open(source, "wb") as f:
+        f.write(b"meow\n")
+    backup.default_backend_type = "chunked"
+    backup.backup({"daily"})
+
+    assert len(backup.history) == 2
+
+    backup.restore("1", out)
+    with open(out, "rb") as f:
+        assert f.read() == b"volume contents\n"
+
+    backup.restore("0", out)
+    with open(out, "rb") as f:
+        assert f.read() == b"meow\n"

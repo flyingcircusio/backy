@@ -371,8 +371,7 @@ def test_commands_wrapper_status(
 ):
     commands = backy.main.Command(tmp_path, log)
 
-    revision = Revision(backup, log, "1")
-    revision.timestamp = backy.utils.now()
+    revision = Revision.create(backup, set(), log, uuid="1")
     revision.materialize()
 
     commands.status(yaml_=False, revision="all")
@@ -396,8 +395,7 @@ def test_commands_wrapper_status_yaml(
 ):
     commands = backy.main.Command(tmp_path, log)
 
-    revision = Revision(backup, log, "1")
-    revision.timestamp = backy.utils.now()
+    revision = Revision.create(backup, set(), log, uuid="1")
     revision.stats["duration"] = 3.5
     revision.stats["bytes_written"] = 42
     revision.materialize()
@@ -408,8 +406,8 @@ def test_commands_wrapper_status_yaml(
     assert err == ""
     assert (
         out
-        == """\
-- backend_type: chunked
+        == f"""\
+- backend_type: {backup.default_backend_type}
   parent: ''
   stats:
     bytes_written: 42

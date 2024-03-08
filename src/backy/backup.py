@@ -23,9 +23,7 @@ from backy.utils import (
     unique,
 )
 
-from .backends import BackendException, BackyBackend
-from .backends.chunked import ChunkedFileBackend
-from .backends.cowfile import COWFileBackend
+from .backends import BackendException, BackyBackend, select_backend
 from .ext_deps import BACKY_EXTRACT
 from .quarantine import QuarantineStore
 from .revision import Revision, Trust, filter_schedule_tags
@@ -111,8 +109,7 @@ class Backup(object):
     config: dict
     schedule: Schedule
     source: BackySourceFactory
-    backend_type: Literal["cowfile", "chunked"]
-    backend_factory: Type[BackyBackend]
+    default_backend_type: Literal["cowfile", "chunked"]
     history: list[Revision]
     quarantine: QuarantineStore
     log: BoundLogger
@@ -152,31 +149,22 @@ class Backup(object):
         self.source = source_factory(self.config["source"], self.log)
 
         # Initialize our backend
-        self.backend_type = self.config["source"].get("backend", None)
-        if self.backend_type is None:
+        self.default_backend_type = self.config["source"].get("backend", None)
+        if self.default_backend_type is None:
             if not self.history:
                 # Start fresh backups with our new default.
-                self.backend_type = "chunked"
+                self.default_backend_type = "chunked"
             else:
                 # Choose to continue existing backups with whatever format
                 # they are in.
-                self.backend_type = self.history[-1].backend_type
+                self.default_backend_type = self.history[-1].backend_type
 
         self.schedule = Schedule()
         self.schedule.configure(self.config["schedule"])
 
-        if self.backend_type == "cowfile":
-            self.backend_factory = COWFileBackend
-        elif self.backend_type == "chunked":
-            self.backend_factory = ChunkedFileBackend
-        else:
-            raise ValueError(
-                "Unsupported backend_type '{}'".format(self.backend_type)
-            )
-
         self.quarantine = QuarantineStore(self.path, self.log)
 
-    def scan(self):
+    def scan(self) -> None:
         self.history = []
         self._by_uuid = {}
         for f in self.path.glob("*.rev"):
@@ -191,19 +179,19 @@ class Backup(object):
         self.history.sort(key=lambda r: r.timestamp)
 
     @property
-    def clean_history(self):
+    def clean_history(self) -> List[Revision]:
         """History without incomplete revisions."""
         return [rev for rev in self.history if "duration" in rev.stats]
 
     @property
-    def contains_distrusted(self):
+    def contains_distrusted(self) -> bool:
         return any((r == Trust.DISTRUSTED for r in self.clean_history))
 
     #################
     # Making backups
 
     @locked(target=".backup", mode="exclusive")
-    def _clean(self):
+    def _clean(self) -> None:
         """Clean-up incomplete revisions."""
         for revision in self.history:
             if "duration" not in revision.stats:
@@ -213,13 +201,13 @@ class Backup(object):
                 revision.remove()
 
     @locked(target=".backup", mode="exclusive")
-    def forget(self, revision: str):
+    def forget(self, revision: str) -> None:
         for r in self.find_revisions(revision):
             r.remove()
 
     @locked(target=".backup", mode="exclusive")
     @locked(target=".purge", mode="shared")
-    def backup(self, tags: set[str], force=False):
+    def backup(self, tags: set[str], force: bool = False) -> None:
         if not force:
             missing_tags = (
                 filter_schedule_tags(tags) - self.schedule.schedule.keys()
@@ -251,7 +239,7 @@ class Backup(object):
             tags=", ".join(new_revision.tags),
         )
 
-        backend = self.backend_factory(new_revision, self.log)
+        backend = new_revision.backend
         with self.source(new_revision) as source:
             try:
                 source.backup(backend)
@@ -286,26 +274,23 @@ class Backup(object):
         for revision in reversed(self.clean_history):
             if revision.trust == Trust.DISTRUSTED:
                 self.log.warning("inconsistent")
-                backend = self.backend_factory(revision, self.log)
-                backend.verify()
+                revision.backend.verify()
                 break
 
     @locked(target=".backup", mode="exclusive")
-    def distrust(self, revision: str):
+    def distrust(self, revision: str) -> None:
         for r in self.find_revisions(revision):
             r.distrust()
             r.write_info()
 
     @locked(target=".purge", mode="shared")
-    def verify(self, revision: str):
+    def verify(self, revision: str) -> None:
         for r in self.find_revisions(revision):
-            backend = self.backend_factory(r, self.log)
-            backend.verify()
+            r.backend.verify()
 
     @locked(target=".purge", mode="exclusive")
-    def purge(self):
-        backend = self.backend_factory(self.history[0], self.log)
-        backend.purge()
+    def purge(self) -> None:
+        self.history[-1].backend.purge()
 
     #################
     # Restoring
@@ -317,10 +302,9 @@ class Backup(object):
         revision: str,
         target: str,
         restore_backend: RestoreBackend = RestoreBackend.AUTO,
-    ):
+    ) -> None:
         r = self.find(revision)
-        backend = self.backend_factory(r, self.log)
-        s = backend.open("rb")
+        s = r.backend.open("rb")
         if restore_backend == RestoreBackend.AUTO:
             if self.backy_extract_supported(s):
                 restore_backend = RestoreBackend.RUST
@@ -357,7 +341,7 @@ class Backup(object):
         return True
 
     # backy-extract acquires lock
-    def restore_backy_extract(self, rev: Revision, target: str):
+    def restore_backy_extract(self, rev: Revision, target: str) -> None:
         log = self.log.bind(subsystem="backy-extract")
         cmd = [BACKY_EXTRACT, str(self.path / rev.uuid), target]
         log.debug("started", cmd=cmd)
@@ -374,11 +358,11 @@ class Backup(object):
             )
 
     @locked(target=".purge", mode="shared")
-    def restore_file(self, source, target):
+    def restore_file(self, source: IO, target_name: str) -> None:
         """Bulk-copy from open revision `source` to target file."""
-        self.log.debug("restore-file", source=source.name, target=target)
-        open(target, "ab").close()  # touch into existence
-        with open(target, "r+b", buffering=CHUNK_SIZE) as target:
+        self.log.debug("restore-file", source=source.name, target=target_name)
+        open(target_name, "ab").close()  # touch into existence
+        with open(target_name, "r+b", buffering=CHUNK_SIZE) as target:
             try:
                 posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)  # type: ignore
             except Exception:
@@ -386,7 +370,7 @@ class Backup(object):
             copy(source, target)
 
     @locked(target=".purge", mode="shared")
-    def restore_stdout(self, source):
+    def restore_stdout(self, source: IO) -> None:
         """Emit restore data to stdout (for pipe processing)."""
         self.log.debug("restore-stdout", source=source.name)
         try:
@@ -401,7 +385,7 @@ class Backup(object):
                 target.write(chunk)
 
     @locked(target=".purge", mode="shared")
-    def upgrade(self):
+    def upgrade(self) -> None:
         """Upgrade this backup's store from cowfile to chunked.
 
         This can take a long time and is intended to be interruptable.
@@ -455,7 +439,6 @@ class Backup(object):
                         os.unlink(revision.filename)
                 revision.writable()
                 chunked = ChunkedFileBackend(revision, self.log)
-                chunked.clone_parent = False
                 file = File(dict(filename=original_file, cow=False), self.log)(
                     revision
                 )

@@ -13,15 +13,11 @@ from .store import Store
 
 
 class ChunkedFileBackend(BackyBackend):
-    # Normally a new revision will be made by copying the last revision's file.
-    # We need to be able to not do this in case of converting from a different
-    # format.
-    clone_parent = True
-
     # multiple Backends may share the same store
     STORES: dict[Path, Store] = dict()
 
     def __init__(self, revision: Revision, log: BoundLogger):
+        assert revision.backend_type == "chunked"
         self.backup = revision.backup
         self.revision = revision
         path = self.backup.path / "chunks"
@@ -31,7 +27,7 @@ class ChunkedFileBackend(BackyBackend):
         self.log = log.bind(subsystem="chunked")
 
     def open(self, mode: str = "rb") -> File:  # type: ignore[override]
-        if "w" in mode or "+" in mode and self.clone_parent:
+        if "w" in mode or "+" in mode:
             parent = self.revision.get_parent()
             if parent and not self.revision.filename.exists():
                 with self.revision.filename.open(
@@ -56,27 +52,29 @@ class ChunkedFileBackend(BackyBackend):
         self.log.debug("purge")
         used_chunks: Set[Hash] = set()
         for revision in self.backup.history:
-            try:
-                used_chunks |= set(
-                    type(self)(revision, self.log).open()._mapping.values()
-                )
-            except ValueError:
-                # Invalid format, like purging non-chunked with chunked backend
-                pass
+            if revision.backend_type != "chunked":
+                continue
+            used_chunks.update(
+                type(self)(revision, self.log).open()._mapping.values()
+            )
         self.store.purge(used_chunks)
 
     @report_status
     def verify(self):
         log = self.log.bind(revision_uuid=self.revision.uuid)
         log.info("verify-start")
-        verified_chunks: Set[str] = set()
+        verified_chunks: Set[Hash] = set()
 
         # Load verified chunks to avoid duplicate work
         for revision in self.backup.clean_history:
-            if revision.trust != Trust.VERIFIED:
+            if (
+                revision.trust != Trust.VERIFIED
+                or revision.backend_type != "chunked"
+            ):
                 continue
-            f = type(self)(revision, log).open()
-            verified_chunks.update(f._mapping.values())
+            verified_chunks.update(
+                type(self)(revision, self.log).open()._mapping.values()
+            )
 
         log.debug("verify-loaded-chunks", verified_chunks=len(verified_chunks))
 

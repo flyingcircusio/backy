@@ -12,7 +12,7 @@ SAMPLE_DIR = Path(__file__).parent.joinpath("samples")
 
 
 def test_revision_base(backup, log):
-    revision = Revision(backup, log, "uuid")
+    revision = Revision.create(backup, set(), log, uuid="uuid")
     assert revision.uuid == "uuid"
     assert revision.backup is backup
 
@@ -27,7 +27,7 @@ def test_revision_create(backup, log):
 
 
 def test_revision_create_child(backup, log):
-    backup.history = [Revision(backup, log, "asdf")]
+    backup.history = [Revision.create(backup, set(), log, uuid="asdf")]
     r = Revision.create(backup, {"test"}, log)
     assert r.uuid is not None
     assert r.tags == {"test"}
@@ -55,20 +55,19 @@ def test_load_sample2(backup, log):
 def test_filenames_based_on_uuid_and_backup_dir(log):
     backup = mock.Mock()
     backup.path = Path("/srv/backup/foo")
-    r = Revision(backup, log, "asdf")
+    r = Revision.create(backup, set(), log, uuid="asdf")
     assert r.filename == Path("/srv/backup/foo/asdf")
     assert r.info_filename == Path("/srv/backup/foo/asdf.rev")
 
 
 def test_store_revision_data(backup, clock, log):
-    backup.history = [Revision(backup, log, "asdf", backy.utils.now())]
-    r = Revision(backup, log, "asdf2", backy.utils.now())
-    r.backup = backup
+    backup.history = [Revision.create(backup, set(), log, uuid="asdf")]
+    r = Revision.create(backup, set(), log, uuid="asdf2")
     r.write_info()
     with open(r.info_filename, encoding="utf-8") as info:
         assert yaml.safe_load(info) == {
             "parent": "asdf",
-            "backend_type": "chunked",
+            "backend_type": backup.default_backend_type,
             "uuid": "asdf2",
             "stats": {"bytes_written": 0},
             "tags": [],
@@ -78,13 +77,12 @@ def test_store_revision_data(backup, clock, log):
 
 
 def test_store_revision_data_no_parent(backup, clock, log):
-    r = Revision(backup, log, "asdf2", backy.utils.now())
-    r.backup = backup
+    r = Revision.create(backup, set(), log, uuid="asdf2")
     r.write_info()
     with open(r.info_filename, encoding="utf-8") as info:
         assert yaml.safe_load(info) == {
             "parent": "",
-            "backend_type": "chunked",
+            "backend_type": backup.default_backend_type,
             "uuid": "asdf2",
             "stats": {"bytes_written": 0},
             "tags": [],
@@ -94,7 +92,7 @@ def test_store_revision_data_no_parent(backup, clock, log):
 
 
 def test_delete_revision(backup, log):
-    r = Revision(backup, log, "123-456", backy.utils.now())
+    r = Revision.create(backup, set(), log, uuid="123-456")
     r.materialize()
     assert backup.path.joinpath("123-456.rev").exists()
     backup.scan()

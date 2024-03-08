@@ -1,13 +1,15 @@
 import datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import IO, TYPE_CHECKING, Literal, Optional
 
 import shortuuid
 import yaml
 from structlog.stdlib import BoundLogger
 
-from .utils import SafeFile, now
+from . import utils
+from .backends import select_backend
+from .utils import SafeFile
 
 if TYPE_CHECKING:
     from .backends import BackyBackend
@@ -50,29 +52,34 @@ class Revision(object):
     ) -> None:
         self.backup = backup
         self.uuid = uuid if uuid else shortuuid.uuid()
-        self.timestamp = timestamp if timestamp else now()
+        self.timestamp = timestamp if timestamp else utils.now()
         self.stats = {"bytes_written": 0}
         self.tags = set()
         self.log = log.bind(revision_uuid=self.uuid, subsystem="revision")
 
     @classmethod
     def create(
-        cls, backup: "Backup", tags: set[str], log: BoundLogger
+        cls,
+        backup: "Backup",
+        tags: set[str],
+        log: BoundLogger,
+        *,
+        uuid: Optional[str] = None,
     ) -> "Revision":
-        r = Revision(backup, log)
+        r = Revision(backup, log, uuid)
         r.tags = tags
-        r.backend_type = backup.backend_type
+        r.backend_type = backup.default_backend_type
         return r
 
     @property
     def backend(self) -> "BackyBackend":
-        return self.backup.backend_factory(self, self.log)
+        return select_backend(self.backend_type)(self, self.log)
 
-    def open(self, mode: str = "rb"):
+    def open(self, mode: str = "rb") -> IO:
         return self.backend.open(mode)
 
     @classmethod
-    def load(cls, file: Path, backup: "Backup", log: BoundLogger):
+    def load(cls, file: Path, backup: "Backup", log: BoundLogger) -> "Revision":
         with file.open(encoding="utf-8") as f:
             metadata = yaml.safe_load(f)
         assert metadata["timestamp"].tzinfo == datetime.timezone.utc
@@ -97,17 +104,17 @@ class Revision(object):
         """Full pathname of the metadata file."""
         return self.filename.with_suffix(self.filename.suffix + ".rev")
 
-    def materialize(self):
+    def materialize(self) -> None:
         self.write_info()
         self.writable()
 
-    def write_info(self):
+    def write_info(self) -> None:
         self.log.debug("writing-info", tags=", ".join(self.tags))
         with SafeFile(self.info_filename, encoding="utf-8") as f:
             f.open_new("wb")
             yaml.safe_dump(self.to_dict(), f)
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "uuid": self.uuid,
             "backend_type": self.backend_type,
@@ -120,15 +127,15 @@ class Revision(object):
             "tags": list(self.tags),
         }
 
-    def distrust(self):
+    def distrust(self) -> None:
         self.log.info("distrusted")
         self.trust = Trust.DISTRUSTED
 
-    def verify(self):
+    def verify(self) -> None:
         self.log.info("verified")
         self.trust = Trust.VERIFIED
 
-    def remove(self):
+    def remove(self) -> None:
         self.log.info("remove")
         for filename in self.filename.parent.glob(self.filename.name + "*"):
             if filename.exists():
@@ -139,12 +146,12 @@ class Revision(object):
         if self in self.backup.history:
             self.backup.history.remove(self)
 
-    def writable(self):
+    def writable(self) -> None:
         if self.filename.exists():
             self.filename.chmod(0o640)
         self.info_filename.chmod(0o640)
 
-    def readonly(self):
+    def readonly(self) -> None:
         if self.filename.exists():
             self.filename.chmod(0o440)
         self.info_filename.chmod(0o440)
@@ -153,6 +160,8 @@ class Revision(object):
         """defaults to last rev if not in history"""
         prev = None
         for r in self.backup.history:
+            if r.backend_type != self.backend_type:
+                continue
             if r.uuid == self.uuid:
                 break
             prev = r

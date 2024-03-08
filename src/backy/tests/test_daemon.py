@@ -192,7 +192,7 @@ def test_sla_over_time(daemon, clock, tmp_path, log):
     # I agree that this gives us a blind spot in the beginning. I'll
     # think of something when this happens. Maybe keeping a log of errors
     # or so to notice that we tried previously.
-    revision = Revision(job.backup, log, "1")
+    revision = Revision.create(job.backup, set(), log)
     # We're on a 24h cycle. 6 hours old backup is fine.
     revision.timestamp = utils.now() - datetime.timedelta(hours=6)
     revision.stats["duration"] = 60.0
@@ -232,11 +232,11 @@ def test_sla_over_time(daemon, clock, tmp_path, log):
 
 def test_incomplete_revs_dont_count_for_sla(daemon, clock, tmp_path, log):
     job = daemon.jobs["test01"]
-    r1 = Revision(job.backup, log, "1")
+    r1 = Revision.create(job.backup, set(), log)
     r1.timestamp = utils.now() - datetime.timedelta(hours=48)
     r1.stats["duration"] = 60.0
     r1.materialize()
-    r2 = Revision(job.backup, log, "2")
+    r2 = Revision.create(job.backup, set(), log)
     r2.timestamp = utils.now() - datetime.timedelta(hours=1)
     r2.materialize()
     job.backup.scan()

@@ -44,5 +44,18 @@ class BackySourceFactory(ABC):
 
 
 def select_source(type_: str) -> Type[BackySourceFactory]:
-    (entry_point,) = entry_points(group="backy.sources", name=type_)
-    return entry_point.load()
+    match type_:
+        case "flyingcircus":
+            from backy.sources.flyingcircus.source import FlyingCircusRootDisk
+
+            return FlyingCircusRootDisk
+        case "ceph-rbd":
+            from backy.sources.ceph.source import CephRBD
+
+            return CephRBD
+        case "file":
+            from backy.sources.file import File
+
+            return File
+        case _:
+            raise ValueError(f"invalid backend: {type_}")

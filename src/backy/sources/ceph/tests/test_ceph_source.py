@@ -188,7 +188,7 @@ def test_diff_backup(ceph_rbd_imagesource, backup, tmp_path, log):
     )
     revision.timestamp = backy.utils.now() + datetime.timedelta(seconds=1)
 
-    with parent.open("wb") as f:
+    with parent.backend.open("wb") as f:
         f.write(b"asdf")
 
     backup.scan()
@@ -289,7 +289,7 @@ def test_full_backup_integrates_changes(
                 source.full(rev.backend)
             export.assert_called_with("test/foo@backy-{}".format(rev.uuid))
 
-        with rev.open("rb") as f:
+        with rev.backend.open("rb") as f:
             assert content == f.read()
 
 
@@ -331,7 +331,7 @@ def test_verify(ceph_rbd_imagesource, backup, tmp_path, log):
         f.write(b"Han likes Leia.")
     source.rbd.unmap(rbd_source)
 
-    with revision.open("wb") as f:
+    with revision.backend.open("wb") as f:
         f.write(b"Han likes Leia.")
         f.flush()
 

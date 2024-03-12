@@ -79,13 +79,6 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
                 self.log.info("backup-no-valid-parent")
                 self.full(target)
                 return
-            if parent.trust == Trust.DISTRUSTED:
-                self.log.info(
-                    "ignoring-distrusted-rev",
-                    revision_uuid=parent.uuid,
-                )
-                revision = parent
-                continue
             if not self.rbd.exists(self._image_name + "@backy-" + parent.uuid):
                 self.log.info(
                     "ignoring-rev-without-snapshot",
@@ -102,7 +95,7 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
         snap_from = "backy-" + parent.uuid
         snap_to = "backy-" + self.revision.uuid
         s = self.rbd.export_diff(self._image_name + "@" + snap_to, snap_from)
-        t = target_.open("r+b")
+        t = target_.open("r+b", parent)
         with s as source, t as target:
             bytes = source.integrate(target, snap_from, snap_to)
         self.log.info("diff-integration-finished")

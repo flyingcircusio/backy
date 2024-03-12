@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Set
+from typing import Optional, Set
 
 from structlog.stdlib import BoundLogger
 
@@ -26,9 +26,8 @@ class ChunkedFileBackend(BackyBackend):
         self.store = self.STORES[path]
         self.log = log.bind(subsystem="chunked")
 
-    def open(self, mode: str = "rb") -> File:  # type: ignore[override]
+    def open(self, mode: str = "rb", parent: Optional[Revision] = None) -> File:  # type: ignore[override]
         if "w" in mode or "+" in mode:
-            parent = self.revision.get_parent()
             if parent and not self.revision.filename.exists():
                 with self.revision.filename.open(
                     "wb"

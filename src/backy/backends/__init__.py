@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import IO, TYPE_CHECKING, Type
+from typing import IO, TYPE_CHECKING, Optional, Type
 
 from structlog.stdlib import BoundLogger
 
@@ -17,7 +17,7 @@ class BackyBackend(ABC):
         ...
 
     @abstractmethod
-    def open(self, mode: str = "rb") -> IO:
+    def open(self, mode: str = "rb", parent: Optional["Revision"] = None) -> IO:
         ...
 
     def purge(self) -> None:

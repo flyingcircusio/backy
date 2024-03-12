@@ -75,9 +75,6 @@ class Revision(object):
     def backend(self) -> "BackyBackend":
         return select_backend(self.backend_type)(self, self.log)
 
-    def open(self, mode: str = "rb") -> IO:
-        return self.backend.open(mode)
-
     @classmethod
     def load(cls, file: Path, backup: "Backup", log: BoundLogger) -> "Revision":
         with file.open(encoding="utf-8") as f:
@@ -156,11 +153,13 @@ class Revision(object):
             self.filename.chmod(0o440)
         self.info_filename.chmod(0o440)
 
-    def get_parent(self) -> Optional["Revision"]:
+    def get_parent(self, ignore_trust=False) -> Optional["Revision"]:
         """defaults to last rev if not in history"""
         prev = None
         for r in self.backup.history:
             if r.backend_type != self.backend_type:
+                continue
+            if not ignore_trust and r.trust == Trust.DISTRUSTED:
                 continue
             if r.uuid == self.uuid:
                 break

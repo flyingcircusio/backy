@@ -1,4 +1,5 @@
 import datetime
+import json
 import os
 import shutil
 from unittest import mock
@@ -25,10 +26,10 @@ def fix_pytest_coverage_465():
 
 
 @pytest.fixture
-def simple_file_config(tmpdir, monkeypatch, log):
-    shutil.copy(fixtures + "/simple_file/config", str(tmpdir))
-    monkeypatch.chdir(tmpdir)
-    b = backy.backup.Backup(str(tmpdir), log)
+def simple_file_config(tmp_path, monkeypatch, log):
+    shutil.copy(fixtures + "/simple_file/config", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    b = backy.backup.Backup(tmp_path, log)
     return b
 
 
@@ -77,14 +78,21 @@ def schedule():
     return schedule
 
 
-@pytest.fixture
-def backup(schedule, tmpdir, log):
-    with open(str(tmpdir / "config"), "wb") as f:
-        f.write(
-            b"{'source': {'type': 'file', 'filename': 'test'},"
-            b"'schedule': {'daily': {'interval': '1d', 'keep': 7}}}"
+@pytest.fixture(params=["chunked", "cowfile"])
+def backup(request, schedule, tmp_path, log):
+    with open(str(tmp_path / "config"), "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "source": {
+                    "type": "file",
+                    "filename": "test",
+                    "backend": request.param,
+                },
+                "schedule": schedule.to_dict(),
+            },
+            f,
         )
-    return backy.backup.Backup(str(tmpdir), log)
+    return backy.backup.Backup(tmp_path, log)
 
 
 @pytest.fixture(scope="session")

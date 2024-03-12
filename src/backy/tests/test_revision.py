@@ -1,5 +1,5 @@
 import datetime
-import os.path as p
+from pathlib import Path
 from unittest import mock
 
 import yaml
@@ -8,11 +8,11 @@ import backy
 from backy.revision import Revision
 
 UTC = datetime.timezone.utc
-SAMPLE_DIR = p.join(p.dirname(__file__), "samples")
+SAMPLE_DIR = Path(__file__).parent.joinpath("samples")
 
 
 def test_revision_base(backup, log):
-    revision = Revision(backup, log, "uuid")
+    revision = Revision.create(backup, set(), log, uuid="uuid")
     assert revision.uuid == "uuid"
     assert revision.backup is backup
 
@@ -21,13 +21,13 @@ def test_revision_create(backup, log):
     backup.history = []
     r = Revision.create(backup, {"1", "2"}, log)
     assert r.uuid is not None
-    assert r.tags == set(["1", "2"])
+    assert r.tags == {"1", "2"}
     assert (backy.utils.now() - r.timestamp).total_seconds() < 10
     assert r.backup is backup
 
 
 def test_revision_create_child(backup, log):
-    backup.history = [Revision(backup, log, "asdf")]
+    backup.history = [Revision.create(backup, set(), log, uuid="asdf")]
     r = Revision.create(backup, {"test"}, log)
     assert r.uuid is not None
     assert r.tags == {"test"}
@@ -37,7 +37,7 @@ def test_revision_create_child(backup, log):
 
 
 def test_load_sample1(backup, log):
-    r = Revision.load(SAMPLE_DIR + "/sample1.rev", backup, log)
+    r = Revision.load(SAMPLE_DIR / "sample1.rev", backup, log)
     assert r.uuid == "asdf"
     assert r.timestamp == datetime.datetime(2015, 8, 1, 20, 0, tzinfo=UTC)
     assert r.get_parent() is None
@@ -45,7 +45,7 @@ def test_load_sample1(backup, log):
 
 
 def test_load_sample2(backup, log):
-    r = Revision.load(SAMPLE_DIR + "/sample2.rev", backup, log)
+    r = Revision.load(SAMPLE_DIR / "sample2.rev", backup, log)
     assert r.uuid == "asdf2"
     assert r.timestamp == datetime.datetime(2015, 8, 1, 21, 0, tzinfo=UTC)
     assert r.get_parent() is None
@@ -54,21 +54,20 @@ def test_load_sample2(backup, log):
 
 def test_filenames_based_on_uuid_and_backup_dir(log):
     backup = mock.Mock()
-    backup.path = "/srv/backup/foo"
-    r = Revision(backup, log, "asdf")
-    assert r.filename == "/srv/backup/foo/asdf"
-    assert r.info_filename == "/srv/backup/foo/asdf.rev"
+    backup.path = Path("/srv/backup/foo")
+    r = Revision.create(backup, set(), log, uuid="asdf")
+    assert r.filename == Path("/srv/backup/foo/asdf")
+    assert r.info_filename == Path("/srv/backup/foo/asdf.rev")
 
 
 def test_store_revision_data(backup, clock, log):
-    backup.history = [Revision(backup, log, "asdf", backy.utils.now())]
-    r = Revision(backup, log, "asdf2", backy.utils.now())
-    r.backup = backup
+    backup.history = [Revision.create(backup, set(), log, uuid="asdf")]
+    r = Revision.create(backup, set(), log, uuid="asdf2")
     r.write_info()
     with open(r.info_filename, encoding="utf-8") as info:
         assert yaml.safe_load(info) == {
             "parent": "asdf",
-            "backend_type": "chunked",
+            "backend_type": backup.default_backend_type,
             "uuid": "asdf2",
             "stats": {"bytes_written": 0},
             "tags": [],
@@ -78,13 +77,12 @@ def test_store_revision_data(backup, clock, log):
 
 
 def test_store_revision_data_no_parent(backup, clock, log):
-    r = Revision(backup, log, "asdf2", backy.utils.now())
-    r.backup = backup
+    r = Revision.create(backup, set(), log, uuid="asdf2")
     r.write_info()
     with open(r.info_filename, encoding="utf-8") as info:
         assert yaml.safe_load(info) == {
             "parent": "",
-            "backend_type": "chunked",
+            "backend_type": backup.default_backend_type,
             "uuid": "asdf2",
             "stats": {"bytes_written": 0},
             "tags": [],
@@ -94,14 +92,14 @@ def test_store_revision_data_no_parent(backup, clock, log):
 
 
 def test_delete_revision(backup, log):
-    r = Revision(backup, log, "123-456", backy.utils.now())
+    r = Revision.create(backup, set(), log, uuid="123-456")
     r.materialize()
-    assert p.exists(backup.path + "/123-456.rev")
+    assert backup.path.joinpath("123-456.rev").exists()
     backup.scan()
-    open(backup.path + "/123-456", "w")
-    assert p.exists(backup.path + "/123-456.rev")
+    backup.path.joinpath("123-456").open("w")
+    assert backup.path.joinpath("123-456.rev").exists()
     r.remove()
     # Ensure the revision data file exists - we do not implicitly create
     # it any longer.
-    assert not p.exists(backup.path + "/123-456")
-    assert not p.exists(backup.path + "/123-456.rev")
+    assert not backup.path.joinpath("123-456").exists()
+    assert not backup.path.joinpath("123-456.rev").exists()

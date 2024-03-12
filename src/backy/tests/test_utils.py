@@ -99,8 +99,8 @@ def test_ellipsis_escaping():
     assert Ellipsis("(<object object at ...>,)") == repr(obj)
 
 
-def test_compare_files_same(tmpdir):
-    os.chdir(str(tmpdir))
+def test_compare_files_same(tmp_path):
+    os.chdir(str(tmp_path))
     with open("a", "wb") as f:
         f.write(b"asdf")
     with open("b", "wb") as f:
@@ -109,8 +109,8 @@ def test_compare_files_same(tmpdir):
     assert files_are_equal(open("a", "rb"), open("b", "rb"))
 
 
-def test_compare_files_different_content(tmpdir):
-    os.chdir(str(tmpdir))
+def test_compare_files_different_content(tmp_path):
+    os.chdir(str(tmp_path))
     with open("a", "wb") as f:
         f.write(b"asdf")
     with open("b", "wb") as f:
@@ -119,8 +119,8 @@ def test_compare_files_different_content(tmpdir):
     assert not files_are_equal(open("a", "rb"), open("b", "rb"))
 
 
-def test_compare_files_different_length(tmpdir):
-    os.chdir(str(tmpdir))
+def test_compare_files_different_length(tmp_path):
+    os.chdir(str(tmp_path))
     with open("a", "wb") as f:
         f.write(b"asdf1")
     with open("b", "wb") as f:
@@ -129,8 +129,8 @@ def test_compare_files_different_length(tmpdir):
     assert not files_are_equal(open("a", "rb"), open("b", "rb"))
 
 
-def test_safe_writable_rename_no_writeprotect(tmpdir):
-    os.chdir(str(tmpdir))
+def test_safe_writable_rename_no_writeprotect(tmp_path):
+    os.chdir(str(tmp_path))
     with SafeFile("asdf") as f:
         f.open_new("wb")
         assert f.name != "asdf"
@@ -139,8 +139,8 @@ def test_safe_writable_rename_no_writeprotect(tmpdir):
     assert open("asdf", "rb").read() == b"asdf"
 
 
-def test_safe_writable_no_rename_no_writeprotect(tmpdir):
-    os.chdir(str(tmpdir))
+def test_safe_writable_no_rename_no_writeprotect(tmp_path):
+    os.chdir(str(tmp_path))
     with SafeFile("asdf") as f:
         f.open_inplace("wb")
         assert f.name == "asdf"
@@ -149,8 +149,8 @@ def test_safe_writable_no_rename_no_writeprotect(tmpdir):
     assert open("asdf", "rb").read() == b"asdf"
 
 
-def test_safe_writable_no_rename_no_writeprotect_existing_file(tmpdir):
-    os.chdir(str(tmpdir))
+def test_safe_writable_no_rename_no_writeprotect_existing_file(tmp_path):
+    os.chdir(str(tmp_path))
     open("asdf", "wb").write(b"bsdf")
     with SafeFile("asdf") as f:
         f.open_inplace("r+b")
@@ -162,8 +162,8 @@ def test_safe_writable_no_rename_no_writeprotect_existing_file(tmpdir):
     assert open("asdf", "rb").read() == b"asdf"
 
 
-def test_safe_writable_rename_writeprotect(tmpdir):
-    os.chdir(str(tmpdir))
+def test_safe_writable_rename_writeprotect(tmp_path):
+    os.chdir(str(tmp_path))
     with SafeFile("asdf") as f:
         f.use_write_protection()
         f.open_new("wb")
@@ -176,14 +176,14 @@ def test_safe_writable_rename_writeprotect(tmpdir):
         open("asdf", "wb")
 
 
-def test_safe_edit_noop(tmpdir):
-    with SafeFile(str(tmpdir / "file")):
+def test_safe_edit_noop(tmp_path):
+    with SafeFile(str(tmp_path / "file")):
         pass
-    assert not os.path.exists(str(tmpdir / "file"))
+    assert not os.path.exists(str(tmp_path / "file"))
 
 
-def test_safe_edit_copy_with_write_protection(tmpdir):
-    os.chdir(str(tmpdir))
+def test_safe_edit_copy_with_write_protection(tmp_path):
+    os.chdir(str(tmp_path))
     open("asdf", "wb").write(b"csdf")
     with SafeFile("asdf") as f:
         f.use_write_protection()
@@ -199,8 +199,8 @@ def test_safe_edit_copy_with_write_protection(tmpdir):
         open("asdf", "wb")
 
 
-def test_safe_edit_inplace_with_write_protection(tmpdir):
-    os.chdir(str(tmpdir))
+def test_safe_edit_inplace_with_write_protection(tmp_path):
+    os.chdir(str(tmp_path))
     open("asdf", "wb").write(b"csdf")
     os.chmod("asdf", 0o440)
     with SafeFile("asdf") as f:
@@ -216,8 +216,8 @@ def test_safe_edit_inplace_with_write_protection(tmpdir):
         open("asdf", "wb")
 
 
-def test_safe_edit_unlinks_copy_on_error(tmpdir):
-    os.chdir(str(tmpdir))
+def test_safe_edit_unlinks_copy_on_error(tmp_path):
+    os.chdir(str(tmp_path))
     with pytest.raises(ValueError):
         with SafeFile("asdf") as f:
             f.open_new("wb")
@@ -226,8 +226,8 @@ def test_safe_edit_unlinks_copy_on_error(tmpdir):
     assert not os.path.exists(f_name)
 
 
-def test_safe_edit_read_write_encoded(tmpdir):
-    os.chdir(str(tmpdir))
+def test_safe_edit_read_write_encoded(tmp_path):
+    os.chdir(str(tmp_path))
     open("asdf", "wb").write(b"csdf")
     with SafeFile("asdf", encoding="utf-8") as f:
         f.open_inplace("r+b")
@@ -237,8 +237,8 @@ def test_safe_edit_read_write_encoded(tmpdir):
     assert open("asdf", "rb").read() == b"csdfasdf"
 
 
-def test_safe_edit_truncate(tmpdir):
-    os.chdir(str(tmpdir))
+def test_safe_edit_truncate(tmp_path):
+    os.chdir(str(tmp_path))
     open("asdf", "wb").write(b"csdf")
     with SafeFile("asdf", encoding="utf-8") as f:
         f.open_inplace("r+b")
@@ -249,8 +249,8 @@ def test_safe_edit_truncate(tmpdir):
     assert open("asdf", "rb").read() == b""
 
 
-def test_safefile_fileobj_api(tmpdir):
-    os.chdir(str(tmpdir))
+def test_safefile_fileobj_api(tmp_path):
+    os.chdir(str(tmp_path))
     with open("asdf", "wb") as seed:
         seed.write(1024 * b"X")
     with SafeFile("asdf", encoding="utf-8") as f:
@@ -260,8 +260,8 @@ def test_safefile_fileobj_api(tmpdir):
         assert int(f.fileno()) > 2
 
 
-def test_roughly_compare_files_same(tmpdir):
-    os.chdir(str(tmpdir))
+def test_roughly_compare_files_same(tmp_path):
+    os.chdir(str(tmp_path))
     with open("a", "wb") as f:
         f.write(b"asdf" * 100)
     with open("b", "wb") as f:
@@ -273,8 +273,8 @@ def test_roughly_compare_files_same(tmpdir):
         )
 
 
-def test_roughly_compare_files_1_changed_block(tmpdir):
-    os.chdir(str(tmpdir))
+def test_roughly_compare_files_1_changed_block(tmp_path):
+    os.chdir(str(tmp_path))
     with open("a", "wb") as f:
         f.write(b"asdf" * 100)
         f.seek(100)
@@ -291,8 +291,8 @@ def test_roughly_compare_files_1_changed_block(tmpdir):
     assert detected > 0 and detected <= 20
 
 
-def test_roughly_compare_files_timeout(tmpdir):
-    os.chdir(str(tmpdir))
+def test_roughly_compare_files_timeout(tmp_path):
+    os.chdir(str(tmp_path))
     with open("a", "wb") as f:
         f.write(b"asdf" * 100)
     with open("b", "wb") as f:
@@ -305,17 +305,17 @@ def test_roughly_compare_files_timeout(tmpdir):
     assert not files_are_roughly_equal(open("a", "rb"), open("b", "rb"))
 
 
-def test_copy_overwrite_correctly_makes_sparse_file(tmpdir):
+def test_copy_overwrite_correctly_makes_sparse_file(tmp_path):
     # Create a test file that contains random data, then we insert
     # blocks of zeroes. copy_overwrite will not break them and will make the
     # file sparse.
-    source_name = str(tmpdir / "input")
+    source_name = str(tmp_path / "input")
     with open(source_name, "wb") as f:
         f.write(b"12345" * 1024 * 100)
         f.seek(1024 * 16)
         f.write(b"\x00" * 1024 * 16)
     with open(source_name, "rb") as source:
-        target_name = str(tmpdir / "output")
+        target_name = str(tmp_path / "output")
         with open(target_name, "wb") as target:
             # To actually ensure that we punch holes and truncate, lets
             # fill the file with a predictable pattern that is non-zero and

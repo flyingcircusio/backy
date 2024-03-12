@@ -32,5 +32,9 @@ repos:
       - types-PyYAML==5.4.0
       - types-setuptools
       - types-tzlocal==4.2
+    exclude: tests
+    args:
+      - --check-untyped-defs
+      - --ignore-missing-imports
   repo: https://github.com/pre-commit/mirrors-mypy
-  rev: 'v1.0.1'
+  rev: 'v1.8.0'

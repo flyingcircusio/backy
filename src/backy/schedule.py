@@ -1,5 +1,7 @@
 import copy
+import datetime
 from datetime import timedelta
+from typing import Dict
 
 import backy.utils
 from backy.revision import filter_schedule_tags
@@ -80,7 +82,7 @@ class Schedule(object):
         return time, tags
 
     def _next_ideal(self, relative, spread):
-        next_times = {}
+        next_times: Dict[datetime.datetime, set] = {}
         for tag, settings in self.schedule.items():
             t = next_times.setdefault(
                 next_in_interval(relative, settings["interval"], spread), set()

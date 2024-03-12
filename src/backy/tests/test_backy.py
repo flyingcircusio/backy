@@ -17,17 +17,17 @@ def generate_test_data(target, size, marker):
     f.close()
 
 
-def test_smoketest_internal(tmpdir, log):
+def test_smoketest_internal(tmp_path, log):
     # These copies of data are intended to be different versions of the same
     # file.
-    source1 = str(tmpdir / "image1.qemu")
+    source1 = str(tmp_path / "image1.qemu")
     generate_test_data(source1, 2 * 1024**2, b"1")
-    source2 = str(tmpdir / "image2.qemu")
+    source2 = str(tmp_path / "image2.qemu")
     generate_test_data(source2, 2 * 1024**2, b"2")
-    source3 = str(tmpdir / "image3.qemu")
+    source3 = str(tmp_path / "image3.qemu")
     generate_test_data(source3, 2 * 1024**2, b"3")
 
-    backup_dir = tmpdir / "image1.backup"
+    backup_dir = tmp_path / "image1.backup"
     os.mkdir(str(backup_dir))
     with open(str(backup_dir / "config"), "wb") as f:
         f.write(
@@ -37,13 +37,13 @@ def test_smoketest_internal(tmpdir, log):
                 % source1
             ).encode("utf-8")
         )
-    backup = backy.backup.Backup(str(backup_dir), log)
+    backup = backy.backup.Backup(backup_dir, log)
 
     # Backup first state
     backup.backup({"manual:test"})
 
     # Restore first state form newest revision at position 0
-    restore_target = str(tmpdir / "image1.restore")
+    restore_target = str(tmp_path / "image1.restore")
     backup.restore("0", restore_target)
     with pytest.raises(IOError):
         open(backup.history[-1].filename, "wb")

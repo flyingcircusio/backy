@@ -19,7 +19,7 @@ class FlyingCircusRootDisk(CephRBD):
         super(FlyingCircusRootDisk, self).__init__(config, log)
         self.log = self.log.bind(vm=self.vm, subsystem="fc-disk")
 
-    def create_snapshot(self, name):
+    def create_snapshot(self, name: str) -> None:
         consul = consulate.Consul(token=self.consul_acl_token)
         snapshot_key = "snapshot/{}".format(str(uuid.uuid4()))
         self.log.info(

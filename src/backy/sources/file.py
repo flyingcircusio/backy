@@ -1,7 +1,10 @@
+from typing import Optional
+
 from structlog.stdlib import BoundLogger
 
+import backy.backends
 from backy.quarantine import QuarantineReport
-from backy.revision import Revision
+from backy.revision import Revision, Trust
 from backy.sources import BackySource, BackySourceContext, BackySourceFactory
 from backy.utils import copy, copy_overwrite, files_are_equal
 
@@ -25,7 +28,7 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
     def __enter__(self):
         return self
 
-    def ready(self):
+    def ready(self) -> bool:
         """Check whether the source can be backed up.
 
         For files this means the file exists and is readable.
@@ -38,15 +41,13 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
             return False
         return True
 
-    def backup(self, target):
+    def backup(self, target_: "backy.backends.BackyBackend") -> None:
         self.log.debug("backup")
         s = open(self.filename, "rb")
-        t = target.open("r+b")
+        parent = self.revision.get_parent()
+        t = target_.open("r+b", parent)
         with s as source, t as target:
-            if self.revision.backup.contains_distrusted:
-                self.log.info("backup-forcing-full")
-                bytes = copy(source, target)
-            elif self.cow:
+            if self.cow and parent:
                 self.log.info("backup-sparse")
                 bytes = copy_overwrite(source, target)
             else:
@@ -55,10 +56,10 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
 
         self.revision.stats["bytes_written"] = bytes
 
-    def verify(self, target) -> bool:
+    def verify(self, target_: "backy.backends.BackyBackend") -> bool:
         self.log.info("verify")
         s = open(self.filename, "rb")
-        t = target.open("rb")
+        t = target_.open("rb")
         with s as source, t as target:
             return files_are_equal(
                 source,

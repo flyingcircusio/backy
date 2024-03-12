@@ -74,13 +74,6 @@ setup(
     entry_points="""
         [console_scripts]
             backy = backy.main:main
-
-        [backy.sources]
-            ceph-rbd = backy.sources.ceph.source:CephRBD
-            file = backy.sources.file:File
-            flyingcircus = \
-                backy.sources.flyingcircus.source:FlyingCircusRootDisk
-
     """,
     author=(
         "Christian Theune <ct@flyingcircus.io>, "

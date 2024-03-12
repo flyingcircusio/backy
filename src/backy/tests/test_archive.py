@@ -4,8 +4,8 @@ import pytest
 
 
 @pytest.fixture
-def backup_with_revisions(backup, tmpdir):
-    with open(str(tmpdir / "123-0.rev"), "wb") as f:
+def backup_with_revisions(backup, tmp_path):
+    with open(str(tmp_path / "123-0.rev"), "wb") as f:
         f.write(
             b"""\
 uuid: 123-0
@@ -16,7 +16,7 @@ stats: {bytes_written: 14868480, duration: 31.1}
 tags: [daily, weekly, monthly]
 """
         )
-    with open(str(tmpdir / "123-1.rev"), "wb") as f:
+    with open(str(tmp_path / "123-1.rev"), "wb") as f:
         f.write(
             b"""\
 uuid: 123-1
@@ -26,7 +26,7 @@ stats: {bytes_written: 1486880, duration: 3.7}
 tags: [daily, weekly]
 """
         )
-    with open(str(tmpdir / "123-2.rev"), "wb") as f:
+    with open(str(tmp_path / "123-2.rev"), "wb") as f:
         f.write(
             b"""\
 uuid: 123-2
@@ -164,8 +164,8 @@ def test_clean_history_should_exclude_incomplete_revs(backup_with_revisions):
     assert 2 == len(backup_with_revisions.clean_history)
 
 
-def test_ignore_duplicates(backup_with_revisions, tmpdir):
-    shutil.copy(str(tmpdir / "123-2.rev"), str(tmpdir / "123-3.rev"))
+def test_ignore_duplicates(backup_with_revisions, tmp_path):
+    shutil.copy(str(tmp_path / "123-2.rev"), str(tmp_path / "123-3.rev"))
     a = backup_with_revisions
     a.scan()
     assert 3 == len(a.history)

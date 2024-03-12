@@ -1,9 +1,7 @@
 import datetime
-import glob
 import hashlib
-import os
 import traceback
-from os import path as p
+from pathlib import Path
 from typing import List
 
 import shortuuid
@@ -25,7 +23,9 @@ class QuarantineReport:
     timestamp: datetime.datetime
     traceback: str
 
-    def __init__(self, source_chunk, target_chunk, offset):
+    def __init__(
+        self, source_chunk: bytes, target_chunk: bytes, offset: int
+    ) -> None:
         self.uuid = shortuuid.uuid()
         self.source_chunk = source_chunk
         self.source_hash = hashlib.md5(source_chunk).hexdigest()
@@ -47,22 +47,20 @@ class QuarantineReport:
 
 
 class QuarantineStore:
-    path: str
-    chunks_path: str
+    path: Path
+    chunks_path: Path
     report_ids: List[str]
     log: BoundLogger
 
-    def __init__(self, backup_path, log):
-        self.path = p.join(backup_path, "quarantine")
-        if not p.exists(self.path):
-            os.mkdir(self.path)
-        self.chunks_path = p.join(self.path, "chunks")
-        if not p.exists(self.chunks_path):
-            os.mkdir(self.chunks_path)
+    def __init__(self, backup_path: Path, log: BoundLogger) -> None:
+        self.path = backup_path / "quarantine"
+        self.path.mkdir(exist_ok=True)
+        self.chunks_path = self.path / "chunks"
+        self.chunks_path.mkdir(exist_ok=True)
         self.log = log.bind(subsystem="quarantine")
         self.scan()
 
-    def add_report(self, report: QuarantineReport):
+    def add_report(self, report: QuarantineReport) -> None:
         self.log.info("add-report", uuid=report.uuid)
         self._store_chunk(report.source_chunk, report.source_hash)
         self._store_chunk(report.target_chunk, report.target_hash)
@@ -70,10 +68,10 @@ class QuarantineStore:
 
         self.report_ids.append(report.uuid)
 
-    def _store_report(self, report: QuarantineReport):
+    def _store_report(self, report: QuarantineReport) -> None:
         self.log.debug("store-report", uuid=report.uuid)
-        path = p.join(self.path, f"{report.uuid}.report")
-        if os.path.exists(path):
+        path = self.path / f"{report.uuid}.report"
+        if path.exists():
             self.log.debug("store-report-exists", uuid=report.uuid)
             return
 
@@ -93,18 +91,16 @@ class QuarantineStore:
             f.open_new("wb")
             yaml.dump(report.to_dict(), f, sort_keys=False, Dumper=CustomDumper)
 
-    def _store_chunk(self, chunk: bytes, hash: str):
+    def _store_chunk(self, chunk: bytes, hash: str) -> None:
         self.log.debug("store-chunk", hash=hash)
-        path = p.join(self.chunks_path, hash)
-        if os.path.exists(path):
+        path = self.chunks_path / hash
+        if path.exists():
             self.log.debug("store-chunk-exists", hash=hash)
             return
         with SafeFile(path) as f:
             f.open_new("wb")
             f.write(chunk)
 
-    def scan(self):
-        self.report_ids = [
-            p.basename(g) for g in glob.glob(p.join(self.path, "*.report"))
-        ]
+    def scan(self) -> None:
+        self.report_ids = [g.name for g in self.path.glob("*.report")]
         self.log.debug("scan", entries=len(self.report_ids))

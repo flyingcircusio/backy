@@ -11,8 +11,9 @@ import sys
 import tempfile
 import time
 import typing
+from asyncio import Event
 from os import DirEntry
-from typing import IO, Callable, Iterable, List, Optional, TypeVar
+from typing import IO, Callable, Iterable, List, Literal, Optional, TypeVar
 from zoneinfo import ZoneInfo
 
 import aiofiles.os as aos
@@ -442,7 +443,7 @@ def min_date():
     return datetime.datetime.min.replace(tzinfo=ZoneInfo("UTC"))
 
 
-async def is_dir_no_symlink(p):
+async def is_dir_no_symlink(p: str | os.PathLike) -> bool:
     return await aos.path.isdir(p) and not await aos.path.islink(p)
 
 
@@ -472,11 +473,17 @@ async def has_recent_changes(path: str, reference_time: float) -> bool:
     return False
 
 
-async def time_or_event(deadline, event):
-    remaining_time = (deadline - now()).total_seconds()
+async def delay_or_event(delay: float, event: Event) -> Optional[Literal[True]]:
     return await next(
-        asyncio.as_completed([asyncio.sleep(remaining_time), event.wait()])
+        asyncio.as_completed([asyncio.sleep(delay), event.wait()])
     )
+
+
+async def time_or_event(
+    deadline: datetime.datetime, event: Event
+) -> Optional[Literal[True]]:
+    remaining_time = (deadline - now()).total_seconds()
+    return await delay_or_event(remaining_time, event)
 
 
 def format_datetime_local(dt):

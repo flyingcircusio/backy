@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import fcntl
 import os
 import os.path as p
@@ -6,7 +7,7 @@ import signal
 import sys
 import time
 from pathlib import Path
-from typing import IO, List, Optional, Pattern
+from typing import IO, List, Optional, Pattern, TypedDict
 
 import aiofiles.os as aos
 import aioshutil
@@ -14,6 +15,7 @@ import yaml
 from structlog.stdlib import BoundLogger
 
 from .api import BackyAPI
+from .backup import Backup
 from .revision import filter_manual_tags
 from .schedule import Schedule
 from .scheduler import Job
@@ -36,6 +38,7 @@ class BackyDaemon(object):
     config: dict
     schedules: dict[str, Schedule]
     jobs: dict[str, Job]
+    dead_backups: dict[str, Backup]
 
     backup_semaphores: dict[str, asyncio.BoundedSemaphore]
     log: BoundLogger
@@ -51,6 +54,7 @@ class BackyDaemon(object):
         self.schedules = {}
         self.backup_semaphores = {}
         self.jobs = {}
+        self.dead_backups = {}
         self._lock = None
         self.reload_api = asyncio.Event()
         self.api_addrs = ["::1", "127.0.0.1"]
@@ -127,6 +131,21 @@ class BackyDaemon(object):
                 job.stop()
                 del self.jobs[name]
                 self.log.info("deleted-job", job_name=name)
+
+        self.dead_backups.clear()
+        for b in os.scandir(self.base_dir):
+            if b.name in self.jobs or not b.is_dir(follow_symlinks=False):
+                continue
+            try:
+                self.dead_backups[b.name] = Backup(
+                    self.base_dir / b.name,
+                    self.log.bind(job_name=b.name),
+                )
+                self.log.info("found-backup", job_name=b.name)
+            except Exception:
+                self.log.info(
+                    "invalid-backup", job_name=b.name, exc_style="short"
+                )
 
         if (
             not self.backup_semaphores
@@ -257,9 +276,26 @@ class BackyDaemon(object):
         self.log.info("stopping-loop")
         self.loop.stop()
 
-    def status(self, filter_re: Optional[Pattern[str]] = None) -> List[dict]:
+    class StatusDict(TypedDict):
+        job: str
+        sla: str
+        sla_overdue: int
+        status: str
+        last_time: Optional[datetime.datetime]
+        last_tags: Optional[str]
+        last_duration: Optional[float]
+        next_time: Optional[datetime.datetime]
+        next_tags: Optional[str]
+        manual_tags: str
+        quarantine_reports: int
+        unsynced_revs: int
+        local_revs: int
+
+    def status(
+        self, filter_re: Optional[Pattern[str]] = None
+    ) -> List[StatusDict]:
         """Collects status information for all jobs."""
-        result = []
+        result: List["BackyDaemon.StatusDict"] = []
         for job in list(self.jobs.values()):
             if filter_re and not filter_re.search(job.name):
                 continue
@@ -297,6 +333,9 @@ class BackyDaemon(object):
                     manual_tags=", ".join(manual_tags),
                     quarantine_reports=len(job.backup.quarantine.report_ids),
                     unsynced_revs=unsynced_revs,
+                    local_revs=len(
+                        job.backup.get_history(clean=True, local=True)
+                    ),
                 )
             )
         return result
@@ -339,14 +378,6 @@ class BackyDaemon(object):
             except Exception:
                 self.log.exception("purge-pending")
             await asyncio.sleep(24 * 60 * 60)
-
-    async def find_dead_backups(self) -> List[str]:
-        self.log.debug("scanning-backups")
-        return [
-            b.name
-            for b in await aos.scandir(self.base_dir)
-            if await is_dir_no_symlink(b.path) and b.name not in self.jobs
-        ]
 
 
 def main(config_file: Path, log: BoundLogger):  # pragma: no cover

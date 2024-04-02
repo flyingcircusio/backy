@@ -2,7 +2,7 @@ import datetime
 import re
 import sys
 from asyncio import get_running_loop
-from typing import Dict, List
+from typing import TYPE_CHECKING, Dict, Iterator, List
 
 import aiohttp
 import humanize
@@ -16,32 +16,35 @@ import backy.backup
 from backy.revision import Revision
 from backy.utils import format_datetime_local
 
+if TYPE_CHECKING:
+    from backy.daemon import BackyDaemon
+
 
 class APIClientManager:
     connector: TCPConnector
-    peers: dict
+    peers: dict[str, dict]
     clients: dict[str, "APIClient"]
     taskid: str
     log: BoundLogger
 
-    def __init__(self, peers, taskid, log):
+    def __init__(self, peers: Dict[str, dict], taskid: str, log: BoundLogger):
         self.connector = TCPConnector()
         self.peers = peers
         self.clients = dict()
         self.taskid = taskid
         self.log = log.bind(subsystem="APIClientManager")
 
-    def __getitem__(self, name):
+    def __getitem__(self, name: str) -> "APIClient":
         if name and name not in self.clients:
             self.clients[name] = APIClient.from_conf(
                 name, self.peers[name], self.taskid, self.log, self.connector
             )
         return self.clients[name]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return iter(self.peers)
 
-    async def close(self):
+    async def close(self) -> None:
         for c in self.clients.values():
             await c.close()
         await self.connector.close()
@@ -89,7 +92,9 @@ class APIClient:
             **kwargs,
         )
 
-    async def fetch_status(self, filter: str = ""):
+    async def fetch_status(
+        self, filter: str = ""
+    ) -> List["BackyDaemon.StatusDict"]:
         async with self.session.get(
             "/v1/status", params={"filter": filter}
         ) as response:

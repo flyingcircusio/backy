@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import json
 import os
 import re
 import signal
@@ -56,6 +57,17 @@ jobs:
         f.write("I am your father, Luke!")
 
     tmp_path.joinpath("dead01").mkdir()
+    with open(tmp_path / "dead01" / "config", "w") as f:
+        json.dump(
+            {
+                "schedule": {},
+                "source": {
+                    "type": "file",
+                    "filename": str(tmp_path / "config"),
+                },
+            },
+            f,
+        )
 
     async def null_coroutine():
         return
@@ -304,6 +316,9 @@ async def test_task_generator_backoff(
     async def null_coroutine():
         await asyncio.sleep(0.1)
 
+    async def false_coroutine(*args, **kw):
+        return False
+
     failures = [1, 1, 1]
 
     async def failing_coroutine(*args, **kw):
@@ -321,8 +336,9 @@ async def test_task_generator_backoff(
     monkeypatch.setattr(job, "run_purge", null_coroutine)
     monkeypatch.setattr(job, "run_callback", null_coroutine)
     monkeypatch.setattr(job, "run_backup", failing_coroutine)
-    monkeypatch.setattr(job, "pull_metadata", failing_coroutine)
-    monkeypatch.setattr(job, "push_metadata", failing_coroutine)
+    monkeypatch.setattr(job, "pull_metadata", null_coroutine)
+    monkeypatch.setattr(job, "push_metadata", null_coroutine)
+    monkeypatch.setattr(job, "_wait_for_leader", false_coroutine)
 
     # This patch causes a single run through the generator loop.
     def update_status(status):

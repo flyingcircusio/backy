@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import random
 import shutil
 from unittest import mock
 from zoneinfo import ZoneInfo
@@ -69,6 +70,11 @@ def clock(monkeypatch):
     )
     monkeypatch.setattr(backy.utils, "now", clock.now)
     return clock
+
+
+@pytest.fixture
+def seed_random(monkeypatch):
+    random.seed(0)
 
 
 @pytest.fixture

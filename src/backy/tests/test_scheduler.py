@@ -17,7 +17,7 @@ def daemon(tmp_path):
 async def test_wait_for_deadline_no_deadline_fails(daemon, log):
     job = Job(daemon, "dummy", log)
     # Not having a deadline set causes this to fail (immediately)
-    with pytest.raises(TypeError):
+    with pytest.raises(AssertionError):
         await job._wait_for_deadline()
 
 

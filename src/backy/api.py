@@ -2,7 +2,7 @@ import datetime
 import re
 from json import JSONEncoder
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import TYPE_CHECKING, Any, List, Tuple
 
 from aiohttp import hdrs, web
 from aiohttp.web_exceptions import (
@@ -18,11 +18,13 @@ from aiohttp.web_middlewares import middleware
 from aiohttp.web_runner import AppRunner, TCPSite
 from structlog.stdlib import BoundLogger
 
-import backy.daemon
 from backy.backup import Backup
 from backy.revision import Revision
 from backy.scheduler import Job
 from backy.utils import generate_taskid
+
+if TYPE_CHECKING:
+    from backy.daemon import BackyDaemon
 
 
 class BackyJSONEncoder(JSONEncoder):
@@ -36,7 +38,7 @@ class BackyJSONEncoder(JSONEncoder):
 
 
 class BackyAPI:
-    daemon: "backy.daemon.BackyDaemon"
+    daemon: "BackyDaemon"
     sites: dict[Tuple[str, int], TCPSite]
     runner: AppRunner
     tokens: dict
@@ -144,7 +146,9 @@ class BackyAPI:
         else:
             return web.json_response(resp, dumps=BackyJSONEncoder().encode)
 
-    async def get_status(self, request: web.Request) -> List[dict]:
+    async def get_status(
+        self, request: web.Request
+    ) -> List["BackyDaemon.StatusDict"]:
         filter = request.query.get("filter", None)
         request["log"].info("get-status", filter=filter)
         if filter:
@@ -160,7 +164,7 @@ class BackyAPI:
         return list(self.daemon.jobs.values())
 
     async def get_job(self, request: web.Request) -> Job:
-        name = request.match_info.get("job_name", None)
+        name = request.match_info.get("job_name")
         request["log"].info("get-job", name=name)
         try:
             return self.daemon.jobs[name]
@@ -176,40 +180,38 @@ class BackyAPI:
 
     async def list_backups(self, request: web.Request) -> List[str]:
         request["log"].info("list-backups")
-        return await self.daemon.find_dead_backups()
+        return list(self.daemon.dead_backups.keys())
 
-    async def get_backup(self, request: web.Request) -> Backup:
-        name = request.match_info.get("backup_name", None)
+    async def get_backup(
+        self, request: web.Request, allow_active: bool
+    ) -> Backup:
+        name = request.match_info.get("backup_name")
         request["log"].info("get-backups", name=name)
+        if name in self.daemon.dead_backups:
+            return self.daemon.dead_backups[name]
         if name in self.daemon.jobs:
+            if allow_active:
+                return self.daemon.jobs[name].backup
             request["log"].info("get-backups-forbidden", name=name)
             raise HTTPForbidden()
-        try:
-            path = Path(self.daemon.base_dir).joinpath(name).resolve()
-            if (
-                not path.exists()
-                or Path(self.daemon.base_dir).resolve() not in path.parents
-            ):
-                raise FileNotFoundError
-            return Backup(path, request["log"])
-        except FileNotFoundError:
-            request["log"].info("get-backups-not-found", name=name)
-            raise HTTPNotFound()
+        request["log"].info("get-backups-not-found", name=name)
+        raise HTTPNotFound()
 
     async def run_purge(self, request: web.Request):
-        backup = await self.get_backup(request)
+        backup = await self.get_backup(request, False)
         request["log"].info("run-purge", name=backup.name)
         backup.set_purge_pending()
         raise HTTPAccepted()
 
     async def touch_backup(self, request: web.Request):
-        backup = await self.get_backup(request)
+        backup = await self.get_backup(request, True)
         request["log"].info("touch-backup", name=backup.name)
         backup.touch()
 
     async def get_revs(self, request: web.Request) -> List[Revision]:
-        backup = await self.get_backup(request)
+        backup = await self.get_backup(request, True)
         request["log"].info("get-revs", name=backup.name)
+        backup.scan()
         return backup.get_history(
             local=True, clean=request.query.get("only_clean", "") == "1"
         )
@@ -223,8 +225,8 @@ class BackyAPI:
             request["log"].info("put-tags-bad-request")
             raise HTTPBadRequest()
         autoremove = request.query.get("autoremove", "") == "1"
-        spec = request.match_info.get("rev_spec", None)
-        backup = await self.get_backup(request)
+        spec = request.match_info.get("rev_spec")
+        backup = await self.get_backup(request, False)
         request["log"].info(
             "put-tags",
             name=backup.name,
@@ -233,6 +235,7 @@ class BackyAPI:
             spec=spec,
             autoremove=autoremove,
         )
+        backup.scan()
         try:
             if not backup.tags(
                 "set",

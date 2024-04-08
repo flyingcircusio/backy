@@ -41,29 +41,27 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
             return False
         return True
 
-    def backup(self, target_: "backy.backends.BackyBackend") -> None:
+    def backup(self, target: "backy.backends.BackyBackend") -> None:
         self.log.debug("backup")
         s = open(self.filename, "rb")
         parent = self.revision.get_parent()
-        t = target_.open("r+b", parent)
-        with s as source, t as target:
+        with s as source, target.open("r+b", parent) as target_:
             if self.cow and parent:
                 self.log.info("backup-sparse")
-                bytes = copy_overwrite(source, target)
+                bytes = copy_overwrite(source, target_)
             else:
                 self.log.info("backup-full")
-                bytes = copy(source, target)
+                bytes = copy(source, target_)
 
         self.revision.stats["bytes_written"] = bytes
 
-    def verify(self, target_: "backy.backends.BackyBackend") -> bool:
+    def verify(self, target: "backy.backends.BackyBackend") -> bool:
         self.log.info("verify")
         s = open(self.filename, "rb")
-        t = target_.open("rb")
-        with s as source, t as target:
+        with s as source, target.open("rb") as target_:
             return files_are_equal(
                 source,
-                target,
+                target_,
                 report=lambda s, t, o: self.revision.backup.quarantine.add_report(
                     QuarantineReport(s, t, o)
                 ),

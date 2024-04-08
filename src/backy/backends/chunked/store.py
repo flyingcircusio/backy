@@ -23,7 +23,7 @@ class Store(object):
 
     path: Path
     seen_forced: set[Hash]
-    known: set[Hash]
+    seen: set[Hash]
     log: BoundLogger
 
     def __init__(self, path: Path, log: BoundLogger):
@@ -36,8 +36,7 @@ class Store(object):
         if not self.path.joinpath("store").exists():
             self.convert_to_v2()
 
-        self.known = set(self.ls())
-        self.log.debug("init", known_chunks=len(self.known))
+        self.seen = set()
 
     def convert_to_v2(self) -> None:
         self.log.info("to-v2")
@@ -61,11 +60,12 @@ class Store(object):
     def purge(self, used_chunks: Set[Hash]) -> None:
         # This assumes exclusive lock on the store. This is guaranteed by
         # backy's main locking.
-        to_delete = self.known - used_chunks
-        self.log.info("purge", purging=len(to_delete))
-        for file_hash in sorted(to_delete):
+        self.log.info("purge")
+        for file_hash in self.ls():
+            if file_hash in used_chunks:
+                continue
             self.chunk_path(file_hash).unlink(missing_ok=True)
-        self.known -= to_delete
+            self.seen.discard(file_hash)
 
     def chunk_path(self, hash: Hash) -> Path:
         dir1 = hash[:2]

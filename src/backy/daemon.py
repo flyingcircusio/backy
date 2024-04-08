@@ -299,13 +299,13 @@ class BackyDaemon(object):
         # thread.
         while True:
             self.log.info("purge-scanning")
-            for candidate in self.base_dir.iterdir():
-                if not candidate.is_dir() or candidate.is_symlink():
+            for candidate in os.scandir(self.base_dir):
+                if not candidate.is_dir(follow_symlinks=False):
                     continue
-                self.log.debug("purge-candidate", candidate=candidate)
+                self.log.debug("purge-candidate", candidate=candidate.path)
                 reference_time = time.time() - 3 * 31 * 24 * 60 * 60
                 if not has_recent_changes(candidate, reference_time):
-                    self.log.info("purging", candidate=candidate)
+                    self.log.info("purging", candidate=candidate.path)
                     shutil.rmtree(candidate)
             self.log.info("purge-finished")
             await asyncio.sleep(24 * 60 * 60)

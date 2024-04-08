@@ -112,8 +112,8 @@ def test_choose_full_without_parent(ceph_rbd_imagesource, backup, log):
 
     revision = Revision.create(backup, set(), log)
 
-    with source(revision):
-        source.backup(revision.backend)
+    with source(revision) as s:
+        s.backup(revision.backend)
 
     assert not source.diff.called
     assert source.full.called

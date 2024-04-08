@@ -51,7 +51,7 @@ class Chunk(object):
         self.data = None
 
     def _read_existing(self) -> None:
-        if self.data is not None:
+        if self.data:
             return
         # Prepare working with the chunk. We keep the data in RAM for
         # easier random access combined with transparent compression.
@@ -82,7 +82,7 @@ class Chunk(object):
         Return the data and the remaining size that should be read.
         """
         self._read_existing()
-        assert self.data is not None
+        assert self.data
 
         self.data.seek(offset)
         data = self.data.read(size)
@@ -107,7 +107,7 @@ class Chunk(object):
             chunk_stats["write_full"] += 1
         else:
             self._read_existing()
-            assert self.data is not None
+            assert self.data
             self.data.seek(offset)
             self.data.write(data)
             chunk_stats["write_partial"] += 1
@@ -121,7 +121,7 @@ class Chunk(object):
         """
         if self.clean:
             return None
-        assert self.data is not None
+        assert self.data
         # I'm not using read() here to a) avoid cache accounting and b)
         # use a faster path to get the data.
         self.hash = hash(self.data.getvalue())
@@ -129,21 +129,22 @@ class Chunk(object):
         needs_forced_write = (
             self.store.force_writes and self.hash not in self.store.seen_forced
         )
-        if self.hash not in self.store.known or needs_forced_write:
-            # Create the tempfile in the right directory to increase locality
-            # of our change - avoid renaming between multiple directories to
-            # reduce traffic on the directory nodes.
-            fd, tmpfile_name = tempfile.mkstemp(dir=target.parent)
-            posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)  # type: ignore
-            with os.fdopen(fd, mode="wb") as f:
-                data = lzo.compress(self.data.getvalue())
-                f.write(data)
-            # Micro-optimization: chmod before rename to help against
-            # metadata flushes and then changing metadata again.
-            os.chmod(tmpfile_name, 0o440)
-            os.rename(tmpfile_name, target)
-            self.store.seen_forced.add(self.hash)
-            self.store.known.add(self.hash)
+        if self.hash not in self.store.seen:
+            if needs_forced_write or not target.exists():
+                # Create the tempfile in the right directory to increase locality
+                # of our change - avoid renaming between multiple directories to
+                # reduce traffic on the directory nodes.
+                fd, tmpfile_name = tempfile.mkstemp(dir=target.parent)
+                posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)  # type: ignore
+                with os.fdopen(fd, mode="wb") as f:
+                    data = lzo.compress(self.data.getvalue())
+                    f.write(data)
+                # Micro-optimization: chmod before rename to help against
+                # metadata flushes and then changing metadata again.
+                os.chmod(tmpfile_name, 0o440)
+                os.rename(tmpfile_name, target)
+                self.store.seen_forced.add(self.hash)
+            self.store.seen.add(self.hash)
         self.clean = True
         return self.hash
 

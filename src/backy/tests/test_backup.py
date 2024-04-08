@@ -83,7 +83,7 @@ def test_backup_corrupted(simple_file_config):
     backup.backup({"daily"})
 
     store = backup.history[0].backend.store
-    chunk_path = store.chunk_path(next(iter(store.known)))
+    chunk_path = store.chunk_path(next(iter(store.seen)))
     os.chmod(chunk_path, 0o664)
     with open(chunk_path, "wb") as f:
         f.write(b"invalid")

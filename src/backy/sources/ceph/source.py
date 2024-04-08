@@ -90,14 +90,13 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
             break
         self.diff(target, parent)
 
-    def diff(self, target_: BackyBackend, parent: Revision) -> None:
+    def diff(self, target: BackyBackend, parent: Revision) -> None:
         self.log.info("diff")
         snap_from = "backy-" + parent.uuid
         snap_to = "backy-" + self.revision.uuid
         s = self.rbd.export_diff(self._image_name + "@" + snap_to, snap_from)
-        t = target_.open("r+b", parent)
-        with s as source, t as target:
-            bytes = source.integrate(target, snap_from, snap_to)
+        with s as source, target.open("r+b", parent) as target_:
+            bytes = source.integrate(target_, snap_from, snap_to)
         self.log.info("diff-integration-finished")
 
         self.revision.stats["bytes_written"] = bytes
@@ -107,19 +106,18 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
 
         self.revision.stats["chunk_stats"] = chunk_stats
 
-    def full(self, target_: BackyBackend) -> None:
+    def full(self, target: BackyBackend) -> None:
         self.log.info("full")
         s = self.rbd.export(
             "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
         )
-        t = target_.open("r+b")
         copied = 0
-        with s as source, t as target:
+        with s as source, target.open("r+b") as target_:
             while True:
                 buf = source.read(4 * backy.utils.MiB)
                 if not buf:
                     break
-                target.write(buf)
+                target_.write(buf)
                 copied += len(buf)
         self.revision.stats["bytes_written"] = copied
 
@@ -128,19 +126,17 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
 
         self.revision.stats["chunk_stats"] = chunk_stats
 
-    def verify(self, target_: BackyBackend) -> bool:
+    def verify(self, target: BackyBackend) -> bool:
         s = self.rbd.image_reader(
             "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
         )
-        t = target_.open("rb")
-
         self.revision.stats["ceph-verification"] = "partial"
 
-        with s as source, t as target:
+        with s as source, target.open("rb") as target_:
             self.log.info("verify")
             return backy.utils.files_are_roughly_equal(
                 source,
-                target,
+                target_,
                 report=lambda s, t, o: self.revision.backup.quarantine.add_report(
                     QuarantineReport(s, t, o)
                 ),

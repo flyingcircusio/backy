@@ -10,7 +10,7 @@ import sys
 import tempfile
 import time
 import typing
-from pathlib import Path
+from os import DirEntry
 from typing import IO, Callable, Iterable, List, Optional, TypeVar
 from zoneinfo import ZoneInfo
 
@@ -146,7 +146,7 @@ class SafeFile(object):
     def open_copy(self, mode):
         """Open an existing file, make a copy first, rename on close."""
         self.open_new("wb")
-        assert self.f is not None
+        assert self.f
         if os.path.exists(self.filename):
             cp_reflink(self.filename, self.f.name)
         self.f.close()
@@ -176,36 +176,36 @@ class SafeFile(object):
 
     @property
     def name(self):
-        assert self.f is not None
+        assert self.f
         return self.f.name
 
     def read(self, *args, **kw):
-        assert self.f is not None
+        assert self.f
         data = self.f.read(*args, **kw)
         if self.encoding:
             data = data.decode(self.encoding)
         return data
 
     def write(self, data):
-        assert self.f is not None
+        assert self.f
         if self.encoding:
             data = data.encode(self.encoding)
         self.f.write(data)
 
     def seek(self, offset, whence=0):
-        assert self.f is not None
+        assert self.f
         return self.f.seek(offset, whence)
 
     def tell(self):
-        assert self.f is not None
+        assert self.f
         return self.f.tell()
 
     def truncate(self, size=None):
-        assert self.f is not None
+        assert self.f
         return self.f.truncate(size)
 
     def fileno(self):
-        assert self.f is not None
+        assert self.f
         return self.f.fileno()
 
 
@@ -440,7 +440,7 @@ def min_date():
     return datetime.datetime.min.replace(tzinfo=ZoneInfo("UTC"))
 
 
-def has_recent_changes(entry: Path, reference_time: float):
+def has_recent_changes(entry: DirEntry, reference_time: float):
     # This is not efficient on a first look as we may stat things twice, but it
     # makes the recursion easier to read and the VFS will be caching this
     # anyway.
@@ -448,17 +448,17 @@ def has_recent_changes(entry: Path, reference_time: float):
     # higher levels will propagate changed mtimes do to new/deleted files
     # instead of just modified files in our case and looking at stats when
     # traversing a directory level is faster than going depth first.
-    st = entry.stat(follow_symlinks=False)
-    if st.st_mtime >= reference_time:
-        return True
-    if not entry.is_dir() or entry.is_symlink():
+    if not entry.is_dir(follow_symlinks=False):
         return False
+    if entry.stat(follow_symlinks=False).st_mtime >= reference_time:
+        return True
+    candidates = list(os.scandir(entry.path))
     # First pass: stat all direct entries
-    for candidate in entry.iterdir():
+    for candidate in candidates:
         if candidate.stat(follow_symlinks=False).st_mtime >= reference_time:
             return True
     # Second pass: start traversing
-    for candidate in entry.iterdir():
+    for candidate in candidates:
         if has_recent_changes(candidate, reference_time):
             return True
     return False

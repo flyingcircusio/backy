@@ -3,10 +3,10 @@ import datetime
 import filecmp
 import hashlib
 import os
-import os.path as p
 import random
 import subprocess
 from datetime import timedelta
+from pathlib import Path
 from typing import Optional
 
 import yaml
@@ -27,9 +27,9 @@ class Job(object):
     status: str = ""
     next_time: Optional[datetime.datetime] = None
     next_tags: Optional[set[str]] = None
-    path: Optional[str] = None
-    backup: Optional[Backup] = None
-    logfile: Optional[str] = None
+    path: Path
+    backup: Backup
+    logfile: Path
     last_config: Optional[dict] = None
     daemon: "backy.daemon.BackyDaemon"
     run_immediately: asyncio.Event
@@ -48,8 +48,8 @@ class Job(object):
     def configure(self, config):
         self.source = config["source"]
         self.schedule_name = config["schedule"]
-        self.path = p.join(self.daemon.base_dir, self.name)
-        self.logfile = p.join(self.path, "backy.log")
+        self.path = self.daemon.base_dir / self.name
+        self.logfile = self.path / "backy.log"
         self.update_config()
         self.backup = Backup(self.path, self.log)
         self.last_config = config
@@ -98,19 +98,19 @@ class Job(object):
 
     def update_config(self):
         """Writes config file for 'backy backup' subprocess."""
-        if not p.exists(self.path):
-            # We do not want to create leading directories, only
-            # the backup directory itself. If the base directory
-            # does not exist then we likely don't have a correctly
-            # configured environment.
-            os.mkdir(self.path)
-        config = p.join(self.path, "config")
+
+        # We do not want to create leading directories, only
+        # the backup directory itself. If the base directory
+        # does not exist then we likely don't have a correctly
+        # configured environment.
+        self.path.mkdir(exist_ok=True)
+        config = self.path / "config"
         with SafeFile(config, encoding="utf-8") as f:
             f.open_new("wb")
             yaml.safe_dump(
                 {"source": self.source, "schedule": self.schedule.config}, f
             )
-            if p.exists(config) and filecmp.cmp(config, f.name):
+            if config.exists() and filecmp.cmp(config, f.name):
                 raise ValueError("not changed")
 
     def to_dict(self):
@@ -219,9 +219,9 @@ class Job(object):
         proc = await asyncio.create_subprocess_exec(
             BACKY_CMD,
             "-b",
-            self.path,
+            str(self.path),
             "-l",
-            self.logfile,
+            str(self.logfile),
             "backup",
             ",".join(tags),
             close_fds=True,
@@ -258,9 +258,9 @@ class Job(object):
         proc = await asyncio.create_subprocess_exec(
             BACKY_CMD,
             "-b",
-            self.path,
+            str(self.path),
             "-l",
-            self.logfile,
+            str(self.logfile),
             "purge",
             # start_new_session=True,  # Avoid signal propagation like Ctrl-C.
             # close_fds=True,
@@ -293,9 +293,9 @@ class Job(object):
         backy_proc = await asyncio.create_subprocess_exec(
             BACKY_CMD,
             "-b",
-            self.path,
+            str(self.path),
             "-l",
-            self.logfile,
+            str(self.logfile),
             "status",
             "--yaml",
             stdin=subprocess.DEVNULL,
@@ -304,7 +304,7 @@ class Job(object):
         )
         os.close(write)
         callback_proc = await asyncio.create_subprocess_exec(
-            self.daemon.backup_completed_callback,
+            str(self.daemon.backup_completed_callback),
             self.name,
             stdin=read,
             stdout=subprocess.PIPE,
@@ -341,6 +341,7 @@ class Job(object):
 
     def start(self):
         assert self._task is None
+        assert self.daemon.loop
         self._task = self.daemon.loop.create_task(
             self.run_forever(), name=f"backup-loop-{self.name}"
         )

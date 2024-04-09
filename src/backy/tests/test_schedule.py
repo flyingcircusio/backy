@@ -1,4 +1,3 @@
-import os.path
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 
@@ -85,7 +84,7 @@ def test_tag_catchup_does_not_stumble_on_adhoc_tags_in_backup(
     revision.tags = {"test"}
     revision.stats = {"duration": 10}
     backup.history.append(revision)
-    assert set({"daily"}) == schedule._missed(backup)
+    assert {"daily"} == schedule._missed(backup)
 
 
 def test_tag_catchup_until_5_minutes_before_next(schedule, backup, clock):
@@ -98,7 +97,7 @@ def test_tag_catchup_until_5_minutes_before_next(schedule, backup, clock):
     revision.stats = {"duration": 10}
     revision.write_info()
     backup.history.append(revision)
-    assert set({"daily"}) == schedule._missed(backup)
+    assert {"daily"} == schedule._missed(backup)
     # This in turn causes the main next() function to return the regular next
     # interval.
     assert (
@@ -153,10 +152,9 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
     schedule, backup, clock, log
 ):
     def add_revision(timestamp):
-        revision = Revision(
-            backup, log, len(backup.history) + 1, timestamp=timestamp
-        )
-        revision.tags = {"daily"}
+        revision = Revision.create(backup, {"daily"}, log)
+        revision.uuid = str(len(backup.history) + 1)
+        revision.timestamp = timestamp
         revision.materialize()
         backup.history.append(revision)
         backup.history.sort(key=lambda x: x.timestamp)
@@ -187,12 +185,12 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
     # This revision is more than keep and also outside the interval.
     # It gets its tag removed and disappears.
     r = add_revision(datetime(2014, 5, 4, 11, 0, tzinfo=UTC))
-    assert os.path.exists(r.filename + ".rev")
+    assert r.filename.with_suffix(".rev").exists()
     removed = [x for x in schedule.expire(backup)]
     assert [r.uuid] == [x.uuid for x in removed]
     backup.scan()
     assert [{"daily"}] * 6 == [rev.tags for rev in backup.history]
-    assert not os.path.exists(r.filename + ".rev")
+    assert not r.filename.with_suffix(".rev").exists()
 
     # If we have manual tags, then those do not expire. However, the
     # known and unknown tag disappear but then the file remains
@@ -200,14 +198,14 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
     r = add_revision(datetime(2014, 5, 4, 11, 0, tzinfo=UTC))
     r.tags = {"daily", "manual:test", "unknown"}
     r.write_info()
-    assert os.path.exists(r.filename + ".rev")
+    assert r.filename.with_suffix(".rev").exists()
     expired = schedule.expire(backup)
     assert [] == [x.uuid for x in expired]
     backup.scan()
     assert [{"manual:test"}] + [{"daily"}] * 6 == [
         rev.tags for rev in backup.history
     ]
-    assert os.path.exists(r.filename + ".rev")
+    assert r.filename.with_suffix(".rev").exists()
 
 
 def test_next_in_interval(clock):

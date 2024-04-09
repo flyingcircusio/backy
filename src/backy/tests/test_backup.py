@@ -3,36 +3,32 @@ import subprocess
 from unittest import mock
 
 import pytest
-import yaml
 
 import backy.utils
-from backy.backup import Backup
 from backy.revision import Revision
 from backy.sources.file import File
 from backy.utils import CHUNK_SIZE
 
 
-def test_config(simple_file_config, tmpdir):
+def test_config(simple_file_config, tmp_path):
     backup = simple_file_config
 
-    assert backup.path == str(tmpdir)
+    assert backup.path == tmp_path
     assert isinstance(backup.source, File)
     assert backup.source.filename == "input-file"
 
 
-def test_find(simple_file_config, tmpdir, log):
+def test_find(simple_file_config, tmp_path, log):
     backup = simple_file_config
-    rev = Revision(backup, log, "123-456", backup)
-    rev.timestamp = backy.utils.now()
+    rev = Revision.create(backup, set(), log, uuid="123-456")
     rev.materialize()
     backup.scan()
-    assert str(tmpdir / "123-456") == backup.find("0").filename
+    assert tmp_path / "123-456" == backup.find("0").filename
 
 
 def test_find_should_raise_if_not_found(simple_file_config, log):
     backup = simple_file_config
-    rev = Revision(backup, log, "123-456")
-    rev.timestamp = backy.utils.now()
+    rev = Revision.create(backup, set(), log)
     rev.materialize()
     backup.scan()
     with pytest.raises(KeyError):
@@ -87,7 +83,7 @@ def test_backup_corrupted(simple_file_config):
     backup.backup({"daily"})
 
     store = backup.history[0].backend.store
-    chunk_path = store.chunk_path(next(iter(store.known)))
+    chunk_path = store.chunk_path(next(iter(store.seen)))
     os.chmod(chunk_path, 0o664)
     with open(chunk_path, "wb") as f:
         f.write(b"invalid")
@@ -95,3 +91,28 @@ def test_backup_corrupted(simple_file_config):
 
     assert backup.history == []
     assert not os.path.exists(chunk_path)
+
+
+def test_restore_mixed_backend(simple_file_config):
+    backup = simple_file_config
+    backup.default_backend_type = "cowfile"
+    source = "input-file"
+    out = "output-file"
+    with open(source, "wb") as f:
+        f.write(b"volume contents\n")
+    backup.backup({"daily"})
+
+    with open(source, "wb") as f:
+        f.write(b"meow\n")
+    backup.default_backend_type = "chunked"
+    backup.backup({"daily"})
+
+    assert len(backup.history) == 2
+
+    backup.restore("1", out)
+    with open(out, "rb") as f:
+        assert f.read() == b"volume contents\n"
+
+    backup.restore("0", out)
+    with open(out, "rb") as f:
+        assert f.read() == b"meow\n"

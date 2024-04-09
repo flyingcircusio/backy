@@ -1,22 +1,24 @@
-import os.path
+from typing import IO, Optional
 
-import backy.revision
+from structlog.stdlib import BoundLogger
+
 from backy.backends import BackyBackend
+from backy.revision import Revision
 from backy.utils import CHUNK_SIZE, cp_reflink
 
 
 class COWFileBackend(BackyBackend):
-    revision: "backy.revision.Revision"
+    revision: Revision
 
-    def __init__(self, revision, log):
+    def __init__(self, revision: Revision, log: BoundLogger):
+        assert revision.backend_type == "cowfile"
         self.revision = revision
 
-    def open(self, mode="rb"):
-        if not os.path.exists(self.revision.filename):
-            parent = self.revision.get_parent()
+    def open(self, mode: str = "rb", parent: Optional[Revision] = None) -> IO:
+        if not self.revision.filename.exists():
             if not parent:
-                open(self.revision.filename, "wb").close()
+                self.revision.filename.open("wb").close()
             else:
                 cp_reflink(parent.filename, self.revision.filename)
             self.revision.writable()
-        return open(self.revision.filename, mode, buffering=CHUNK_SIZE)
+        return self.revision.filename.open(mode, buffering=CHUNK_SIZE)

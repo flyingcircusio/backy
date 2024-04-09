@@ -37,8 +37,8 @@ def test_unpack_from_q():
     assert unpack_from("<Q", b) == (12**10,)
 
 
-def test_read_header_valid(tmpdir):
-    filename = str(tmpdir / "sample.rbddiff")
+def test_read_header_valid(tmp_path):
+    filename = str(tmp_path / "sample.rbddiff")
     with open(filename, "wb") as f:
         f.write(b"rbd diff v1\n")
 
@@ -46,8 +46,8 @@ def test_read_header_valid(tmpdir):
     RBDDiffV1(open(filename, "rb"))
 
 
-def test_read_header_invalid(tmpdir):
-    filename = str(tmpdir / "sample.rbddiff")
+def test_read_header_invalid(tmp_path):
+    filename = str(tmp_path / "sample.rbddiff")
     with open(filename, "wb") as f:
         f.write(b"rbd duff v1\n")
 
@@ -58,8 +58,8 @@ def test_read_header_invalid(tmpdir):
 
 
 @pytest.fixture
-def sample_diff(tmpdir):
-    filename = str(tmpdir / "sample.rbddiff")
+def sample_diff(tmp_path):
+    filename = str(tmp_path / "sample.rbddiff")
     with open(filename, "wb") as f:
         f.write(b"rbd diff v1\n")
         # from snap
@@ -144,10 +144,10 @@ def test_read_sample_data(sample_diff):
         next(data)
 
 
-def test_integrate_sample_data(sample_diff, tmpdir):
+def test_integrate_sample_data(sample_diff, tmp_path):
     diff = RBDDiffV1(open(sample_diff, "rb"))
 
-    target = open(str(tmpdir / "target"), "wb")
+    target = open(str(tmp_path / "target"), "wb")
     target.write(b"\1" * 600)
     target.seek(0)
 
@@ -155,7 +155,7 @@ def test_integrate_sample_data(sample_diff, tmpdir):
         bytes = diff.integrate(target, "fromsnapshot", "tosnapshot")
     assert bytes == 121
 
-    integrated = open(str(tmpdir / "target"), "rb").read()
+    integrated = open(str(tmp_path / "target"), "rb").read()
     assert len(integrated) == 500
 
     assert integrated[0:10] == b"\1" * 10
@@ -167,8 +167,8 @@ def test_integrate_sample_data(sample_diff, tmpdir):
     assert integrated[209:500] == b"\1" * 291
 
 
-def test_integrate_stops_on_broken_metadata_record(tmpdir):
-    filename = str(tmpdir / "sample.rbddiff")
+def test_integrate_stops_on_broken_metadata_record(tmp_path):
+    filename = str(tmp_path / "sample.rbddiff")
     with open(filename, "wb") as f:
         f.write(b"rbd diff v1\n")
         # from snap
@@ -181,7 +181,7 @@ def test_integrate_stops_on_broken_metadata_record(tmpdir):
 
     diff = RBDDiffV1(open(filename, "rb"))
 
-    target = open(str(tmpdir / "target"), "wb")
+    target = open(str(tmp_path / "target"), "wb")
     target.write(b"\1" * 600)
     target.seek(0)
     with pytest.raises(ValueError) as e:
@@ -191,8 +191,8 @@ def test_integrate_stops_on_broken_metadata_record(tmpdir):
     assert e.value.args[0] == 'Got invalid record type "0". Previous record: f'
 
 
-def test_integrate_stops_on_broken_data_record(tmpdir):
-    filename = str(tmpdir / "sample.rbddiff")
+def test_integrate_stops_on_broken_data_record(tmp_path):
+    filename = str(tmp_path / "sample.rbddiff")
     with open(filename, "wb") as f:
         f.write(b"rbd diff v1\n")
         # from snap
@@ -209,7 +209,7 @@ def test_integrate_stops_on_broken_data_record(tmpdir):
 
     diff = RBDDiffV1(open(filename, "rb"))
 
-    target = open(str(tmpdir / "target"), "wb")
+    target = open(str(tmp_path / "target"), "wb")
     target.write(b"\1" * 600)
     target.seek(0)
     with pytest.raises(ValueError) as e:
@@ -219,8 +219,8 @@ def test_integrate_stops_on_broken_data_record(tmpdir):
     assert e.value.args[0] == 'Got invalid record type "0". Previous record: z'
 
 
-def test_read_zero_first_data_record(tmpdir):
-    filename = str(tmpdir / "sample.rbddiff")
+def test_read_zero_first_data_record(tmp_path):
+    filename = str(tmp_path / "sample.rbddiff")
     with open(filename, "wb") as f:
         f.write(b"rbd diff v1\n")
 
@@ -238,8 +238,8 @@ def test_read_zero_first_data_record(tmpdir):
     assert x == [Zero(start=20, length=5 * 1024**3)]
 
 
-def test_read_detects_wrong_record_type(tmpdir):
-    filename = str(tmpdir / "sample.rbddiff")
+def test_read_detects_wrong_record_type(tmp_path):
+    filename = str(tmp_path / "sample.rbddiff")
     with open(filename, "wb") as f:
         f.write(b"rbd diff v1\n")
         f.write(b"a")
@@ -253,9 +253,9 @@ def test_read_detects_wrong_record_type(tmpdir):
     )
 
 
-def test_read_empty_diff(tmpdir):
+def test_read_empty_diff(tmp_path):
     diff = RBDDiffV1(open(os.path.dirname(__file__) + "/nodata.rbddiff", "rb"))
-    target = open(str(tmpdir / "foo"), "wb")
+    target = open(str(tmp_path / "foo"), "wb")
     diff.integrate(
         target,
         "backy-ed968696-5ab0-4fe0-af1c-14cadab44661",

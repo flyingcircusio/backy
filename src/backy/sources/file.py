@@ -1,7 +1,10 @@
+from typing import Optional
+
 from structlog.stdlib import BoundLogger
 
+import backy.backends
 from backy.quarantine import QuarantineReport
-from backy.revision import Revision
+from backy.revision import Revision, Trust
 from backy.sources import BackySource, BackySourceContext, BackySourceFactory
 from backy.utils import copy, copy_overwrite, files_are_equal
 
@@ -25,7 +28,7 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
     def __enter__(self):
         return self
 
-    def ready(self):
+    def ready(self) -> bool:
         """Check whether the source can be backed up.
 
         For files this means the file exists and is readable.
@@ -38,31 +41,27 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
             return False
         return True
 
-    def backup(self, target):
+    def backup(self, target: "backy.backends.BackyBackend") -> None:
         self.log.debug("backup")
         s = open(self.filename, "rb")
-        t = target.open("r+b")
-        with s as source, t as target:
-            if self.revision.backup.contains_distrusted:
-                self.log.info("backup-forcing-full")
-                bytes = copy(source, target)
-            elif self.cow:
+        parent = self.revision.get_parent()
+        with s as source, target.open("r+b", parent) as target_:
+            if self.cow and parent:
                 self.log.info("backup-sparse")
-                bytes = copy_overwrite(source, target)
+                bytes = copy_overwrite(source, target_)
             else:
                 self.log.info("backup-full")
-                bytes = copy(source, target)
+                bytes = copy(source, target_)
 
         self.revision.stats["bytes_written"] = bytes
 
-    def verify(self, target) -> bool:
+    def verify(self, target: "backy.backends.BackyBackend") -> bool:
         self.log.info("verify")
         s = open(self.filename, "rb")
-        t = target.open("rb")
-        with s as source, t as target:
+        with s as source, target.open("rb") as target_:
             return files_are_equal(
                 source,
-                target,
+                target_,
                 report=lambda s, t, o: self.revision.backup.quarantine.add_report(
                     QuarantineReport(s, t, o)
                 ),

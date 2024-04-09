@@ -1,4 +1,4 @@
-import os
+from unittest.mock import Mock
 
 import lzo
 import pytest
@@ -11,11 +11,11 @@ SPACE_CHUNK = b" " * Chunk.CHUNK_SIZE
 SPACE_CHUNK_HASH = "c01b5d75bfe6a1fa5bca6e492c5ab09a"
 
 
-def test_chunk_read_write_update(tmpdir, log):
-    store = Store(str(tmpdir / "store"), log)
-    f = File(str(tmpdir / "asdf"), store)
+def test_chunk_read_write_update(tmp_path, log):
+    store = Store(tmp_path / "store", log)
+    f = File(tmp_path / "asdf", store)
 
-    chunk = Chunk(f, 1, store, None)
+    chunk = Chunk(store, None)
     chunk.write(0, b"asdf")
     chunk.write(4, b"bsdf")
     assert chunk.read(0) == (b"asdfbsdf", -1)
@@ -23,11 +23,11 @@ def test_chunk_read_write_update(tmpdir, log):
     assert chunk.read(0) == (b"axxxxsdf", -1)
 
 
-def test_chunk_write_partial_offset(tmpdir, log):
-    store = Store(str(tmpdir / "store"), log)
-    f = File(str(tmpdir / "asdf"), store)
+def test_chunk_write_partial_offset(tmp_path, log):
+    store = Store(tmp_path / "store", log)
+    f = File(tmp_path / "asdf", store)
 
-    chunk = Chunk(f, 1, store, None)
+    chunk = Chunk(store, None)
     # Write data that fits exactly into this chunk. Nothing remains
     # to be written.
     result = chunk.write(0, SPACE_CHUNK)
@@ -39,7 +39,7 @@ def test_chunk_write_partial_offset(tmpdir, log):
 
     chunk.flush()
     assert chunk.hash == SPACE_CHUNK_HASH
-    store_state = os.stat(store.chunk_path(SPACE_CHUNK_HASH))
+    store_state = store.chunk_path(SPACE_CHUNK_HASH).stat()
 
     with open(store.chunk_path(chunk.hash), "rb") as store_file:
         data = store_file.read()
@@ -50,20 +50,20 @@ def test_chunk_write_partial_offset(tmpdir, log):
     # wasn't touched.
     chunk.write(0, b"      ")
     chunk.flush()
-    assert store_state == os.stat(store.chunk_path(SPACE_CHUNK_HASH))
+    assert store_state == store.chunk_path(SPACE_CHUNK_HASH).stat()
 
 
-def test_chunk_read_existing(tmpdir, log):
-    store = Store(str(tmpdir / "store"), log)
+def test_chunk_read_existing(tmp_path, log):
+    store = Store(tmp_path / "store", log)
 
     chunk_hash = hash("asdf")
     p = store.chunk_path(chunk_hash)
     with open(p, "wb") as existing:
         existing.write(lzo.compress(b"asdf"))
 
-    f = File(str(tmpdir / "asdf"), store)
+    f = File(tmp_path / "asdf", store)
 
-    chunk = Chunk(f, 1, store, chunk_hash)
+    chunk = Chunk(store, chunk_hash)
     assert chunk.read(0) == (b"asdf", -1)
     assert chunk.read(0, 10) == (b"asdf", 6)
 
@@ -71,50 +71,52 @@ def test_chunk_read_existing(tmpdir, log):
     chunk.flush()
 
 
-def test_chunk_write_existing_partial_joins_with_existing_data(tmpdir, log):
-    store = Store(str(tmpdir / "store"), log)
+def test_chunk_write_existing_partial_joins_with_existing_data(tmp_path, log):
+    store = Store(tmp_path / "store", log)
 
     chunk_hash = hash("asdf")
     p = store.chunk_path(chunk_hash)
     with open(p, "wb") as existing:
         existing.write(lzo.compress(b"asdf"))
 
-    f = File(str(tmpdir / "asdf"), store)
+    f = File(tmp_path / "asdf", store)
 
-    chunk = Chunk(f, 1, store, chunk_hash)
+    chunk = Chunk(store, chunk_hash)
+    chunk._read_existing = Mock(side_effect=chunk._read_existing)
     chunk.write(2, b"xxsdf")
     assert chunk.read(0) == (b"asxxsdf", -1)
-    assert chunk._read_existing_called
+    chunk._read_existing.assert_called()
 
 
-def test_chunk_fails_wrong_content(tmpdir, log):
-    store = Store(str(tmpdir / "store"), log)
+def test_chunk_fails_wrong_content(tmp_path, log):
+    store = Store(tmp_path / "store", log)
 
     chunk_hash = hash("asdf")
     p = store.chunk_path(chunk_hash)
     with open(p, "wb") as existing:
         existing.write(lzo.compress(b"bsdf"))
 
-    f = File(str(tmpdir / "asdf"), store)
+    f = File(tmp_path / "asdf", store)
 
-    chunk = Chunk(f, 1, store, chunk_hash)
+    chunk = Chunk(store, chunk_hash)
     with pytest.raises(InconsistentHash):
         chunk.read(0)
 
 
 def test_chunk_write_existing_partial_complete_does_not_read_existing_data(
-    tmpdir, log
+    tmp_path, log
 ):
-    store = Store(str(tmpdir / "store"), log)
+    store = Store(tmp_path / "store", log)
 
     p = store.chunk_path("asdf")
-    os.makedirs(os.path.dirname(p))
+    p.parent.mkdir(parents=True)
     with open(p, "wb") as existing:
         existing.write(lzo.compress(b"asdf"))
 
-    f = File(str(tmpdir / "asdf"), store)
+    f = File(tmp_path / "asdf", store)
 
-    chunk = Chunk(f, 1, store, "asdf")
+    chunk = Chunk(store, "asdf")
+    chunk._read_existing = Mock(side_effect=chunk._read_existing)
     chunk.write(0, b"X" * Chunk.CHUNK_SIZE)
-    assert not chunk._read_existing_called
+    chunk._read_existing.assert_not_called()
     assert chunk.read(0, 3) == (b"XXX", 0)

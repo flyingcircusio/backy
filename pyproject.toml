@@ -75,8 +75,3 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 backy = "backy.main:main"
-
-[tool.poetry.plugins."backy.sources"]
-ceph-rbd = "backy.sources.ceph.source:CephRBD"
-file = "backy.sources.file:File"
-flyingcircus = "backy.sources.flyingcircus.source:FlyingCircusRootDisk"

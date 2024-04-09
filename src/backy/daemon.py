@@ -1,11 +1,11 @@
 import asyncio
 import fcntl
 import os
-import os.path as p
 import shutil
 import signal
 import sys
 import time
+from pathlib import Path
 from typing import IO, List, Optional
 
 import yaml
@@ -23,14 +23,14 @@ daemon: "BackyDaemon"
 class BackyDaemon(object):
     # config defaults, will be overriden from config file
     worker_limit: int = 1
-    base_dir: str
-    backup_completed_callback: Optional[str]
+    base_dir: Path
+    backup_completed_callback: Optional[Path]
     api_addrs: List[str]
     api_port: int = 6023
     api_tokens: dict[str, str]
     api_cli_default: dict
     peers: dict[str, dict]
-    config_file: str
+    config_file: Path
     config: dict
     schedules: dict[str, Schedule]
     jobs: dict[str, Job]
@@ -42,7 +42,7 @@ class BackyDaemon(object):
 
     loop: Optional[asyncio.AbstractEventLoop] = None
 
-    def __init__(self, config_file, log):
+    def __init__(self, config_file: Path, log: BoundLogger):
         self.config_file = config_file
         self.log = log.bind(subsystem="daemon")
         self.config = {}
@@ -57,17 +57,18 @@ class BackyDaemon(object):
         self.peers = {}
 
     def _read_config(self):
-        if not p.exists(self.config_file):
-            self.log.error("no-config-file", config_file=self.config_file)
+        if not self.config_file.exists():
+            self.log.error("no-config-file", config_file=str(self.config_file))
             raise RuntimeError("Could not find config file.")
-        with open(self.config_file, encoding="utf-8") as f:
+        with self.config_file.open(encoding="utf-8") as f:
             fcntl.flock(f, fcntl.LOCK_SH)
             self.config = yaml.safe_load(f)
 
         g = self.config.get("global", {})
         self.worker_limit = int(g.get("worker-limit", type(self).worker_limit))
-        self.base_dir = g.get("base-dir")
-        self.backup_completed_callback = g.get("backup-completed-callback")
+        self.base_dir = Path(g.get("base-dir"))
+        callback = g.get("backup-completed-callback")
+        self.backup_completed_callback = Path(callback) if callback else None
 
         self.peers = self.config.get("peers", {})
 
@@ -127,7 +128,7 @@ class BackyDaemon(object):
 
         if (
             not self.backup_semaphores
-            or self.backup_semaphores["slow"]._bound_value != self.worker_limit
+            or self.backup_semaphores["slow"]._bound_value != self.worker_limit  # type: ignore
         ):
             # Adjusting the settings of a semaphore is not obviously simple. So
             # here is a simplified version with hopefully clear semantics:
@@ -146,8 +147,8 @@ class BackyDaemon(object):
 
     def lock(self):
         """Ensures that only a single daemon instance is active."""
-        lockfile = p.join(self.base_dir, ".lock")
-        self._lock = open(lockfile, "a+b")
+        lockfile = self.base_dir.with_suffix(self.base_dir.suffix + ".lock")
+        self._lock = lockfile.open("a+b")
         try:
             fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except EnvironmentError:
@@ -186,6 +187,7 @@ class BackyDaemon(object):
             loop.add_signal_handler(sig, handle_signals, sig)
 
     def run_forever(self):
+        assert self.loop
         self.log.info("starting-loop")
         self.loop.run_forever()
         self.loop.close()
@@ -226,20 +228,21 @@ class BackyDaemon(object):
     def terminate(self):
         self.log.info("terminating")
         for task in asyncio.all_tasks():
-            if task.get_coro().__name__ == "async_finalizer":
+            if task.get_coro().__name__ == "async_finalizer":  # type: ignore
                 # Support pytest-asyncio integration.
                 continue
-            if task.get_coro().__name__.startswith("test_"):
+            if task.get_coro().__name__.startswith("test_"):  # type: ignore
                 # Support pytest-asyncio integration.
                 continue
             self.log.debug(
                 "cancelling-task",
                 name=task.get_name(),
-                coro_name=task.get_coro().__name__,
+                coro_name=task.get_coro().__name__,  # type: ignore
             )
             task.cancel()
 
     async def shutdown_loop(self):
+        assert self.loop
         self.log.debug("waiting-shutdown")
         while True:
             try:
@@ -308,7 +311,7 @@ class BackyDaemon(object):
             await asyncio.sleep(24 * 60 * 60)
 
 
-def main(config_file, log: BoundLogger):  # pragma: no cover
+def main(config_file: Path, log: BoundLogger):  # pragma: no cover
     global daemon
 
     loop = asyncio.get_event_loop()

@@ -4,8 +4,8 @@ import backy.fallocate
 
 
 @pytest.fixture
-def testfile(tmpdir):
-    fn = str(tmpdir / "myfile")
+def testfile(tmp_path):
+    fn = str(tmp_path / "myfile")
     with open(fn, "wb") as f:
         f.write(b"\xde\xad\xbe\xef" * 32)
     return fn

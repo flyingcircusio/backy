@@ -1,11 +1,9 @@
 import asyncio
 import datetime
 import os
-import os.path as p
 import re
 import signal
 from pathlib import Path
-from unittest import mock
 
 import pytest
 import yaml
@@ -19,16 +17,15 @@ from backy.tests import Ellipsis
 
 
 @pytest.fixture
-async def daemon(tmpdir, log):
-    daemon = BackyDaemon(str(tmpdir / "config"), log)
-    base_dir = str(tmpdir)
-    source = str(tmpdir / "test01.source")
-    with open(str(tmpdir / "config"), "w") as f:
+async def daemon(tmp_path, log):
+    daemon = BackyDaemon(tmp_path / "config", log)
+    source = str(tmp_path / "test01.source")
+    with open(str(tmp_path / "config"), "w") as f:
         f.write(
             f"""\
 ---
 global:
-    base-dir: {base_dir}
+    base-dir: {str(tmp_path)}
     backup-completed-callback: {Path(__file__).parent / "test_callback.sh"}
 api:
     port: 1234
@@ -63,15 +60,15 @@ jobs:
 
 
 def test_fail_on_nonexistent_config(log):
-    daemon = BackyDaemon("/no/such/config", log)
+    daemon = BackyDaemon(Path("/no/such/config"), log)
     with pytest.raises(RuntimeError):
         daemon._read_config()
 
 
-def test_reload(daemon, tmpdir):
-    new_base_dir = p.join(tmpdir, "newdir")
-    os.mkdir(new_base_dir)
-    with open(str(tmpdir / "config"), "w") as f:
+def test_reload(daemon, tmp_path):
+    new_base_dir = tmp_path / "newdir"
+    new_base_dir.mkdir()
+    with open(str(tmp_path / "config"), "w") as f:
         f.write(
             f"""\
 ---
@@ -110,6 +107,8 @@ jobs:
 async def test_sighup(daemon, log, monkeypatch):
     """test that a `SIGHUP` causes a reload without interrupting other tasks"""
 
+    all_tasks = set()
+
     def reload():
         nonlocal all_tasks
         all_tasks = asyncio.all_tasks()
@@ -118,7 +117,6 @@ async def test_sighup(daemon, log, monkeypatch):
     async def send_sighup():
         os.kill(os.getpid(), signal.SIGHUP)
 
-    all_tasks = []
     reloaded = asyncio.Event()
     monkeypatch.setattr(daemon, "reload", reload)
 
@@ -188,13 +186,13 @@ def test_sla_before_first_backup(daemon):
     assert job.sla is True
 
 
-def test_sla_over_time(daemon, clock, tmpdir, log):
+def test_sla_over_time(daemon, clock, tmp_path, log):
     job = daemon.jobs["test01"]
     # No previous backups - we consider this to be OK initially.
     # I agree that this gives us a blind spot in the beginning. I'll
     # think of something when this happens. Maybe keeping a log of errors
     # or so to notice that we tried previously.
-    revision = Revision(job.backup, log, "1")
+    revision = Revision.create(job.backup, set(), log)
     # We're on a 24h cycle. 6 hours old backup is fine.
     revision.timestamp = utils.now() - datetime.timedelta(hours=6)
     revision.stats["duration"] = 60.0
@@ -232,13 +230,13 @@ def test_sla_over_time(daemon, clock, tmpdir, log):
     assert job.sla is False
 
 
-def test_incomplete_revs_dont_count_for_sla(daemon, clock, tmpdir, log):
+def test_incomplete_revs_dont_count_for_sla(daemon, clock, tmp_path, log):
     job = daemon.jobs["test01"]
-    r1 = Revision(job.backup, log, "1")
+    r1 = Revision.create(job.backup, set(), log)
     r1.timestamp = utils.now() - datetime.timedelta(hours=48)
     r1.stats["duration"] = 60.0
     r1.materialize()
-    r2 = Revision(job.backup, log, "2")
+    r2 = Revision.create(job.backup, set(), log)
     r2.timestamp = utils.now() - datetime.timedelta(hours=1)
     r2.materialize()
     job.backup.scan()
@@ -258,7 +256,7 @@ async def cancel_and_wait(job):
     job._task = None
 
 
-async def test_task_generator(daemon, clock, tmpdir, monkeypatch, tz_berlin):
+async def test_task_generator(daemon, clock, tmp_path, monkeypatch, tz_berlin):
     # This is really just a smoke tests, but it covers the task pool,
     # so hey, better than nothing.
 
@@ -288,7 +286,7 @@ async def test_task_generator(daemon, clock, tmpdir, monkeypatch, tz_berlin):
 
 
 async def test_task_generator_backoff(
-    daemon, clock, tmpdir, monkeypatch, tz_berlin
+    daemon, clock, tmp_path, monkeypatch, tz_berlin
 ):
     for j in daemon.jobs.values():
         await cancel_and_wait(j)

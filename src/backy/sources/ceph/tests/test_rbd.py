@@ -98,8 +98,8 @@ def test_rbd_snap(rbdclient):
 
 
 @mock.patch("subprocess.Popen")
-def test_rbd_export_diff(popen, rbdclient, tmpdir):
-    stdout = open(str(tmpdir / "foobar"), "wb+")
+def test_rbd_export_diff(popen, rbdclient, tmp_path):
+    stdout = open(str(tmp_path / "foobar"), "wb+")
     stdout.write(RBDDiffV1.header)
     stdout.seek(0)
     popen.return_value = mock.Mock(stdout=stdout)
@@ -125,14 +125,14 @@ def test_rbd_export_diff(popen, rbdclient, tmpdir):
     )
 
 
-def test_rbd_image_reader_simple(rbdclient, tmpdir):
+def test_rbd_image_reader_simple(rbdclient, tmp_path):
     device = rbdclient.map("test/test04.root@backup")["device"]
     open(device, "wb").write(b"asdf")
     with rbdclient.image_reader("test/test04.root@backup") as f:
         assert f.name == device
 
 
-def test_rbd_image_reader_explicit_closed(rbdclient, tmpdir):
+def test_rbd_image_reader_explicit_closed(rbdclient, tmp_path):
     device = rbdclient.map("test/test04.root@backup")["device"]
     open(device, "wb").write(b"asdf")
 
@@ -142,8 +142,8 @@ def test_rbd_image_reader_explicit_closed(rbdclient, tmpdir):
 
 
 @mock.patch("subprocess.Popen")
-def test_rbd_export(popen, rbdclient, tmpdir):
-    stdout = open(str(tmpdir / "rbd0"), "wb+")
+def test_rbd_export(popen, rbdclient, tmp_path):
+    stdout = open(str(tmp_path / "rbd0"), "wb+")
     popen.return_value = mock.Mock(stdout=stdout)
     with rbdclient.export(mock.sentinel.image) as f:
         assert f == stdout

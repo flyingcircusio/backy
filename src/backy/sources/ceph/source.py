@@ -2,9 +2,11 @@ import time
 
 from structlog.stdlib import BoundLogger
 
+import backy.backends
 import backy.utils
-from backy.revision import Trust
+from backy.revision import Revision, Trust
 
+from ...backends import BackyBackend
 from ...quarantine import QuarantineReport
 from .. import BackySource, BackySourceContext, BackySourceFactory
 from .rbd import RBDClient
@@ -52,20 +54,20 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
         self.create_snapshot(snapname)
         return self
 
-    def create_snapshot(self, snapname):
+    def create_snapshot(self, snapname: str) -> None:
         """An overridable method to allow different ways of creating the
         snapshot.
         """
         self.rbd.snap_create(self._image_name + "@" + snapname)
 
     @property
-    def _image_name(self):
+    def _image_name(self) -> str:
         return "{}/{}".format(self.pool, self.image)
 
     def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
         self._delete_old_snapshots()
 
-    def backup(self, target):
+    def backup(self, target: BackyBackend) -> None:
         if self.always_full:
             self.log.info("backup-always-full")
             self.full(target)
@@ -77,13 +79,6 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
                 self.log.info("backup-no-valid-parent")
                 self.full(target)
                 return
-            if parent.trust == Trust.DISTRUSTED:
-                self.log.info(
-                    "ignoring-distrusted-rev",
-                    revision_uuid=parent.uuid,
-                )
-                revision = parent
-                continue
             if not self.rbd.exists(self._image_name + "@backy-" + parent.uuid):
                 self.log.info(
                     "ignoring-rev-without-snapshot",
@@ -95,14 +90,13 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
             break
         self.diff(target, parent)
 
-    def diff(self, target, parent):
+    def diff(self, target: BackyBackend, parent: Revision) -> None:
         self.log.info("diff")
         snap_from = "backy-" + parent.uuid
         snap_to = "backy-" + self.revision.uuid
         s = self.rbd.export_diff(self._image_name + "@" + snap_to, snap_from)
-        t = target.open("r+b")
-        with s as source, t as target:
-            bytes = source.integrate(target, snap_from, snap_to)
+        with s as source, target.open("r+b", parent) as target_:
+            bytes = source.integrate(target_, snap_from, snap_to)
         self.log.info("diff-integration-finished")
 
         self.revision.stats["bytes_written"] = bytes
@@ -112,19 +106,18 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
 
         self.revision.stats["chunk_stats"] = chunk_stats
 
-    def full(self, target):
+    def full(self, target: BackyBackend) -> None:
         self.log.info("full")
         s = self.rbd.export(
             "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
         )
-        t = target.open("r+b")
         copied = 0
-        with s as source, t as target:
+        with s as source, target.open("r+b") as target_:
             while True:
                 buf = source.read(4 * backy.utils.MiB)
                 if not buf:
                     break
-                target.write(buf)
+                target_.write(buf)
                 copied += len(buf)
         self.revision.stats["bytes_written"] = copied
 
@@ -133,25 +126,23 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
 
         self.revision.stats["chunk_stats"] = chunk_stats
 
-    def verify(self, target) -> bool:
+    def verify(self, target: BackyBackend) -> bool:
         s = self.rbd.image_reader(
             "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
         )
-        t = target.open("rb")
-
         self.revision.stats["ceph-verification"] = "partial"
 
-        with s as source, t as target:
+        with s as source, target.open("rb") as target_:
             self.log.info("verify")
             return backy.utils.files_are_roughly_equal(
                 source,
-                target,
+                target_,
                 report=lambda s, t, o: self.revision.backup.quarantine.add_report(
                     QuarantineReport(s, t, o)
                 ),
             )
 
-    def _delete_old_snapshots(self):
+    def _delete_old_snapshots(self) -> None:
         # Clean up all snapshots except the one for the most recent valid
         # revision.
         # Previously we used to remove all snapshots but the one for this

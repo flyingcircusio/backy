@@ -28,7 +28,7 @@ class Report(object):
                     result.append("- " + pattern)
                 else:
                     diffed = d.compare([pattern], [line])
-                    diffed = [x.rstrip("\n") for x in diffed]
+                    diffed = (x.rstrip("\n") for x in diffed)
                     result.extend(diffed)
         result = list(filter(str.strip, result))
         return result

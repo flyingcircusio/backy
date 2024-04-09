@@ -2,8 +2,7 @@ import binascii
 import io
 import os
 import tempfile
-import time
-from typing import Optional
+from typing import Optional, Tuple, TypeAlias
 
 import lzo
 import mmh3
@@ -11,6 +10,8 @@ import mmh3
 import backy.backends.chunked
 from backy.backends import BackendException
 from backy.utils import posix_fadvise
+
+Hash: TypeAlias = str
 
 chunk_stats = {
     "write_full": 0,
@@ -34,39 +35,23 @@ class Chunk(object):
 
     CHUNK_SIZE = 4 * 1024**2  # 4 MiB chunks
 
-    _read_existing_called = False  # Test support
-
-    id: int
-    hash: str
-    file: "backy.backends.chunked.File"
+    hash: Optional[Hash]
     store: "backy.backends.chunked.Store"
     clean: bool
-    loaded: bool
     data: Optional[io.BytesIO]
 
-    def __init__(self, file, id, store, hash):
-        self.id = id
+    def __init__(
+        self,
+        store: "backy.backends.chunked.Store",
+        hash: Optional[Hash],
+    ):
         self.hash = hash
-        self.file = file
         self.store = store
         self.clean = True
-        self.loaded = False
-
-        if self.id not in file._access_stats:
-            self.file._access_stats[id] = (0, 0)
-
         self.data = None
 
-    def _cache_prio(self):
-        return self.file._access_stats[self.id]
-
-    def _touch(self):
-        count = self.file._access_stats[self.id][0]
-        self.file._access_stats[self.id] = (count + 1, time.time())
-
-    def _read_existing(self):
-        self._read_existing_called = True  # Test support
-        if self.data is not None:
+    def _read_existing(self) -> None:
+        if self.data:
             return
         # Prepare working with the chunk. We keep the data in RAM for
         # easier random access combined with transparent compression.
@@ -75,7 +60,7 @@ class Chunk(object):
             chunk_file = self.store.chunk_path(self.hash)
             try:
                 with open(chunk_file, "rb") as f:
-                    posix_fadvise(f.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+                    posix_fadvise(f.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)  # type: ignore
                     data = f.read()
                     data = lzo.decompress(data)
             except (lzo.error, IOError) as e:
@@ -88,16 +73,16 @@ class Chunk(object):
                 raise InconsistentHash(self.hash, disk_hash)
         self._init_data(data)
 
-    def _init_data(self, data):
+    def _init_data(self, data: bytes) -> None:
         self.data = io.BytesIO(data)
 
-    def read(self, offset, size=-1):
+    def read(self, offset: int, size: int = -1) -> Tuple[bytes, int]:
         """Read data from the chunk.
 
         Return the data and the remaining size that should be read.
         """
         self._read_existing()
-        self._touch()
+        assert self.data
 
         self.data.seek(offset)
         data = self.data.read(size)
@@ -106,15 +91,13 @@ class Chunk(object):
             remaining = max([0, size - len(data)])
         return data, remaining
 
-    def write(self, offset, data):
+    def write(self, offset: int, data: bytes) -> Tuple[int, bytes]:
         """Write data to the chunk, returns
 
         - the amount of data we used
         - the _data_ remaining
 
         """
-        self._touch()
-
         remaining_data = data[self.CHUNK_SIZE - offset :]
         data = data[: self.CHUNK_SIZE - offset]
 
@@ -124,6 +107,7 @@ class Chunk(object):
             chunk_stats["write_full"] += 1
         else:
             self._read_existing()
+            assert self.data
             self.data.seek(offset)
             self.data.write(data)
             chunk_stats["write_partial"] += 1
@@ -131,39 +115,39 @@ class Chunk(object):
 
         return len(data), remaining_data
 
-    def flush(self):
+    def flush(self) -> Optional[Hash]:
+        """Writes data to disk if necessary
+        Returns the new Hash on updates
+        """
         if self.clean:
-            return
-        assert self.data is not None
-        self._update_hash()
+            return None
+        assert self.data
+        # I'm not using read() here to a) avoid cache accounting and b)
+        # use a faster path to get the data.
+        self.hash = hash(self.data.getvalue())
         target = self.store.chunk_path(self.hash)
         needs_forced_write = (
             self.store.force_writes and self.hash not in self.store.seen_forced
         )
-        if self.hash not in self.store.known or needs_forced_write:
-            # Create the tempfile in the right directory to increase locality
-            # of our change - avoid renaming between multiple directories to
-            # reduce traffic on the directory nodes.
-            fd, tmpfile_name = tempfile.mkstemp(dir=os.path.dirname(target))
-            posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
-            with os.fdopen(fd, mode="wb") as f:
-                data = lzo.compress(self.data.getvalue())
-                f.write(data)
-            # Micro-optimization: chmod before rename to help against
-            # metadata flushes and then changing metadata again.
-            os.chmod(tmpfile_name, 0o440)
-            os.rename(tmpfile_name, target)
-            self.store.seen_forced.add(self.hash)
-            self.store.known.add(self.hash)
+        if self.hash not in self.store.seen:
+            if needs_forced_write or not target.exists():
+                # Create the tempfile in the right directory to increase locality
+                # of our change - avoid renaming between multiple directories to
+                # reduce traffic on the directory nodes.
+                fd, tmpfile_name = tempfile.mkstemp(dir=target.parent)
+                posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)  # type: ignore
+                with os.fdopen(fd, mode="wb") as f:
+                    data = lzo.compress(self.data.getvalue())
+                    f.write(data)
+                # Micro-optimization: chmod before rename to help against
+                # metadata flushes and then changing metadata again.
+                os.chmod(tmpfile_name, 0o440)
+                os.rename(tmpfile_name, target)
+                self.store.seen_forced.add(self.hash)
+            self.store.seen.add(self.hash)
         self.clean = True
-
-    def _update_hash(self):
-        # I'm not using read() here to a) avoid cache accounting and b)
-        # use a faster path to get the data.
-        data = self.data.getvalue()
-        self.hash = hash(data)
-        self.file._mapping[self.id] = self.hash
+        return self.hash
 
 
-def hash(data):
+def hash(data: bytes) -> Hash:
     return binascii.hexlify(mmh3.hash_bytes(data)).decode("ascii")

@@ -2,10 +2,10 @@
 
 import argparse
 import asyncio
-import datetime
 import errno
 import sys
 from pathlib import Path
+from typing import Optional
 
 import humanize
 import structlog
@@ -16,27 +16,26 @@ from rich import print as rprint
 from rich.table import Column, Table
 from structlog.stdlib import BoundLogger
 
-import backy.backup
 import backy.daemon
 from backy.utils import format_datetime_local
 
 from . import logging
-from .backup import RestoreBackend
+from .backup import Backup, RestoreBackend
 from .client import APIClient, CLIClient
 
 
 class Command(object):
     """Proxy between CLI calls and actual backup code."""
 
-    path: str
+    path: Path
     log: BoundLogger
 
-    def __init__(self, path, log):
+    def __init__(self, path: Path, log: BoundLogger):
         self.path = path
         self.log = log
 
-    def status(self, yaml_: bool, revision):
-        revs = backy.backup.Backup(self.path, self.log).find_revisions(revision)
+    def status(self, yaml_: bool, revision: str) -> None:
+        revs = Backup(self.path, self.log).find_revisions(revision)
         if yaml_:
             print(yaml.safe_dump([r.to_dict() for r in revs]))
             return
@@ -79,12 +78,12 @@ class Command(object):
             )
         )
 
-    def backup(self, tags, force):
-        b = backy.backup.Backup(self.path, self.log)
+    def backup(self, tags: str, force: bool) -> None:
+        b = Backup(self.path, self.log)
         b._clean()
         try:
-            tags = set(t.strip() for t in tags.split(","))
-            b.backup(tags, force)
+            tags_ = set(t.strip() for t in tags.split(","))
+            b.backup(tags_, force)
         except IOError as e:
             if e.errno not in [errno.EDEADLK, errno.EAGAIN]:
                 raise
@@ -92,42 +91,52 @@ class Command(object):
         finally:
             b._clean()
 
-    def restore(self, revision, target, restore_backend):
-        b = backy.backup.Backup(self.path, self.log)
+    def restore(
+        self, revision: str, target: str, restore_backend: RestoreBackend
+    ) -> None:
+        b = Backup(self.path, self.log)
         b.restore(revision, target, restore_backend)
 
-    def find(self, revision, uuid):
-        b = backy.backup.Backup(self.path, self.log)
+    def find(self, revision: str, uuid: bool) -> None:
+        b = Backup(self.path, self.log)
         for r in b.find_revisions(revision):
             if uuid:
                 print(r.uuid)
             else:
                 print(r.filename)
 
-    def forget(self, revision):
-        b = backy.backup.Backup(self.path, self.log)
+    def forget(self, revision: str) -> None:
+        b = Backup(self.path, self.log)
         b.forget(revision)
 
-    def scheduler(self, config):
+    def scheduler(self, config: Path) -> None:
         backy.daemon.main(config, self.log)
 
-    def purge(self):
-        b = backy.backup.Backup(self.path, self.log)
+    def purge(self) -> None:
+        b = Backup(self.path, self.log)
         b.purge()
 
-    def upgrade(self):
-        b = backy.backup.Backup(self.path, self.log)
+    def upgrade(self) -> None:
+        b = Backup(self.path, self.log)
         b.upgrade()
 
-    def distrust(self, revision):
-        b = backy.backup.Backup(self.path, self.log)
+    def distrust(self, revision: str) -> None:
+        b = Backup(self.path, self.log)
         b.distrust(revision)
 
-    def verify(self, revision):
-        b = backy.backup.Backup(self.path, self.log)
+    def verify(self, revision: str) -> None:
+        b = Backup(self.path, self.log)
         b.verify(revision)
 
-    def client(self, config, peer, url, token, apifunc, **kwargs):
+    def client(
+        self,
+        config: Path,
+        peer: str,
+        url: str,
+        token: str,
+        apifunc: str,
+        **kwargs,
+    ) -> None:
         async def run():
             if url and token:
                 api = APIClient("<server>", url, token, self.log)
@@ -149,24 +158,6 @@ class Command(object):
                     sys.exit(1)
 
         asyncio.run(run())
-
-    def tags(self, action, autoremove, expect, revision, tags, force):
-        tags = set(t.strip() for t in tags.split(","))
-        if expect is not None:
-            expect = set(t.strip() for t in expect.split(","))
-        b = backy.backup.Backup(self.path, self.log)
-        b.tags(
-            action,
-            revision,
-            tags,
-            expect=expect,
-            autoremove=autoremove,
-            force=force,
-        )
-
-    def expire(self):
-        b = backy.backup.Backup(self.path, self.log)
-        b.expire()
 
 
 def setup_argparser():
@@ -210,7 +201,7 @@ Query the api
 """,
     )
     g = client.add_argument_group()
-    g.add_argument("-c", "--config", default="/etc/backy.conf")
+    g.add_argument("-c", "--config", type=Path, default="/etc/backy.conf")
     g.add_argument("-p", "--peer")
     g = client.add_argument_group()
     g.add_argument("--url")
@@ -364,7 +355,7 @@ Run the scheduler.
 """,
     )
     p.set_defaults(func="scheduler")
-    p.add_argument("-c", "--config", default="/etc/backy.conf")
+    p.add_argument("-c", "--config", type=Path, default="/etc/backy.conf")
 
     # DISTRUST
     p = subparsers.add_parser(
@@ -431,6 +422,7 @@ def main():
     if not hasattr(args, "logfile"):
         args.logfile = None
 
+    default_logfile: Optional[Path]
     match args.func:
         case "scheduler":
             default_logfile = Path("/var/log/backy.log")

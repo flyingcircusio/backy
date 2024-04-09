@@ -2,11 +2,13 @@ import io
 import json
 import os
 import os.path
-from typing import Tuple
+import time
+from collections import defaultdict
+from typing import Optional, Tuple
 
 import backy.backends.chunked
 
-from .chunk import Chunk
+from .chunk import Chunk, Hash
 
 
 class File(object):
@@ -38,11 +40,17 @@ class File(object):
 
     _position: int
     _access_stats: dict[int, Tuple[int, float]]  # (count, last)
-    _mapping: dict[int, str]
+    _mapping: dict[int, Hash]
     _chunks: dict[int, Chunk]
 
-    def __init__(self, name, store, mode="rw", overlay=False):
-        self.name = name
+    def __init__(
+        self,
+        name: str | os.PathLike,
+        store: "backy.backends.chunked.Store",
+        mode: str = "rw",
+        overlay: bool = False,
+    ):
+        self.name = str(name)
         self.store = store
         self.closed = False
         # This indicates that writes should be temporary and no modify
@@ -50,7 +58,7 @@ class File(object):
         self.overlay = overlay
         self._position = 0
 
-        self._access_stats = {}
+        self._access_stats = defaultdict(lambda: (0, 0))
 
         self.mode = mode
 
@@ -87,34 +95,30 @@ class File(object):
         # Chunks that we are working on.
         self._chunks = {}
 
-    def fileno(self):
+    def fileno(self) -> int:
         raise OSError(
             "ChunkedFile does not support use through a file descriptor."
         )
 
-    def _flush_chunks(self, target=None):
-        # Support an override to the general flush/cache mechanism to
-        # allow the final() flush to actually flush everything.
+    def _flush_chunks(self, target: Optional[int] = None) -> None:
         target = target if target is not None else self.flush_target
-        if target == 0:
-            for chunk in self._chunks.values():
-                chunk.flush()
-            self._chunks = {}
-            return
-        elif len(self._chunks) < (2 * target):
+        if len(self._chunks) < (2 * target):
             return
 
-        chunks = list(self._chunks.values())
-        chunks.sort(key=lambda x: x._cache_prio())
-        keep_chunks = chunks[-target:]
-        remove_chunks = chunks[:-target]
+        chunks = list(self._chunks.items())
+        chunks.sort(key=lambda i: self._access_stats[i[0]], reverse=True)
 
-        for chunk in remove_chunks:
-            chunk.flush()
+        keep_chunks = chunks[:target]
+        remove_chunks = chunks[target:]
 
-        self._chunks = {c.id: c for c in keep_chunks}
+        for id, chunk in remove_chunks:
+            hash = chunk.flush()
+            if hash:
+                self._mapping[id] = hash
 
-    def flush(self):
+        self._chunks = dict(keep_chunks)
+
+    def flush(self) -> None:
         assert "w" in self.mode and not self.closed
 
         self._flush_chunks(0)
@@ -125,29 +129,29 @@ class File(object):
                 f.flush()
                 os.fsync(f)
 
-    def close(self):
+    def close(self) -> None:
         assert not self.closed
         if "w" in self.mode:
             self.flush()
         self.closed = True
 
-    def isatty(self):
+    def isatty(self) -> bool:
         return False
 
-    def readable(self):
+    def readable(self) -> bool:
         return "r" in self.mode and not self.closed
 
     # def readline(size=-1)
     # def readlines(hint=-1)
 
-    def tell(self):
+    def tell(self) -> int:
         assert not self.closed
         return self._position
 
-    def seekable(self):
+    def seekable(self) -> bool:
         return True
 
-    def seek(self, offset, whence=io.SEEK_SET):
+    def seek(self, offset: int, whence=io.SEEK_SET) -> int:
         assert not self.closed
 
         position = self._position
@@ -184,7 +188,7 @@ class File(object):
         self._position = position
         return position
 
-    def truncate(self, size=None):
+    def truncate(self, size: Optional[int] = None) -> None:
         assert "w" in self.mode and not self.closed
         if size is None:
             size = self._position
@@ -198,7 +202,7 @@ class File(object):
             del self._mapping[key]
         self.flush()
 
-    def read(self, size=-1):
+    def read(self, size: int = -1) -> bytes:
         assert "r" in self.mode and not self.closed
         result = io.BytesIO()
         max_size = self.size - self._position
@@ -207,39 +211,39 @@ class File(object):
         else:
             size = min([size, max_size])
         while size:
-            chunk, offset = self._current_chunk()
+            chunk, id, offset = self._current_chunk()
             data, size = chunk.read(offset, size)
             if not data:
                 raise ValueError(
-                    "Under-run: chunk {} seems to be missing data".format(
-                        chunk.id
-                    )
+                    f"Under-run: chunk {id} seems to be missing data"
                 )
             self._position += len(data)
             result.write(data)
         return result.getvalue()
 
-    def writable(self):
+    def writable(self) -> bool:
         return "w" in self.mode and not self.closed
 
-    def write(self, data):
+    def write(self, data: bytes) -> None:
         assert "w" in self.mode and not self.closed
         while data:
-            chunk, offset = self._current_chunk()
+            chunk, _, offset = self._current_chunk()
             written, data = chunk.write(offset, data)
             self._position += written
             if self._position > self.size:
                 self.size = self._position
 
-    def _current_chunk(self):
+    def _current_chunk(self) -> Tuple[Chunk, int, int]:
         chunk_id = self._position // Chunk.CHUNK_SIZE
         offset = self._position % Chunk.CHUNK_SIZE
         if chunk_id not in self._chunks:
             self._flush_chunks()
             self._chunks[chunk_id] = Chunk(
-                self, chunk_id, self.store, self._mapping.get(chunk_id)
+                self.store, self._mapping.get(chunk_id)
             )
-        return self._chunks[chunk_id], offset
+        count = self._access_stats[chunk_id][0]
+        self._access_stats[chunk_id] = (count + 1, time.time())
+        return self._chunks[chunk_id], chunk_id, offset
 
     def __enter__(self):
         assert not self.closed

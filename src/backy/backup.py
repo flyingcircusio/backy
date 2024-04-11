@@ -34,6 +34,7 @@ from .quarantine import QuarantineStore
 from .revision import Revision, Trust, filter_schedule_tags
 from .schedule import Schedule
 from .sources import BackySourceFactory, select_source
+from .sources.obj_types import ObjectRestoreTarget
 from .utils import CHUNK_SIZE, copy, posix_fadvise
 
 # Locking strategy:
@@ -416,12 +417,9 @@ class Backup(object):
     ) -> None:
         r = self.find(revision)
         if r.backend_type == "s3":
-            from backy.sources.s3.source import S3
-
-            assert isinstance(self.source, S3)
-            assert target.startswith("s3://")
-            target = target.removeprefix("s3://")
-            self.source.restore(r.backend, target)
+            r.backend.open_multi("rb").restore(
+                self.select_restore_target(target)
+            )
             return
         s = r.backend.open("rb")
         if restore_backend == RestoreBackend.AUTO:
@@ -439,8 +437,31 @@ class Backup(object):
         elif restore_backend == RestoreBackend.RUST:
             self.restore_backy_extract(r, target)
 
-    def parse_restore_target(self, target: str) -> Any:
-        pass
+    def select_restore_target(self, type_: str) -> ObjectRestoreTarget:
+        from backy.sources.s3.source import (
+            S3,
+            AsyncS3Client,
+            S3LocalRestoreTarget,
+        )
+
+        if type_.startswith("s3://"):
+
+            assert isinstance(self.source, S3)
+            return AsyncS3Client(
+                type_.removeprefix("s3://"),
+                self.config["source"]["endpoint_url"],
+                self.config["source"]["access_key"],
+                self.config["source"]["secret_key"],
+                self.log,
+            )
+        elif type_.startswith("path://"):
+            return S3LocalRestoreTarget(Path(type_.removeprefix("path://")))
+        elif type_.startswith("path-flat://"):
+            return S3LocalRestoreTarget(
+                Path(type_.removeprefix("path://")), separator=None
+            )
+        else:
+            raise ValueError()
 
     def backy_extract_supported(self, file: IO) -> bool:
         log = self.log.bind(subsystem="backy-extract")

@@ -15,6 +15,7 @@ from asyncio import AbstractEventLoop, Event, Future, Task
 from concurrent.futures import ThreadPoolExecutor
 from typing import (
     IO,
+    Any,
     Callable,
     Coroutine,
     Iterable,
@@ -570,7 +571,7 @@ class FuturePool:
                 raise t.exception()
 
     async def submit(
-        self, coro: Coroutine[_T] | Future[_T] | Callable[[], _T]
+        self, coro: Coroutine[Any, Any, _T] | Future[_T] | Callable[..., _T]
     ) -> Future[_T]:
         if len(self.futures) >= self.size:
             await self._wait(asyncio.FIRST_COMPLETED)
@@ -596,3 +597,9 @@ class FuturePool:
         # all threads are part `self.futures` so this should not block
         if self.thread_pool:
             self.thread_pool.shutdown()
+
+
+def completed_future(res: _T) -> Future[_T]:
+    future: Future[_T] = Future()
+    future.set_result(res)
+    return future

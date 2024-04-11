@@ -5,12 +5,15 @@ from abc import ABC, abstractmethod
 from asyncio import Future
 from contextlib import contextmanager
 from pathlib import Path
-from typing import IO, AsyncIterable, Iterator
+from typing import IO, TYPE_CHECKING, AsyncIterable, Iterator
 
 import yaml
 from mypy_boto3_s3.type_defs import ObjectTypeDef
 
-from backy.backends.s3 import Store
+from backy.utils import posix_fadvise
+
+if TYPE_CHECKING:
+    from backy.backends.s3 import Store
 
 
 class TemporaryS3Obj:
@@ -40,6 +43,8 @@ class TemporaryS3Obj:
         assert self.writeable
         with self.meta_path.open("w", encoding="utf-8") as f:
             yaml.safe_dump({"Metadata": meta}, f)
+            f.flush()
+            os.fsync(f)
 
     def get_metadata(self) -> dict:
         with self.meta_path.open(encoding="utf-8") as f:
@@ -50,6 +55,8 @@ class TemporaryS3Obj:
         with self.path.open(self.mode) as f:
             posix_fadvise(f.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)  # type: ignore
             yield f
+            f.flush()
+            os.fsync(f)
 
 
 class RemoteS3Obj:
@@ -68,8 +75,8 @@ class RemoteS3Obj:
         self.etag = etag
 
     @classmethod
-    def from_api(cls, obj: ObjectTypeDef):
-        cls(obj["Key"], obj["LastModified"], obj["ETag"])
+    def from_api(cls, obj: ObjectTypeDef) -> "RemoteS3Obj":
+        return cls(obj["Key"], obj["LastModified"], obj["ETag"])
 
 
 class S3Obj(TemporaryS3Obj, RemoteS3Obj):
@@ -85,8 +92,8 @@ class S3Obj(TemporaryS3Obj, RemoteS3Obj):
         etag: str,
     ):
         self.id = id
-        super(TemporaryS3Obj).__init__(store.object_path(id), mode)
-        super(RemoteS3Obj).__init__(key, lastmodified, etag)
+        TemporaryS3Obj.__init__(self, store.object_path(id), mode)
+        RemoteS3Obj.__init__(self, key, lastmodified, etag)
 
     @classmethod
     def from_db_row(cls, store: "Store", row, mode="rb") -> "S3Obj":
@@ -97,7 +104,7 @@ class S3Obj(TemporaryS3Obj, RemoteS3Obj):
 
 class ObjectRestoreTarget(ABC):
     async def __aenter__(self) -> "ObjectRestoreTarget":
-        pass
+        return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         pass

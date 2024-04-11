@@ -1,19 +1,13 @@
 import datetime
-import os
 import sqlite3
-import tempfile
-from contextlib import contextmanager
 from pathlib import Path
 from sqlite3 import PARSE_DECLTYPES, Cursor
-from typing import IO, Any, Iterable, Iterator, List, Optional, Set
+from typing import Iterable, Optional, Set
 
-import yaml
-from mypy_boto3_s3.type_defs import ObjectTypeDef
 from structlog.stdlib import BoundLogger
 
-from backy.backends.s3.obj_types import RemoteS3Obj, S3Obj, TemporaryS3Obj
 from backy.revision import Revision
-from backy.utils import posix_fadvise
+from backy.sources.obj_types import RemoteS3Obj, S3Obj, TemporaryS3Obj
 
 STORE_DEPTH = 3
 

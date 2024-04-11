@@ -1,13 +1,10 @@
 import asyncio
-import os
-from typing import IO, Iterable, Iterator, Optional, Set, Tuple
-
-import yaml
+from typing import Iterable, Optional, Set
 
 import backy.backends.s3
-from backy.backends.s3.obj_types import ObjectRestoreTarget, RemoteS3Obj
 from backy.backends.s3.store import S3Obj, TemporaryS3Obj
 from backy.revision import Revision
+from backy.sources.obj_types import ObjectRestoreTarget, RemoteS3Obj
 
 
 class BucketSnapshot:
@@ -60,8 +57,8 @@ class BucketSnapshot:
             obj = self.store.add_object(remote_obj)
             self.store.add_obj_rev_relation(obj.id, self.id)
             obj.path.parent.mkdir(parents=True, exist_ok=True)
-            os.rename(tempobj.path, obj.path)
-            os.rename(tempobj.meta_path, obj.meta_path)
+            tempobj.path.rename(obj.path)
+            tempobj.meta_path.rename(obj.meta_path)
             return obj
 
     def list_obj(self) -> Iterable[S3Obj]:
@@ -81,7 +78,7 @@ class BucketSnapshot:
 
     async def _restore(self, target: "ObjectRestoreTarget") -> None:
         remote_obj: Set[str] = set()
-        with target:
+        async with target:
             async for obj in target.list_obj():
                 remote_obj.add(obj.key)
                 print("restore found remote", obj.key)
@@ -90,7 +87,7 @@ class BucketSnapshot:
                 local_obj = self.get_obj(obj.key)
                 if not local_obj:
                     print("restore unknown remote", obj.key)
-                    await target.delete_obj(obj.key)
+                    await target.submit_delete_obj(obj.key)
                 elif (
                     local_obj.lastmodified != obj.lastmodified
                     or local_obj.etag != obj.etag
@@ -99,8 +96,8 @@ class BucketSnapshot:
                     print("restore remote changed", obj.key)
                     print(local_obj.lastmodified, obj.lastmodified)
                     print(local_obj.etag, obj.etag)
-                    await target.upload_obj(local_obj)
+                    await target.submit_upload_obj(local_obj)
             for local_obj in self.list_obj():
                 if local_obj.key not in remote_obj:
                     print("restore remote missing", local_obj.key)
-                    await target.upload_obj(local_obj)
+                    await target.submit_upload_obj(local_obj)

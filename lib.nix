@@ -23,6 +23,12 @@ let
       scriv = super.scriv.overrideAttrs (old: {
         buildInputs = (old.buildInputs or []) ++ [ super.setuptools ];
       });
+      backports-tarfile = super.backports-tarfile.overrideAttrs (old: {
+        buildInputs = (old.buildInputs or []) ++ [ super.setuptools ];
+      });
+      docutils = super.docutils.overrideAttrs (old: {
+        buildInputs = (old.buildInputs or []) ++ [ super.flit-core ];
+      });
       execnet = super.execnet.overrideAttrs (old: {
         buildInputs = (old.buildInputs or []) ++ [ super.hatchling super.hatch-vcs ];
       });
@@ -54,7 +60,7 @@ let
       nh3 =
         let
           getCargoHash = version: {
-            "0.2.15" = "sha256-fetAE3cj9hh4SoPE72Bqco5ytUMiDqbazeS2MHdUibM=";
+            "0.2.17" = "sha256-WomlVzKOUfcgAWGJInSvZn9hm+bFpgc4nJbRiyPCU64=";
           }.${version} or (
             lib.warn "Unknown nh3 version: '${version}'. Please update getCargoHash." lib.fakeHash
           );
@@ -78,7 +84,7 @@ let
       cryptography =
         let
           getCargoHash = version: {
-            "41.0.7" = "sha256-VeZhKisCPDRvmSjGNwCgJJeVj65BZ0Ge+yvXbZw86Rw";
+            "42.0.5" = "sha256-Pw3ftpcDMfZr/w6US5fnnyPVsFSB9+BuIKazDocYjTU=";
           }.${version} or (
             lib.warn "Unknown cryptography version: '${version}'. Please update getCargoHash." lib.fakeHash
           );

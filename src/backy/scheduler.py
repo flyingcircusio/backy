@@ -7,17 +7,27 @@ import random
 import subprocess
 from datetime import timedelta
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Literal, Optional, Set
 
 import yaml
+from aiohttp import ClientError
 from structlog.stdlib import BoundLogger
 
-import backy.daemon
 import backy.utils
 
 from .backup import Backup
+from .client import APIClientManager
 from .ext_deps import BACKY_CMD
-from .utils import SafeFile, format_datetime_local, time_or_event
+from .schedule import Schedule
+from .utils import (
+    SafeFile,
+    format_datetime_local,
+    generate_taskid,
+    time_or_event,
+)
+
+if TYPE_CHECKING:
+    from backy.daemon import BackyDaemon
 
 
 class Job(object):
@@ -31,31 +41,32 @@ class Job(object):
     backup: Backup
     logfile: Path
     last_config: Optional[dict] = None
-    daemon: "backy.daemon.BackyDaemon"
+    daemon: "BackyDaemon"
     run_immediately: asyncio.Event
     errors: int = 0
     backoff: int = 0
+    taskid: str = ""
     log: BoundLogger
 
     _task: Optional[asyncio.Task] = None
 
-    def __init__(self, daemon, name, log):
+    def __init__(self, daemon: "BackyDaemon", name: str, log: BoundLogger):
         self.daemon = daemon
         self.name = name
         self.log = log.bind(job_name=name, subsystem="job")
         self.run_immediately = asyncio.Event()
-
-    def configure(self, config):
-        self.source = config["source"]
-        self.schedule_name = config["schedule"]
         self.path = self.daemon.base_dir / self.name
         self.logfile = self.path / "backy.log"
+
+    def configure(self, config: dict) -> None:
+        self.source = config["source"]
+        self.schedule_name = config["schedule"]
         self.update_config()
         self.backup = Backup(self.path, self.log)
         self.last_config = config
 
     @property
-    def spread(self):
+    def spread(self) -> int:
         seed = int(hashlib.md5(self.name.encode("utf-8")).hexdigest(), 16)
         limit = max(x["interval"] for x in self.schedule.schedule.values())
         limit = int(limit.total_seconds())
@@ -64,7 +75,7 @@ class Job(object):
         return generator.randint(0, limit)
 
     @property
-    def sla(self):
+    def sla(self) -> bool:
         """Is the SLA currently held?
 
         The SLA being held is only reflecting the current status.
@@ -76,11 +87,11 @@ class Job(object):
         return not self.sla_overdue
 
     @property
-    def sla_overdue(self):
+    def sla_overdue(self) -> int:
         """Amount of time the SLA is currently overdue."""
         if not self.backup.clean_history:
             return 0
-        if self.status == "running":
+        if self.status.startswith("running"):
             return 0
         age = backy.utils.now() - self.backup.clean_history[-1].timestamp
         max_age = min(x["interval"] for x in self.schedule.schedule.values())
@@ -89,14 +100,14 @@ class Job(object):
         return 0
 
     @property
-    def schedule(self):
+    def schedule(self) -> Schedule:
         return self.daemon.schedules[self.schedule_name]
 
-    def update_status(self, status):
+    def update_status(self, status: str) -> None:
         self.status = status
         self.log.debug("updating-status", status=self.status)
 
-    def update_config(self):
+    def update_config(self) -> None:
         """Writes config file for 'backy backup' subprocess."""
 
         # We do not want to create leading directories, only
@@ -113,7 +124,7 @@ class Job(object):
             if config.exists() and filecmp.cmp(config, f.name):
                 raise ValueError("not changed")
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "name": self.name,
             "status": self.status,
@@ -121,14 +132,84 @@ class Job(object):
             "schedule": self.schedule.to_dict(),
         }
 
-    async def _wait_for_deadline(self):
+    async def _wait_for_deadline(self) -> Optional[Literal[True]]:
+        assert self.next_time
         self.update_status("waiting for deadline")
         trigger = await time_or_event(self.next_time, self.run_immediately)
         self.run_immediately.clear()
         self.log.info("woken", trigger=trigger)
         return trigger
 
-    async def run_forever(self):
+    async def _wait_for_leader(self, next_time: datetime.datetime) -> bool:
+        api = None
+        try:
+            api = APIClientManager(self.daemon.peers, self.taskid, self.log)
+            statuses = await asyncio.gather(
+                *[api[server].fetch_status(f"^{self.name}$") for server in api],
+                return_exceptions=True,
+            )
+            leader = None
+            leader_revs = len(self.backup.get_history(clean=True, local=True))
+            leader_status: "BackyDaemon.StatusDict"
+            self.log.info("local-revs", local_revs=leader_revs)
+            for server, status in zip(api, statuses):
+                log = self.log.bind(server=server)
+                if isinstance(status, BaseException):
+                    log.info(
+                        "server-unavailable", exc_info=status, exc_style="short"
+                    )
+                    continue
+                num_remote_revs = status[0]["local_revs"]
+                log.info("duplicate-job", remote_revs=num_remote_revs)
+                if num_remote_revs > leader_revs:
+                    leader_revs = num_remote_revs
+                    leader = server
+                    leader_status = status[0]
+
+            log = self.log.bind(leader=leader)
+            log.info("leader-found", leader_revs=leader_revs)
+            if not leader:
+                return False
+
+            self.update_status(f"monitoring ({leader})")
+            res = leader_status
+            while True:
+                if (
+                    res["last_time"]
+                    and (next_time - res["last_time"]).total_seconds() < 5 * 60
+                ):
+                    # there was a backup in the last 5min
+                    log.info("leader-finished")
+                    return True
+                if not res["status"]:
+                    log.info("leader-stopped")
+                    return False
+                if res["next_time"] and (
+                    (res["next_time"] - next_time).total_seconds() > 5 * 60
+                ):
+                    # not currently running or scheduled in the next 5min
+                    log.info("leader-not-scheduled")
+                    return False
+
+                if await backy.utils.delay_or_event(300, self.run_immediately):
+                    self.run_immediately.clear()
+                    log.info("run-immediately-triggered")
+                    return False
+                try:
+                    res = (await api[leader].fetch_status(f"^{self.name}$"))[0]
+                except ClientError:
+                    log.warning("leader-failed", exc_style="short")
+                    return False
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            self.log.exception("_wait_for_leader-failed")
+            return False
+        finally:
+            if api:
+                await api.close()
+
+    async def run_forever(self) -> None:
         """Generate backup tasks for this job.
 
         Tasks are based on the ideal next time in the future and
@@ -146,7 +227,10 @@ class Job(object):
         self.backoff = 0
         self.log.debug("loop-started")
         while True:
-            self.backup.scan()
+            self.taskid = generate_taskid()
+            self.log = self.log.bind(job_name=self.name, sub_taskid=self.taskid)
+
+            self.backup = Backup(self.path, self.log)
 
             next_time, next_tags = self.schedule.next(
                 backy.utils.now(), self.spread, self.backup
@@ -169,7 +253,7 @@ class Job(object):
                 next_time=format_datetime_local(self.next_time)[0],
                 next_tags=", ".join(next_tags),
             )
-            await self._wait_for_deadline()
+            run_immediately = await self._wait_for_deadline()
 
             # The UI shouldn't show a next any longer now that we have already
             # triggered.
@@ -177,22 +261,31 @@ class Job(object):
             self.next_tags = None
 
             try:
-                speed = "slow"
-                if (
-                    self.backup.clean_history
-                    and self.backup.clean_history[-1].stats["duration"] < 600
+                self.update_status("checking neighbours")
+                if not run_immediately and await self._wait_for_leader(
+                    next_time
                 ):
-                    speed = "fast"
-                self.update_status(f"waiting for worker slot ({speed})")
-
-                async with self.daemon.backup_semaphores[speed]:
-                    self.update_status(f"running ({speed})")
-
-                    self.update_config()
-                    await self.run_backup(next_tags)
-                    await self.run_expiry()
-                    await self.run_purge()
+                    await self.pull_metadata()
                     await self.run_callback()
+                else:
+                    speed = "slow"
+                    if (
+                        self.backup.clean_history
+                        and self.backup.clean_history[-1].stats["duration"]
+                        < 600
+                    ):
+                        speed = "fast"
+                    self.update_status(f"waiting for worker slot ({speed})")
+
+                    async with self.daemon.backup_semaphores[speed]:
+                        self.update_status(f"running ({speed})")
+
+                        await self.run_backup(next_tags)
+                        await self.pull_metadata()
+                        await self.run_expiry()
+                        await self.push_metadata()
+                        await self.run_purge()
+                        await self.run_callback()
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -214,10 +307,80 @@ class Job(object):
                 self.backoff = 0
                 self.update_status("finished")
 
-    async def run_backup(self, tags):
+    async def pull_metadata(self) -> None:
+        self.log.info("pull-metadata-started")
+        proc = await asyncio.create_subprocess_exec(
+            BACKY_CMD,
+            "-t",
+            self.taskid,
+            "-b",
+            self.path,
+            "-l",
+            self.logfile,
+            "pull",
+            "-c",
+            self.daemon.config_file,
+            close_fds=True,
+            start_new_session=True,  # Avoid signal propagation like Ctrl-C
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            return_code = await proc.wait()
+            self.log.info(
+                "pull-metadata-finished",
+                return_code=return_code,
+                subprocess_pid=proc.pid,
+            )
+        except asyncio.CancelledError:
+            self.log.warning("pull-metadata-cancelled")
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+            raise
+
+    async def push_metadata(self) -> None:
+        self.log.info("push-metadata-started")
+        proc = await asyncio.create_subprocess_exec(
+            BACKY_CMD,
+            "-t",
+            self.taskid,
+            "-b",
+            self.path,
+            "-l",
+            self.logfile,
+            "push",
+            "-c",
+            self.daemon.config_file,
+            close_fds=True,
+            start_new_session=True,  # Avoid signal propagation like Ctrl-C
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            return_code = await proc.wait()
+            self.log.info(
+                "push-metadata-finished",
+                return_code=return_code,
+                subprocess_pid=proc.pid,
+            )
+        except asyncio.CancelledError:
+            self.log.warning("push-metadata-cancelled")
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+            raise
+
+    async def run_backup(self, tags: Set[str]) -> None:
         self.log.info("backup-started", tags=", ".join(tags))
         proc = await asyncio.create_subprocess_exec(
             BACKY_CMD,
+            "-t",
+            self.taskid,
             "-b",
             str(self.path),
             "-l",
@@ -249,14 +412,48 @@ class Job(object):
                 pass
             raise
 
-    async def run_expiry(self):
-        self.log.info("expiring-revs")
-        self.schedule.expire(self.backup)
+    async def run_expiry(self) -> None:
+        self.log.info("expiry-started")
+        proc = await asyncio.create_subprocess_exec(
+            BACKY_CMD,
+            "-t",
+            self.taskid,
+            "-b",
+            self.path,
+            "-l",
+            self.logfile,
+            "expire",
+            close_fds=True,
+            start_new_session=True,  # Avoid signal propagation like Ctrl-C
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            return_code = await proc.wait()
+            self.log.info(
+                "expiry-finished",
+                return_code=return_code,
+                subprocess_pid=proc.pid,
+            )
+            if return_code:
+                raise RuntimeError(
+                    f"Expiry failed with return code {return_code}"
+                )
+        except asyncio.CancelledError:
+            self.log.warning("expiry-cancelled")
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+            raise
 
-    async def run_purge(self):
+    async def run_purge(self) -> None:
         self.log.info("purge-started")
         proc = await asyncio.create_subprocess_exec(
             BACKY_CMD,
+            "-t",
+            self.taskid,
             "-b",
             str(self.path),
             "-l",
@@ -283,7 +480,7 @@ class Job(object):
                 pass
             raise
 
-    async def run_callback(self):
+    async def run_callback(self) -> None:
         if not self.daemon.backup_completed_callback:
             self.log.debug("callback-not-configured")
             return
@@ -339,17 +536,18 @@ class Job(object):
                 pass
             raise
 
-    def start(self):
+    def start(self) -> None:
         assert self._task is None
         assert self.daemon.loop
         self._task = self.daemon.loop.create_task(
             self.run_forever(), name=f"backup-loop-{self.name}"
         )
 
-    def stop(self):
+    def stop(self) -> None:
         # XXX make shutdown graceful and let a previous run finish ...
         # schedule a reload after that.
         if self._task:
             self.log.info("stop")
             self._task.cancel()
             self._task = None
+            self.update_status("")

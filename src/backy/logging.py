@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Optional
 
 import structlog
+from structlog.typing import EventDict, WrappedLogger
+
+from backy import utils
 
 try:
     import colorama
@@ -17,7 +20,7 @@ except ImportError:
     colorama = None
 
 _MISSING = "{who} requires the {package} package installed."
-_EVENT_WIDTH = 30  # pad the event name to so many characters
+_EVENT_WIDTH = 35  # pad the event name to so many characters
 
 if sys.stderr.isatty() and colorama:
     COLORIZED_TTY_OUTPUT = True
@@ -136,11 +139,8 @@ class ConsoleFileRenderer:
         "trace",
     ]
 
-    def __init__(
-        self, min_level, default_job_name: str = "", pad_event=_EVENT_WIDTH
-    ):
+    def __init__(self, min_level, pad_event=_EVENT_WIDTH):
         self.min_level = self.LEVELS.index(min_level.lower())
-        self.default_job_name = default_job_name
         if colorama is None:
             print(
                 _MISSING.format(who=self.__class__.__name__, package="colorama")
@@ -167,7 +167,9 @@ class ConsoleFileRenderer:
             max(self._level_to_color.keys(), key=lambda e: len(e))
         )
 
-    def __call__(self, logger, method_name, event_dict):
+    def __call__(
+        self, logger: WrappedLogger, method_name: str, event_dict: EventDict
+    ):
         console_io = io.StringIO()
         log_io = io.StringIO()
 
@@ -203,9 +205,9 @@ class ConsoleFileRenderer:
                 + " "
             )
 
-        pid = event_dict.pop("pid", None)
-        if pid is not None:
-            write(DIM + str(pid) + RESET_ALL + " ")
+        taskid = event_dict.pop("taskid", None)
+        if taskid is not None:
+            write(DIM + str(taskid) + RESET_ALL + " ")
 
         level = event_dict.pop("level", None)
         if level is not None:
@@ -213,7 +215,10 @@ class ConsoleFileRenderer:
                 self._level_to_color[level] + level[0].upper() + RESET_ALL + " "
             )
 
-        job_name = event_dict.pop("job_name", self.default_job_name)
+        job_name = event_dict.pop("job_name", "")
+        sub_taskid = event_dict.pop("sub_taskid", None)
+        if sub_taskid:
+            job_name += f"[{sub_taskid}]"
         if job_name:
             write(job_name.ljust(20) + " ")
 
@@ -227,6 +232,10 @@ class ConsoleFileRenderer:
             + RESET_ALL
             + " "
         )
+        if len(subsystem + event) > self._pad_event and hasattr(
+            utils, "log_data"
+        ):
+            raise RuntimeWarning("logline to long: " + subsystem + event)
 
         logger_name = event_dict.pop("logger", None)
         if logger_name is not None:
@@ -237,6 +246,16 @@ class ConsoleFileRenderer:
         stderr = event_dict.pop("stderr", None)
         stack = event_dict.pop("stack", None)
         exception_traceback = event_dict.pop("exception_traceback", None)
+        exc_style = event_dict.pop("exc_style", "long")
+        match exc_style:
+            case "short":
+                exception_traceback = None
+            case "banner":
+                exception_traceback = (
+                    "\n"
+                    + event_dict.get("exception_msg", exception_traceback)
+                    + "\n"
+                )
 
         write(
             " ".join(
@@ -280,11 +299,6 @@ class ConsoleFileRenderer:
         return {"console": console_io.getvalue(), "file": log_io.getvalue()}
 
 
-def add_pid(logger, method_name, event_dict):
-    event_dict["pid"] = os.getpid()
-    return event_dict
-
-
 def process_exc_info(logger, name, event_dict):
     """Transforms exc_info to the exception tuple format returned by
     sys.exc_info(). Uses the the same logic as as structlog's format_exc_info()
@@ -292,6 +306,7 @@ def process_exc_info(logger, name, event_dict):
     the exception yet.
     """
     exc_info = event_dict.get("exc_info", None)
+    exc_style = event_dict.get("exc_style", None)
 
     if isinstance(exc_info, BaseException):
         event_dict["exc_info"] = (
@@ -301,7 +316,7 @@ def process_exc_info(logger, name, event_dict):
         )
     elif isinstance(exc_info, tuple):
         pass
-    elif exc_info:
+    elif exc_info or exc_style:
         event_dict["exc_info"] = sys.exc_info()
 
     return event_dict
@@ -326,19 +341,30 @@ def format_exc_info(logger, name, event_dict):
     return event_dict
 
 
+class EventDictDefaults:
+    def __init__(self, defaults: dict):
+        self.defaults = defaults
+
+    def __call__(
+        self, logger: WrappedLogger, method_name: str, event_dict: EventDict
+    ) -> EventDict:
+        for k, v in self.defaults.items():
+            event_dict.setdefault(k, v)
+        return event_dict
+
+
 def init_logging(
     verbose: bool,
     logfile: Optional[Path] = None,
-    default_job_name: str = "",
+    defaults: Optional[dict] = None,
 ):
 
     console_file_renderer = ConsoleFileRenderer(
         min_level="trace" if verbose else "info",
-        default_job_name=default_job_name,
     )
 
     processors = [
-        add_pid,
+        EventDictDefaults(defaults or dict()),
         structlog.processors.add_log_level,
         process_exc_info,
         format_exc_info,

@@ -50,7 +50,7 @@ class ChunkedFileBackend(BackyBackend):
     def purge(self) -> None:
         self.log.debug("purge")
         used_chunks: Set[Hash] = set()
-        for revision in self.backup.history:
+        for revision in self.backup.local_history:
             if revision.backend_type != "chunked":
                 continue
             used_chunks.update(
@@ -65,7 +65,7 @@ class ChunkedFileBackend(BackyBackend):
         verified_chunks: Set[Hash] = set()
 
         # Load verified chunks to avoid duplicate work
-        for revision in self.backup.clean_history:
+        for revision in self.backup.get_history(clean=True, local=True):
             if (
                 revision.trust != Trust.VERIFIED
                 or revision.backend_type != "chunked"

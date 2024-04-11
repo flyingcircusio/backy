@@ -32,6 +32,7 @@ repos:
       - types-PyYAML==5.4.0
       - types-setuptools
       - types-tzlocal==4.2
+      - types-aiofiles==23.2.0.20240311
     exclude: tests
     args:
       - --check-untyped-defs

@@ -7,20 +7,23 @@ import backy.utils
 from backy.scheduler import Job
 
 
-@pytest.mark.asyncio
-async def test_wait_for_deadline_no_deadline_fails(log):
+@pytest.fixture
+def daemon(tmp_path):
     daemon = mock.Mock()
+    daemon.base_dir = tmp_path
+    return daemon
+
+
+async def test_wait_for_deadline_no_deadline_fails(daemon, log):
     job = Job(daemon, "dummy", log)
-    # Not having a a deadline set causes this to fail (immediately)
-    with pytest.raises(TypeError):
+    # Not having a deadline set causes this to fail (immediately)
+    with pytest.raises(AssertionError):
         await job._wait_for_deadline()
 
 
-@pytest.mark.asyncio
-async def test_wait_for_deadline(log):
-    daemon = mock.Mock()
+async def test_wait_for_deadline(daemon, log):
     job = Job(daemon, "dummy", log)
-    # Not having a a deadline set causes this to fail.
+    # Not having a deadline set causes this to fail.
     now = backy.utils.now()
     job.next_time = now + datetime.timedelta(seconds=0.3)
     result = await job._wait_for_deadline()
@@ -28,9 +31,7 @@ async def test_wait_for_deadline(log):
     assert backy.utils.now() - now >= datetime.timedelta(seconds=0.3)
 
 
-@pytest.mark.asyncio
-async def test_wait_for_deadline_1000(log):
-    daemon = mock.Mock()
+async def test_wait_for_deadline_1000(daemon, log):
     job = Job(daemon, "dummy", log)
     # Large deadline
     now = backy.utils.now()

@@ -4,7 +4,7 @@ from unittest import mock
 
 import yaml
 
-import backy
+import backy.utils
 from backy.revision import Revision
 
 UTC = datetime.timezone.utc
@@ -71,6 +71,8 @@ def test_store_revision_data(backup, clock, log):
             "uuid": "asdf2",
             "stats": {"bytes_written": 0},
             "tags": [],
+            "orig_tags": [],
+            "server": "",
             "trust": "trusted",
             "timestamp": datetime.datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC),
         }
@@ -86,6 +88,8 @@ def test_store_revision_data_no_parent(backup, clock, log):
             "uuid": "asdf2",
             "stats": {"bytes_written": 0},
             "tags": [],
+            "orig_tags": [],
+            "server": "",
             "trust": "trusted",
             "timestamp": datetime.datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC),
         }

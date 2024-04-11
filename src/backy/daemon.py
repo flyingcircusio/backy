@@ -1,21 +1,25 @@
 import asyncio
+import datetime
 import fcntl
 import os
-import shutil
+import os.path as p
 import signal
 import sys
 import time
 from pathlib import Path
-from typing import IO, List, Optional
+from typing import IO, List, Optional, Pattern, TypedDict
 
+import aiofiles.os as aos
+import aioshutil
 import yaml
 from structlog.stdlib import BoundLogger
 
 from .api import BackyAPI
+from .backup import Backup
 from .revision import filter_manual_tags
 from .schedule import Schedule
 from .scheduler import Job
-from .utils import has_recent_changes
+from .utils import has_recent_changes, is_dir_no_symlink
 
 daemon: "BackyDaemon"
 
@@ -34,6 +38,7 @@ class BackyDaemon(object):
     config: dict
     schedules: dict[str, Schedule]
     jobs: dict[str, Job]
+    dead_backups: dict[str, Backup]
 
     backup_semaphores: dict[str, asyncio.BoundedSemaphore]
     log: BoundLogger
@@ -49,6 +54,7 @@ class BackyDaemon(object):
         self.schedules = {}
         self.backup_semaphores = {}
         self.jobs = {}
+        self.dead_backups = {}
         self._lock = None
         self.reload_api = asyncio.Event()
         self.api_addrs = ["::1", "127.0.0.1"]
@@ -116,8 +122,8 @@ class BackyDaemon(object):
             job = self.jobs[name]
             if config != job.last_config:
                 self.log.info("changed-job", job_name=name)
-                job.configure(config)
                 job.stop()
+                job.configure(config)
                 job.start()
 
         for name, job in list(self.jobs.items()):
@@ -125,6 +131,21 @@ class BackyDaemon(object):
                 job.stop()
                 del self.jobs[name]
                 self.log.info("deleted-job", job_name=name)
+
+        self.dead_backups.clear()
+        for b in os.scandir(self.base_dir):
+            if b.name in self.jobs or not b.is_dir(follow_symlinks=False):
+                continue
+            try:
+                self.dead_backups[b.name] = Backup(
+                    self.base_dir / b.name,
+                    self.log.bind(job_name=b.name),
+                )
+                self.log.info("found-backup", job_name=b.name)
+            except Exception:
+                self.log.info(
+                    "invalid-backup", job_name=b.name, exc_style="short"
+                )
 
         if (
             not self.backup_semaphores
@@ -168,6 +189,9 @@ class BackyDaemon(object):
         self._apply_config()
 
         loop.create_task(self.purge_old_files(), name="purge-old-files")
+        loop.create_task(
+            self.purge_pending_backups(), name="purge-pending-backups"
+        )
         loop.create_task(self.shutdown_loop(), name="shutdown-cleanup")
 
         def handle_signals(signum):
@@ -252,34 +276,53 @@ class BackyDaemon(object):
         self.log.info("stopping-loop")
         self.loop.stop()
 
-    def status(self, filter_re=None):
+    class StatusDict(TypedDict):
+        job: str
+        sla: str
+        sla_overdue: int
+        status: str
+        last_time: Optional[datetime.datetime]
+        last_tags: Optional[str]
+        last_duration: Optional[float]
+        next_time: Optional[datetime.datetime]
+        next_tags: Optional[str]
+        manual_tags: str
+        quarantine_reports: int
+        unsynced_revs: int
+        local_revs: int
+
+    def status(
+        self, filter_re: Optional[Pattern[str]] = None
+    ) -> List[StatusDict]:
         """Collects status information for all jobs."""
-        result = []
+        result: List["BackyDaemon.StatusDict"] = []
         for job in list(self.jobs.values()):
             if filter_re and not filter_re.search(job.name):
                 continue
             job.backup.scan()
             manual_tags = set()
-            if job.backup.clean_history:
-                last = job.backup.clean_history[-1]
-                for rev in job.backup.clean_history:
-                    manual_tags |= filter_manual_tags(rev.tags)
-            else:
-                last = None
+            unsynced_revs = 0
+            history = job.backup.clean_history
+            for rev in history:
+                manual_tags |= filter_manual_tags(rev.tags)
+                if rev.pending_changes:
+                    unsynced_revs += 1
             result.append(
                 dict(
                     job=job.name,
                     sla="OK" if job.sla else "TOO OLD",
                     sla_overdue=job.sla_overdue,
                     status=job.status,
-                    last_time=last.timestamp if last else None,
+                    last_time=history[-1].timestamp if history else None,
                     last_tags=(
-                        ",".join(job.schedule.sorted_tags(last.tags))
-                        if last
+                        ",".join(job.schedule.sorted_tags(history[-1].tags))
+                        if history
                         else None
                     ),
                     last_duration=(
-                        last.stats.get("duration", 0) if last else None
+                        history[-1].stats.get("duration", 0)
+                        if history
+                        else None
                     ),
                     next_time=job.next_time,
                     next_tags=(
@@ -289,25 +332,51 @@ class BackyDaemon(object):
                     ),
                     manual_tags=", ".join(manual_tags),
                     quarantine_reports=len(job.backup.quarantine.report_ids),
+                    unsynced_revs=unsynced_revs,
+                    local_revs=len(
+                        job.backup.get_history(clean=True, local=True)
+                    ),
                 )
             )
         return result
 
     async def purge_old_files(self):
-        # `stat` and other file system access things are _not_
-        # properly async, we might want to spawn those off into a separate
-        # thread.
         while True:
-            self.log.info("purge-scanning")
-            for candidate in os.scandir(self.base_dir):
-                if not candidate.is_dir(follow_symlinks=False):
-                    continue
-                self.log.debug("purge-candidate", candidate=candidate.path)
-                reference_time = time.time() - 3 * 31 * 24 * 60 * 60
-                if not has_recent_changes(candidate, reference_time):
-                    self.log.info("purging", candidate=candidate.path)
-                    shutil.rmtree(candidate)
-            self.log.info("purge-finished")
+            try:
+                self.log.info("purge-scanning")
+                for candidate in await aos.scandir(self.base_dir):
+                    if not await is_dir_no_symlink(candidate.path):
+                        continue
+                    self.log.debug("purge-candidate", candidate=candidate.path)
+                    reference_time = time.time() - 3 * 31 * 24 * 60 * 60
+                    if not await has_recent_changes(
+                        candidate.path, reference_time
+                    ):
+                        self.log.info("purging", candidate=candidate.path)
+                        await aioshutil.rmtree(candidate)
+                self.log.info("purge-finished")
+            except Exception:
+                self.log.exception("purge")
+            await asyncio.sleep(24 * 60 * 60)
+
+    async def purge_pending_backups(self):
+        while True:
+            try:
+                self.log.info("purge-pending-scanning")
+                for candidate in await aos.scandir(self.base_dir):
+                    if (
+                        candidate.name in self.jobs  # will get purged anyway
+                        or not await is_dir_no_symlink(candidate.path)
+                        or not await aos.path.exists(
+                            p.join(candidate.path, ".purge_pending")
+                        )
+                    ):
+                        continue
+                    self.log.info("purging-pending", job=candidate.name)
+                    await Job(self, candidate.name, self.log).run_purge()
+                self.log.info("purge-pending-finished")
+            except Exception:
+                self.log.exception("purge-pending")
             await asyncio.sleep(24 * 60 * 60)
 
 

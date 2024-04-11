@@ -149,9 +149,9 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
         # revision - which is wrong: broken new revisions would always cause
         # full backups instead of new deltas based on the most recent valid
         # one.
-        if not self.always_full and self.revision.backup.history:
-            keep_snapshot_revision = self.revision.backup.history[-1]
-            keep_snapshot_revision = keep_snapshot_revision.uuid
+        # XXX this will break if multiple servers are active
+        if not self.always_full and self.revision.backup.local_history:
+            keep_snapshot_revision = self.revision.backup.local_history[-1].uuid
         else:
             keep_snapshot_revision = None
         for snapshot in self.rbd.snap_ls(self._image_name):

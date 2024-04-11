@@ -57,5 +57,9 @@ def select_source(type_: str) -> Type[BackySourceFactory]:
             from backy.sources.file import File
 
             return File
+        case "s3":
+            from backy.sources.s3.source import S3
+
+            return S3
         case _:
-            raise ValueError(f"invalid backend: {type_}")
+            raise ValueError(f"invalid source: {type_}")

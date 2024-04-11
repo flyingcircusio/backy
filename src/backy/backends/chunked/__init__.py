@@ -22,7 +22,7 @@ class ChunkedFileBackend(BackyBackend):
         self.revision = revision
         path = self.backup.path / "chunks"
         if path not in self.STORES:
-            self.STORES[path] = Store(self.backup.path / "chunks", log)
+            self.STORES[path] = Store(path, log)
         self.store = self.STORES[path]
         self.log = log.bind(subsystem="chunked")
 

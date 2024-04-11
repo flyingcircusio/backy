@@ -24,6 +24,7 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
     always_full: bool
     log: BoundLogger
     rbd: RBDClient
+    revision: Revision
 
     def __init__(self, config: dict, log: BoundLogger):
         self.pool = config["pool"]
@@ -45,7 +46,7 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
             self.log.exception("not-ready")
         return False
 
-    def __call__(self, revision):
+    def __call__(self, revision: Revision):
         self.revision = revision
         return self
 

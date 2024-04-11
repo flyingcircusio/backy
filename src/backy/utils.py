@@ -11,9 +11,19 @@ import sys
 import tempfile
 import time
 import typing
-from asyncio import Event
-from os import DirEntry
-from typing import IO, Callable, Iterable, List, Literal, Optional, TypeVar
+from asyncio import AbstractEventLoop, Event, Future, Task
+from concurrent.futures import ThreadPoolExecutor
+from typing import (
+    IO,
+    Callable,
+    Coroutine,
+    Iterable,
+    List,
+    Literal,
+    Optional,
+    Set,
+    TypeVar,
+)
 from zoneinfo import ZoneInfo
 
 import aiofiles.os as aos
@@ -534,3 +544,55 @@ def list_split(l: List[_T], v: _T) -> List[List[_T]]:
         else:
             res[-1].append(i)
     return res
+
+
+# can also be used as a threadpool with async close support
+class FuturePool:
+    size: int
+    futures: Set[Future]
+    loop: AbstractEventLoop
+    thread_pool: Optional[ThreadPoolExecutor]
+
+    def __init__(
+        self, loop: AbstractEventLoop, size: int, thread_support=False
+    ):
+        self.size = size
+        self.futures: Set[Future] = set()
+        self.thread_pool = ThreadPoolExecutor(size) if thread_support else None
+        self.loop = loop
+
+    async def _wait(self, return_when: str = asyncio.ALL_COMPLETED):
+        _done, self.futures = await asyncio.wait(
+            self.futures, return_when=return_when
+        )
+        for t in _done:
+            if t.exception():
+                raise t.exception()
+
+    async def submit(
+        self, coro: Coroutine[_T] | Future[_T] | Callable[[], _T]
+    ) -> Future[_T]:
+        if len(self.futures) >= self.size:
+            await self._wait(asyncio.FIRST_COMPLETED)
+
+        if asyncio.isfuture(coro):
+            f = coro
+        elif asyncio.iscoroutine(coro):
+            f = self.loop.create_task(coro)
+        elif self.thread_pool:
+            f = self.loop.run_in_executor(self.thread_pool, coro)
+        else:
+            raise ValueError()
+
+        self.futures.add(f)
+        return f
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.futures:
+            await self._wait()
+        # all threads are part `self.futures` so this should not block
+        if self.thread_pool:
+            self.thread_pool.shutdown()

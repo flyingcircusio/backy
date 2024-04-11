@@ -11,10 +11,6 @@ from backy.backends.chunked.chunk import Hash
 # lot more coordination about the users of the pool.
 
 
-def rreplace(str, old, new):
-    return new.join(str.rsplit(old, 1))
-
-
 class Store(object):
     # Signal that we should always override chunks that we want to write.
     # This can be used in the face of suspected inconsistencies while still

@@ -144,7 +144,7 @@ class Backup(object):
         # Initialize our source
         try:
             source_factory = select_source(self.config["source"]["type"])
-        except IndexError:
+        except ValueError:
             self.log.error(
                 "source-type-unavailable",
                 _fmt_msg="No source type named `{type}` exists.",
@@ -155,6 +155,7 @@ class Backup(object):
 
         # Initialize our backend
         self.default_backend_type = self.config["source"].get("backend", None)
+        # TODO: force s3 backend here?
         if self.default_backend_type is None:
             if not self.local_history:
                 # Start fresh backups with our new default.
@@ -414,6 +415,14 @@ class Backup(object):
         restore_backend: RestoreBackend = RestoreBackend.AUTO,
     ) -> None:
         r = self.find(revision)
+        if r.backend_type == "s3":
+            from backy.sources.s3.source import S3
+
+            assert isinstance(self.source, S3)
+            assert target.startswith("s3://")
+            target = target.removeprefix("s3://")
+            self.source.restore(r.backend, target)
+            return
         s = r.backend.open("rb")
         if restore_backend == RestoreBackend.AUTO:
             if self.backy_extract_supported(s):
@@ -429,6 +438,9 @@ class Backup(object):
                     self.restore_stdout(source)
         elif restore_backend == RestoreBackend.RUST:
             self.restore_backy_extract(r, target)
+
+    def parse_restore_target(self, target: str) -> Any:
+        pass
 
     def backy_extract_supported(self, file: IO) -> bool:
         log = self.log.bind(subsystem="backy-extract")

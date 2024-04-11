@@ -37,5 +37,9 @@ def select_backend(type_: str) -> Type[BackyBackend]:
             from backy.backends.cowfile import COWFileBackend
 
             return COWFileBackend
+        case "s3":
+            from backy.backends.s3 import S3Backend
+
+            return S3Backend
         case _:
             raise ValueError(f"Invalid backend '{type_}'")

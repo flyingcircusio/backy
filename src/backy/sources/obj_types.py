@@ -114,7 +114,9 @@ class ObjectRestoreTarget(ABC):
         ...
 
     @abstractmethod
-    async def submit_upload_obj(self, obj: S3Obj) -> Future[None]:
+    async def submit_upload_obj(
+        self, obj: S3Obj, meta_only=False
+    ) -> Future[None]:
         ...
 
     @abstractmethod

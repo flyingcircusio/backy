@@ -108,10 +108,8 @@ class Store(object):
 
     def ls(self) -> Iterable[int]:
         # XXX this is fucking expensive
-        for file in self.path.glob(
-            ("*" * STORE_DEPTH).join("/") + ".object.lzo"
-        ):
-            yield int(file.name.removesuffix(".object.lzo"))
+        for file in self.path.rglob("*.object"):
+            yield int(file.name.removesuffix(".object"))
 
     def purge(self, existing_revs: Set[str]) -> None:
         with self.db:
@@ -133,9 +131,11 @@ class Store(object):
                 self.object_path(row["id"]).unlink(missing_ok=True)
             self.log.info("purge-obj", num=num)
 
-        # for id in self.ls():
-        #     if not self.db.execute("SELECT 1 FROM object WHERE id = ?", (id, )).fetchone():
-        #         self.object_path(id).unlink(missing_ok=True)
+        for id in self.ls():
+            if not self.db.execute(
+                "SELECT 1 FROM object WHERE id = ?", (id,)
+            ).fetchone():
+                self.object_path(id).unlink(missing_ok=True)
 
     def verify(self, revision: Revision):
         rev_id = self.get_rev_id(revision)

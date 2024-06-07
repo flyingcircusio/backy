@@ -39,7 +39,7 @@ class S3Backend(BackyBackend):
         mode: str = "rb",
         parent: Optional[Revision] = None,
     ):
-        return BucketSnapshot(self.store, mode, self.revision, parent)
+        return BucketSnapshot(self.store, mode, self.revision, parent, self.log)
 
     def purge(self) -> None:
         self.store.purge(

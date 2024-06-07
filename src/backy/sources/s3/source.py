@@ -1,9 +1,11 @@
 import asyncio
 import datetime
+import time
 from asyncio import Future, Task
 from functools import partial
 from pathlib import Path
 from typing import AsyncIterable, Optional, Tuple
+from urllib import parse
 
 import boto3
 import boto3.s3
@@ -51,7 +53,9 @@ class S3(BackySource, BackySourceFactory, BackySourceContext):
 
     def backup(self, target: BackyBackend) -> None:
         assert isinstance(target, S3Backend)
+        start = time.time()
         asyncio.run(self._backup(target))
+        print("time", time.time() - start)
 
     async def _backup(self, target: S3Backend):
         bucket = target.open_multi("wb", self.revision.get_parent())
@@ -59,10 +63,14 @@ class S3(BackySource, BackySourceFactory, BackySourceContext):
             count = 0
             async for obj in self.client.list_obj():
                 count += 1
-                print(obj.key, count)
+                if count > 100_000:
+                    break
+                if count % 1000 == 0:
+                    print(obj.key, count)
                 if bucket.create_shallow(obj):
-                    # TODO differentiate between modified and etag missmatch
+                    # TODO differentiate between modified and etag missmatch?
                     continue
+                print("not shallow")
                 new = bucket.create_incoming_obj()
                 fut = await client.submit_download_obj(obj, new)
                 fut.add_done_callback(
@@ -70,6 +78,9 @@ class S3(BackySource, BackySourceFactory, BackySourceContext):
                 )
         # complete all callbacks
         await asyncio.sleep(0)
+        start = time.time()
+        bucket.store.db.commit()
+        print("commit time", time.time() - start)
 
     def verify(self, target: BackyBackend) -> bool:
         return True
@@ -101,7 +112,11 @@ class S3LocalRestoreTarget(ObjectRestoreTarget):
         p.unlink()
         return completed_future(None)
 
-    async def submit_upload_obj(self, obj: S3Obj) -> Future[None]:
+    async def submit_upload_obj(
+        self, obj: S3Obj, meta_only=False
+    ) -> Future[None]:
+        if meta_only:
+            return completed_future(None)
         p = self.to_path(obj.key)
         p.parent.mkdir(parents=True, exist_ok=True)
         with obj.open() as source, p.open("wb") as target:
@@ -162,37 +177,61 @@ class AsyncS3Client(ObjectRestoreTarget):
             partial(self.client.delete_object, Bucket=self.bucket, Key=key),
         )
 
-    async def submit_upload_obj(self, obj: S3Obj) -> Future[None]:
+    async def submit_upload_obj(
+        self, obj: S3Obj, meta_only=False
+    ) -> Future[None]:
         assert self.future_pool
-        return await self.future_pool.submit(
-            partial(
-                self.client.upload_file,
-                Filename=str(obj.path),
-                Bucket=self.bucket,
-                Key=obj.key,
-                ExtraArgs={"Metadata": obj.get_metadata()},
-            ),
-        )
+        meta = obj.get_metadata()
+        if meta_only:
+            tag_set = [{k: v} for k, v in meta.get("TagSet", {}).items()]
+            return await self.future_pool.submit(
+                partial(
+                    self.client.put_object_tagging,
+                    Bucket=self.bucket,
+                    Key=obj.key,
+                    Tagging={"TagSet": tag_set},
+                ),
+            )
+        else:
+            return await self.future_pool.submit(
+                partial(
+                    self.client.upload_file,
+                    Filename=str(obj.path),
+                    Bucket=self.bucket,
+                    Key=obj.key,
+                    ExtraArgs={
+                        "Metadata": meta["Metadata"],
+                        "Tagging": parse.urlencode(meta.get("TagSet", {})),
+                    },
+                ),
+            )
 
     async def submit_download_obj(
-        self, spec: RemoteS3Obj, target: TemporaryS3Obj
+        self, spec: RemoteS3Obj, target: TemporaryS3Obj, meta_only=False
     ) -> Future[Tuple[RemoteS3Obj, TemporaryS3Obj]]:
         assert self.future_pool
         return await self.future_pool.submit(
-            partial(self._download_obj, spec, target)
+            partial(self._download_obj, spec, target, meta_only)
         )
 
     def _download_obj(
-        self, spec: RemoteS3Obj, target: TemporaryS3Obj
+        self, spec: RemoteS3Obj, target: TemporaryS3Obj, meta_only=False
     ) -> Tuple[RemoteS3Obj, TemporaryS3Obj]:
+        meta = {}
         obj = self.client.get_object(Bucket=self.bucket, Key=spec.key)
-        with target.open() as f:
-            for chunk in obj["Body"].iter_chunks():
-                f.write(chunk)
-
-        target.set_metadata(obj["Metadata"])
-        # XXX LastModified from listobjects has milliseconds accuracy, getobject only has seconds accuracy
-        spec.etag = obj["ETag"]
+        if obj.get("TagCount", 0):
+            tags = self.client.get_object_tagging(
+                Bucket=self.bucket, Key=spec.key
+            )
+            meta["TagSet"] = tags["TagSet"]
+        meta["Metadata"] = obj["Metadata"]
+        target.set_metadata(meta)
+        if not meta_only:
+            with target.open() as f:
+                for chunk in obj["Body"].iter_chunks():
+                    f.write(chunk)
+            # XXX LastModified from listobjects has milliseconds accuracy, getobject only has seconds accuracy
+            spec.etag = obj["ETag"]
         return spec, target
 
     async def list_obj(self, glob: str = "") -> AsyncIterable[RemoteS3Obj]:
@@ -213,7 +252,7 @@ class AsyncS3Client(ObjectRestoreTarget):
                 )
             else:
                 inflight = None
-            rprint(res)
+            # rprint(res)
             for o in res["Contents"]:
                 yield RemoteS3Obj.from_api(o)
 

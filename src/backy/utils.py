@@ -232,7 +232,7 @@ else:  # pragma: no cover
     os.POSIX_FADV_DONTNEED = None  # type: ignore
 
     def posix_fadvise(*args, **kw):
-        log.debug("posix_fadivse-unavailable")
+        # log.debug("posix_fadivse-unavailable")
         return
 
 
@@ -580,7 +580,7 @@ class FuturePool:
             f = coro
         elif asyncio.iscoroutine(coro):
             f = self.loop.create_task(coro)
-        elif self.thread_pool:
+        elif self.thread_pool and callable(coro):
             f = self.loop.run_in_executor(self.thread_pool, coro)
         else:
             raise ValueError()

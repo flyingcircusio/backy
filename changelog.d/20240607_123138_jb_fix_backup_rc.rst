@@ -1,0 +1,3 @@
+.. A new scriv changelog fragment.
+
+- Fixed the return code for `backy backup` which could have caused an infinite loop in the scheduler

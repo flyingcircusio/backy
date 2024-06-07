@@ -322,7 +322,7 @@ class Backup(object):
 
     @locked(target=".backup", mode="exclusive")
     @locked(target=".purge", mode="shared")
-    def backup(self, tags: set[str], force: bool = False) -> None:
+    def backup(self, tags: set[str], force: bool = False) -> bool:
         if not force:
             self.validate_tags(tags)
 
@@ -381,6 +381,7 @@ class Backup(object):
                 self.log.warning("inconsistent")
                 revision.backend.verify()
                 break
+        return verified
 
     @locked(target=".backup", mode="exclusive")
     def distrust(self, revision: str) -> None:

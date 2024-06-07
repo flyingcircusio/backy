@@ -2,6 +2,7 @@ import datetime
 import os
 import pprint
 import sys
+from functools import partialmethod
 
 import pytest
 
@@ -110,9 +111,10 @@ def test_verbose_logging(capsys, argv):
     assert exit.value.code == 0
 
 
-def print_args(*args, **kw):
+def print_args(*args, return_value=None, **kw):
     print(args)
     pprint.pprint(kw)
+    return return_value
 
 
 async def async_print_args(*args, **kw):
@@ -148,7 +150,8 @@ def test_call_status(capsys, backup, argv, monkeypatch):
     )
 
 
-def test_call_backup(tmp_path, capsys, argv, monkeypatch):
+@pytest.mark.parametrize("success", [False, True])
+def test_call_backup(success, tmp_path, capsys, argv, monkeypatch):
     os.makedirs(tmp_path / "backy")
     os.chdir(tmp_path / "backy")
 
@@ -170,7 +173,11 @@ source:
             )
         )
 
-    monkeypatch.setattr(backy.backup.Backup, "backup", print_args)
+    monkeypatch.setattr(
+        backy.backup.Backup,
+        "backup",
+        partialmethod(print_args, return_value=success),
+    )
     argv.extend(["-v", "backup", "manual:test"])
     utils.log_data = ""
     with pytest.raises(SystemExit) as exit:
@@ -187,16 +194,16 @@ source:
     )
     assert (
         Ellipsis(
-            """\
+            f"""\
 ... D command/invoked                     args='... -v backup manual:test'
-... D command/parsed                      func='backup' func_args={'force': False, 'tags': 'manual:test'}
+... D command/parsed                      func='backup' func_args={{'force': False, 'tags': 'manual:test'}}
 ... D quarantine/scan                     entries=0
-... D command/successful                  \n\
+... D command/return-code                 code={int(not success)}
 """
         )
         == utils.log_data
     )
-    assert exit.value.code == 0
+    assert exit.value.code == int(not success)
 
 
 def test_call_find(capsys, backup, argv, monkeypatch):

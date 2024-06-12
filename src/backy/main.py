@@ -97,16 +97,18 @@ class Command(object):
                 f"[yellow]{pending_changes} pending change(s)[/] (Push changes with `backy push`)"
             )
 
-    def backup(self, tags: str, force: bool) -> None:
+    def backup(self, tags: str, force: bool) -> int:
         b = Backup(self.path, self.log)
         b._clean()
         try:
             tags_ = set(t.strip() for t in tags.split(","))
-            b.backup(tags_, force)
+            success = b.backup(tags_, force)
+            return int(not success)
         except IOError as e:
             if e.errno not in [errno.EDEADLK, errno.EAGAIN]:
                 raise
-            self.log.info("backup-already-running")
+            self.log.warning("backup-already-running")
+            return 1
         finally:
             b._clean()
 

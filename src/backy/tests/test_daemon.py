@@ -250,6 +250,12 @@ def test_sla_over_time(daemon, clock, tmp_path, log):
     job.backup.scan()
     assert job.sla is False
 
+    # a running backup does not influence this.
+    job.update_status("running (slow)")
+    r = Revision.create(job.backup, {"daily"}, log)
+    r.write_info()
+    assert job.sla is False
+
 
 def test_incomplete_revs_dont_count_for_sla(daemon, clock, tmp_path, log):
     job = daemon.jobs["test01"]

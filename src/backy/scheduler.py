@@ -91,8 +91,6 @@ class Job(object):
         """Amount of time the SLA is currently overdue."""
         if not self.backup.clean_history:
             return 0
-        if self.status.startswith("running"):
-            return 0
         age = backy.utils.now() - self.backup.clean_history[-1].timestamp
         max_age = min(x["interval"] for x in self.schedule.schedule.values())
         if age > max_age * 1.5:

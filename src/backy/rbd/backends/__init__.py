@@ -33,9 +33,5 @@ def select_backend(type_: str) -> Type[BackyBackend]:
             from backy.backends.chunked import ChunkedFileBackend
 
             return ChunkedFileBackend
-        case "cowfile":
-            from backy.backends.cowfile import COWFileBackend
-
-            return COWFileBackend
         case _:
             raise ValueError(f"Invalid backend '{type_}'")

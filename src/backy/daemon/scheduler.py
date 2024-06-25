@@ -549,3 +549,137 @@ class Job(object):
             self._task.cancel()
             self._task = None
             self.update_status("")
+
+    @locked(target=".backup", mode="exclusive")
+    async def push_metadata(self, peers, taskid: str) -> int:
+        grouped = defaultdict(list)
+        for r in self.clean_history:
+            if r.pending_changes:
+                grouped[r.server].append(r)
+        self.log.info(
+            "push-start", changes=sum(len(l) for l in grouped.values())
+        )
+        async with APIClientManager(peers, taskid, self.log) as apis:
+            errors = await asyncio.gather(
+                *[
+                    self._push_metadata(apis[server], grouped[server])
+                    for server in apis
+                ]
+            )
+        self.log.info("push-end", errors=sum(errors))
+        return sum(errors)
+
+    async def _push_metadata(
+        self, api: APIClient, revs: List[Revision]
+    ) -> bool:
+        purge_required = False
+        error = False
+        for r in revs:
+            log = self.log.bind(
+                server=r.server,
+                rev_uuid=r.uuid,
+            )
+            log.debug(
+                "push-updating-tags",
+                old_tags=r.orig_tags,
+                new_tags=r.tags,
+            )
+            try:
+                await api.put_tags(r, autoremove=True)
+                if r.tags:
+                    r.orig_tags = r.tags
+                    r.write_info()
+                else:
+                    r.remove(force=True)
+                    purge_required = True
+            except ClientResponseError:
+                log.warning("push-client-error", exc_style="short")
+                error = True
+            except ClientConnectionError:
+                log.warning("push-connection-error", exc_style="short")
+                error = True
+            except ClientError:
+                log.exception("push-error")
+                error = True
+
+        if purge_required:
+            log = self.log.bind(server=api.server_name)
+            log.debug("push-purging-remote")
+            try:
+                await api.run_purge(self.name)
+            except ClientResponseError:
+                log.warning("push-purge-client-error", exc_style="short")
+                error = True
+            except ClientConnectionError:
+                log.warning("push-purge-connection-error", exc_style="short")
+                error = True
+            except ClientError:
+                log.error("push-purge-error")
+                error = True
+        return error
+
+    @locked(target=".backup", mode="exclusive")
+    async def pull_metadata(self, peers: dict, taskid: str) -> int:
+        async def remove_dead_peer():
+            for r in list(self.history):
+                if r.server and r.server not in peers:
+                    self.log.info(
+                        "pull-removing-dead-peer",
+                        rev_uuid=r.uuid,
+                        server=r.server,
+                    )
+                    r.remove(force=True)
+            return False
+
+        self.log.info("pull-start")
+        async with APIClientManager(peers, taskid, self.log) as apis:
+            errors = await asyncio.gather(
+                remove_dead_peer(),
+                *[self._pull_metadata(apis[server]) for server in apis],
+            )
+        self.log.info("pull-end", errors=sum(errors))
+        return sum(errors)
+
+    async def _pull_metadata(self, api: APIClient) -> bool:
+        error = False
+        log = self.log.bind(server=api.server_name)
+        try:
+            await api.touch_backup(self.name)
+            remote_revs = await api.get_revs(self)
+            log.debug("pull-found-revs", revs=len(remote_revs))
+        except ClientResponseError as e:
+            if e.status in [
+                HTTPNotFound.status_code,
+                HTTPForbidden.status_code,
+            ]:
+                log.debug("pull-not-found")
+            else:
+                log.warning("pull-client-error", exc_style="short")
+                error = True
+            remote_revs = []
+        except ClientConnectionError:
+            log.warning("pull-connection-error", exc_style="short")
+            return True
+        except ClientError:
+            log.exception("pull-error")
+            error = True
+            remote_revs = []
+
+        local_uuids = {
+            r.uuid for r in self.history if r.server == api.server_name
+        }
+        remote_uuids = {r.uuid for r in remote_revs}
+        for uuid in local_uuids - remote_uuids:
+            log.warning("pull-removing-unknown-rev", rev_uuid=uuid)
+            self.find_by_uuid(uuid).remove(force=True)
+
+        for r in remote_revs:
+            if r.uuid in local_uuids:
+                if r.to_dict() == self.find_by_uuid(r.uuid).to_dict():
+                    continue
+                log.debug("pull-updating-rev", rev_uid=r.uuid)
+            else:
+                log.debug("pull-new-rev", rev_uid=r.uuid)
+            r.write_info()
+
+        return error

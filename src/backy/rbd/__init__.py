@@ -1,26 +1,14 @@
-# -*- encoding: utf-8 -*-
-
 import argparse
-import asyncio
 import errno
 import sys
 from pathlib import Path
-from typing import Literal, Optional
 
-import humanize
 import structlog
-import tzlocal
-import yaml
-from aiohttp import ClientConnectionError
-from rich import print as rprint
-from rich.table import Column, Table
-from structlog.stdlib import BoundLogger
 
-import backy.daemon
-from backy.utils import format_datetime_local, generate_taskid
+from backy.utils import generate_taskid
 
-from . import logging
-from .backup import Backup, RestoreBackend
+from .. import logging
+from .backup import RbdBackup, RestoreBackend
 
 
 def main():
@@ -35,8 +23,9 @@ def main():
         "-t",
         "--taskid",
         default=generate_taskid(),
-        help="id to include in log messages (default: 4 random base32 chars)",
+        help="ID to include in log messages (default: 4 random base32 chars)",
     )
+    parser.add_argument("-j", "--job", help="Job to work on.")
 
     subparsers = parser.add_subparsers()
 
@@ -45,9 +34,8 @@ def main():
         "backup",
         help="Perform a backup",
     )
-    p.add_argument("job", help="Which job to perform a backup for.")
-    p.add_argument("revision", help="Revision to work on.")
     p.set_defaults(func="backup")
+    parser.add_argument("-r", "--revision", help="Revision to work on.")
 
     # RESTORE
     p = subparsers.add_parser(
@@ -62,13 +50,7 @@ def main():
         dest="restore_backend",
         help="(default: %(default)s)",
     )
-    p.add_argument(
-        "-r",
-        "--revision",
-        metavar="SPEC",
-        default="latest",
-        help="use revision SPEC as restore source (default: %(default)s)",
-    )
+    parser.add_argument("-r", "--revision", help="Revision to work on.")
     p.add_argument(
         "target",
         metavar="TARGET",
@@ -76,24 +58,19 @@ def main():
     )
     p.set_defaults(func="restore")
 
-    # XXX rename to "garbage collect"
+    # GC
     p = subparsers.add_parser(
-        "purge",
-        help="Purge the backup store (i.e. chunked) from unused data",
+        "gc",
+        help="Purge the backup store from unused data",
     )
-    p.set_defaults(func="purge")
+    p.set_defaults(func="gc")
 
+    # VERIFY
     p = subparsers.add_parser(
         "verify",
-        help="Verify specified revisions",
+        help="Verify specified revision",
     )
-    p.add_argument(
-        "-r",
-        "--revision",
-        metavar="SPEC",
-        default="trust:distrusted&local",
-        help="use revision SPEC to verify (default: %(default)s)",
-    )
+    parser.add_argument("-r", "--revision", help="Revision to work on.")
     p.set_defaults(func="verify")
 
     args = parser.parse_args()
@@ -102,43 +79,39 @@ def main():
         parser.print_usage()
         sys.exit(0)
 
-    logfile = args.backupdir / "backy.log"
+    backupdir = Path()  # TODO
 
     # Logging
     logging.init_logging(
         args.verbose,
-        args.logfile or default_logfile,
+        backupdir / "backy.log",
         defaults={"taskid": args.taskid},
     )
     log = structlog.stdlib.get_logger(subsystem="command")
     log.debug("invoked", args=" ".join(sys.argv))
 
-    # Pass over to function
-    func_args = dict(args._get_kwargs())
-    del func_args["func"]
-    del func_args["verbose"]
-    del func_args["backupdir"]
-    del func_args["logfile"]
-    del func_args["taskid"]
-
     try:
-        log.debug("parsed", func=args.func, func_args=func_args)
-        b = Backup(self.path, self.log)
+        b = RbdBackup(backupdir, log)
         # XXX scheduler?
         b._clean()
-        try:
-            success = b.backup()
-            ret = int(not success)
-        except IOError as e:
-            if e.errno not in [errno.EDEADLK, errno.EAGAIN]:
-                raise
-            self.log.warning("backup-currently-locked")
-            ret = 1
-        if isinstance(ret, int):
-            log.debug("return-code", code=ret)
-            sys.exit(ret)
-        log.debug("successful")
-        sys.exit(0)
-    except Exception:
-        log.exception("failed")
+        ret = 0
+        match args.fun:
+            case "backup":
+                success = b.backup(args.revision)
+                ret = int(not success)
+            case "restore":
+                b.restore(args.revisions, args.target, args.backend)
+            case "gc":
+                b.gc()
+            case "verify":
+                b.verify(args.revision)
+            case _:
+                raise ValueError("invalid function: " + args.fun)
+        log.debug("return-code", code=ret)
+        sys.exit(ret)
+    except Exception as e:
+        if isinstance(e, IOError) and e.errno in [errno.EDEADLK, errno.EAGAIN]:
+            log.warning("backup-currently-locked")
+        else:
+            log.exception("failed")
         sys.exit(1)

@@ -7,6 +7,7 @@ import shortuuid
 import yaml
 from structlog.stdlib import BoundLogger
 
+from ..revision import Revision
 from . import utils
 from .backends import select_backend
 from .utils import SafeFile
@@ -14,15 +15,6 @@ from .utils import SafeFile
 if TYPE_CHECKING:
     from .backends import BackyBackend
     from .backup import Backup
-
-
-TAG_MANUAL_PREFIX = "manual:"
-
-
-class Trust(Enum):
-    TRUSTED = "trusted"
-    DISTRUSTED = "distrusted"
-    VERIFIED = "verified"
 
 
 def filter_schedule_tags(tags):
@@ -33,7 +25,7 @@ def filter_manual_tags(tags):
     return {t for t in tags if t.startswith(TAG_MANUAL_PREFIX)}
 
 
-class Revision(object):
+class RbdRevision(Revision):
     backup: "Backup"
     uuid: str
     timestamp: datetime.datetime
@@ -41,6 +33,7 @@ class Revision(object):
     tags: set[str]
     orig_tags: set[str]
     trust: Trust = Trust.TRUSTED
+    backend_type: Literal["cowfile", "chunked"] = "chunked"
     server: str = ""
     log: BoundLogger
 
@@ -70,7 +63,12 @@ class Revision(object):
     ) -> "Revision":
         r = Revision(backup, log, uuid)
         r.tags = tags
+        r.backend_type = backup.default_backend_type
         return r
+
+    @property
+    def backend(self) -> "BackyBackend":
+        return select_backend(self.backend_type)(self, self.log)
 
     @classmethod
     def load(cls, file: Path, backup: "Backup", log: BoundLogger) -> "Revision":
@@ -120,6 +118,7 @@ class Revision(object):
     def to_dict(self) -> dict:
         return {
             "uuid": self.uuid,
+            "backend_type": self.backend_type,
             "timestamp": self.timestamp,
             "parent": getattr(
                 self.get_parent(), "uuid", ""
@@ -176,6 +175,8 @@ class Revision(object):
         """defaults to last rev if not in history"""
         prev = None
         for r in self.backup.history:
+            if r.backend_type != self.backend_type:
+                continue
             if not ignore_trust and r.trust == Trust.DISTRUSTED:
                 continue
             if r.server != self.server:

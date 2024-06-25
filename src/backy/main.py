@@ -94,7 +94,8 @@ class Command(object):
         pending_changes = sum(1 for r in revs if r.pending_changes)
         if pending_changes:
             rprint(
-                f"[yellow]{pending_changes} pending change(s)[/] (Push changes with `backy push`)"
+                f"[yellow]{pending_changes} pending change(s)[/] "
+                "(Push changes with `backy push`)"
             )
 
     def backup(self, tags: str, force: bool) -> int:
@@ -181,7 +182,9 @@ class Command(object):
                     if peer not in d.peers:
                         self.log.error(
                             "client-peer-unknown",
-                            _fmt_msg="The peer {peer} is not known. Select a known peer or specify --url and --token.\n"
+                            _fmt_msg="The peer {peer} is not known. "
+                            "Select a known peer or specify --url and "
+                            "--token.\n"
                             "The following peers are known: {known}",
                             peer=peer,
                             known=", ".join(d.peers.keys()),
@@ -194,7 +197,8 @@ class Command(object):
                     if "token" not in d.api_cli_default:
                         self.log.error(
                             "client-missing-defaults",
-                            _fmt_msg="The config file is missing default parameters. Please specify --url and --token",
+                            _fmt_msg="The config file is missing default "
+                            "parameters. Please specify --url and --token",
                         )
                         return 1
                     api = APIClient.from_conf(
@@ -271,8 +275,8 @@ def setup_argparser():
         type=Path,
         help=(
             "file name to write log output in. "
-            "(default: /var/log/backy.log for `scheduler`, ignored for `client`, "
-            "$backupdir/backy.log otherwise)"
+            "(default: /var/log/backy.log for `scheduler`, "
+            "ignored for `client`, $backupdir/backy.log otherwise)"
         ),
     )
     parser.add_argument(
@@ -435,7 +439,8 @@ def setup_argparser():
     # upgrade
     p = subparsers.add_parser(
         "upgrade",
-        help="Upgrade this backup (incl. its data) to the newest supported version",
+        help="Upgrade this backup (incl. its data) to the newest "
+        "supported version",
     )
     p.set_defaults(func="upgrade")
 
@@ -522,7 +527,8 @@ def setup_argparser():
         "--revision",
         metavar="SPEC",
         default="all",
-        help="modify tags for revision SPEC, modifies all if not given (default: %(default)s)",
+        help="modify tags for revision SPEC, modifies all if not given "
+        "(default: %(default)s)",
     )
     p.add_argument(
         "tags",

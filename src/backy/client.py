@@ -230,17 +230,7 @@ class CLIClient:
         if filter_re:
             backups = list(filter(re.compile(filter_re).search, backups))
         for b in backups:
-            t.add_row(
-                b,
-                "-",
-                "-",
-                "Dead",
-                "-",
-                "",
-                "-",
-                "-",
-                "",
-            )
+            t.add_row(b, "-", "-", "Dead", "-", "", "-", "-", "")
 
         rprint(t)
         print("{} jobs shown".format(len(jobs) + len(backups)))

@@ -77,3 +77,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 backy = "backy.main:main"
+
+[[tool.mypy.overrides]]
+module = "backy.*"
+check_untyped_defs = true

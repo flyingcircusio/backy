@@ -1,6 +1,6 @@
 import pytest
 
-from backy.timeout import TimeOut, TimeOutError
+from backy.utils import TimeOut, TimeOutError
 
 
 def test_timeout(capsys):

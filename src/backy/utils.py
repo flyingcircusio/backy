@@ -14,12 +14,12 @@ import typing
 from asyncio import Event
 from os import DirEntry
 from typing import IO, Callable, Iterable, List, Literal, Optional, TypeVar
-from zoneinfo import ZoneInfo
 
 import aiofiles.os as aos
 import humanize
 import structlog
 import tzlocal
+from zoneinfo import ZoneInfo
 
 from .ext_deps import CP
 from .fallocate import punch_hole
@@ -473,7 +473,9 @@ async def has_recent_changes(path: str, reference_time: float) -> bool:
     return False
 
 
-async def delay_or_event(delay: float, event: Event) -> Optional[Literal[True]]:
+async def delay_or_event(
+    delay: float, event: Event
+) -> Optional[Literal[True]]:
     return await next(
         asyncio.as_completed([asyncio.sleep(delay), event.wait()])
     )
@@ -508,29 +510,77 @@ def duplicates(a: List[_T], b: List[_T]) -> List[_T]:
     return unique(i for i in a if i in b)
 
 
-def list_rindex(l: List[_T], v: _T) -> int:
-    return len(l) - l[-1::-1].index(v) - 1
+def list_rindex(L: List[_T], v: _T) -> int:
+    return len(L) - L[-1::-1].index(v) - 1
 
 
 @typing.overload
-def list_get(l: List[_T], i: int) -> _T | None:
+def list_get(L: List[_T], i: int) -> _T | None:
     ...
 
 
 @typing.overload
-def list_get(l: List[_T], i: int, default: _U) -> _T | _U:
+def list_get(L: List[_T], i: int, default: _U) -> _T | _U:
     ...
 
 
-def list_get(l, i, default=None):
-    return l[i] if -len(l) <= i < len(l) else default
+def list_get(L, i, default=None):
+    return L[i] if -len(L) <= i < len(L) else default
 
 
-def list_split(l: List[_T], v: _T) -> List[List[_T]]:
+def list_split(L: List[_T], v: _T) -> List[List[_T]]:
     res: List[List[_T]] = [[]]
-    for i in l:
+    for i in L:
         if i == v:
             res.append([])
         else:
             res[-1].append(i)
     return res
+
+
+class TimeOutError(RuntimeError):
+    pass
+
+
+class TimeOut(object):
+    def __init__(self, timeout, interval=1, raise_on_timeout=False):
+        """Creates a timeout controller.
+
+        TimeOut is typically used in a while loop to retry a command
+        for a while, e.g. for polling. Example::
+
+            timeout = TimeOut()
+            while timeout.tick():
+                do_something
+        """
+
+        self.remaining = timeout
+        self.cutoff = time.time() + timeout
+        self.interval = interval
+        self.timed_out = False
+        self.first = True
+        self.raise_on_timeout = raise_on_timeout
+
+    def tick(self):
+        """Perform a `tick` for this timeout.
+
+        Returns True if we should keep going or False if not.
+
+        Instead of returning False this can raise an exception
+        if raise_on_timeout is set.
+        """
+
+        self.remaining = self.cutoff - time.time()
+        self.timed_out = self.remaining <= 0
+
+        if self.timed_out:
+            if self.raise_on_timeout:
+                raise TimeOutError()
+            else:
+                return False
+
+        if self.first:
+            self.first = False
+        else:
+            time.sleep(self.interval)
+        return True

@@ -5,7 +5,7 @@ import uuid
 import consulate
 from structlog.stdlib import BoundLogger
 
-from ...timeout import TimeOut, TimeOutError
+from ...utils import TimeOut, TimeOutError
 from ..ceph.source import CephRBD
 
 

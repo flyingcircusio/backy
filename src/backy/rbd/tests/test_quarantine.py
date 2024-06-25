@@ -18,9 +18,9 @@ offset: 3
 timestamp: 2015-09-01 07:06:47+00:00
 traceback: |-
 ...
-    File ".../src/backy/tests/test_quarantine.py", line ..., in test_quarantine
+    File ".../src/backy/rbd/tests/test_quarantine.py", line ..., in test_quarantine
       store.add_report(QuarantineReport(b"source", b"target", 3))
-    File ".../src/backy/quarantine.py", line ..., in __init__
+    File ".../src/backy/rbd/quarantine.py", line ..., in __init__
       self.traceback = "".join(traceback.format_stack()).strip()
 """
             )

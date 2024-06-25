@@ -49,8 +49,6 @@ class ChunkedFileBackend:
         self.log.debug("purge")
         used_chunks: Set[Hash] = set()
         for revision in self.backup.local_history:
-            if revision.backend_type != "chunked":
-                continue
             used_chunks.update(
                 type(self)(revision, self.log).open()._mapping.values()
             )

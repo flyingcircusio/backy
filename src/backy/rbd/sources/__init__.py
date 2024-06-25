@@ -1,9 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Type
+from typing import TYPE_CHECKING, Type
 
 from structlog.stdlib import BoundLogger
 
 import backy.revision
+
+if TYPE_CHECKING:
+    from backy.rbd import RbdBackup
 
 
 class BackySource(ABC):
@@ -27,7 +30,9 @@ class BackySourceContext(ABC):
 
 class BackySourceFactory(ABC):
     @abstractmethod
-    def __init__(self, config: dict, log: BoundLogger) -> None:
+    def __init__(
+        self, config: dict, backup: "RbdBackup", log: BoundLogger
+    ) -> None:
         ...
 
     @abstractmethod

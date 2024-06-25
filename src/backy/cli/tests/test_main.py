@@ -7,8 +7,6 @@ from functools import partialmethod
 import pytest
 
 import backy.backup
-import backy.client
-import backy.main
 from backy import utils
 from backy.revision import Revision
 from backy.tests import Ellipsis
@@ -551,8 +549,7 @@ def test_commands_wrapper_status_yaml(
     assert (
         out
         == f"""\
-- backend_type: {backup.default_backend_type}
-  orig_tags: []
+- orig_tags: []
   parent: ''
   server: ''
   stats:

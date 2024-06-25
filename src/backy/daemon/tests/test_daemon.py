@@ -11,10 +11,10 @@ import pytest
 import yaml
 
 from backy import utils
-from backy.backends.chunked import ChunkedFileBackend
 from backy.daemon import BackyDaemon
+from backy.daemon.scheduler import Job
+from backy.rbd.chunked import ChunkedFileBackend
 from backy.revision import Revision
-from backy.scheduler import Job
 from backy.tests import Ellipsis
 
 

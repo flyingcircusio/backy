@@ -72,7 +72,7 @@ class RbdBackup(Backup):
                 type=self.config["source"]["type"],
             )
             raise
-        self.source = source_factory(self.config["source"], self.log)
+        self.source = source_factory(self.config["source"], self, self.log)
 
         assert self.config["source"].get("backend", "chunked") == "chunked"
 

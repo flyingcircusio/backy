@@ -16,11 +16,11 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
     filename: str
     cow: bool
     revision: Revision
-    backup: RbdBackup
+    rbdbackup: RbdBackup
     log: BoundLogger
 
     def __init__(self, config: dict, backup: RbdBackup, log: BoundLogger):
-        self.backup = backup
+        self.rbdbackup = backup
         self.filename = config["filename"]
         self.cow = config.get("cow", True)
         self.log = log.bind(filename=self.filename, subsystem="file")
@@ -67,7 +67,7 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
             return files_are_equal(
                 source,
                 target_,
-                report=lambda s, t, o: self.backup.quarantine.add_report(
+                report=lambda s, t, o: self.rbdbackup.quarantine.add_report(
                     QuarantineReport(s, t, o)
                 ),
             )

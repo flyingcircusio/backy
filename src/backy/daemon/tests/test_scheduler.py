@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 
 import backy.utils
-from backy.scheduler import Job
+from backy.daemon.scheduler import Job
 
 
 @pytest.fixture

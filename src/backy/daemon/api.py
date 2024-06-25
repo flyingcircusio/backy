@@ -24,10 +24,10 @@ from backy.backup import Backup, StatusDict
 from backy.revision import Revision
 from backy.utils import generate_taskid
 
-from .scheduler import Job
-
 if TYPE_CHECKING:
     from backy.daemon import BackyDaemon
+
+    from .scheduler import Job
 
 
 class BackyJSONEncoder(JSONEncoder):
@@ -150,8 +150,7 @@ class BackyAPI:
     ) -> aiohttp.web.StreamResponse:
         filter = request.query.get("filter", None)
         request["log"].info("get-status", filter=filter)
-        if filter:
-            filter_re = re.compile(filter)
+        filter_re = re.compile(filter) if filter else None
         return to_json(self.daemon.status(filter_re))
 
     async def reload_daemon(self, request: web.Request):
@@ -163,7 +162,7 @@ class BackyAPI:
         request["log"].info("get-jobs")
         return to_json(list(self.daemon.jobs.values()))
 
-    async def get_job(self, request: web.Request) -> Job:
+    async def get_job(self, request: web.Request) -> "Job":
         name = request.match_info.get("job_name")
         if name is None:
             request["log"].info("empty-job")
@@ -384,7 +383,6 @@ class Client:
             json = await response.json()
             revs = [Revision.from_dict(r, backup, self.log) for r in json]
             for r in revs:
-                r.backend_type = ""
                 r.orig_tags = r.tags
                 r.server = self.server_name
             return revs

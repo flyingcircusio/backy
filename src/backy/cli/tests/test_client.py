@@ -6,13 +6,12 @@ from aiohttp import ClientResponseError, hdrs
 from aiohttp.web_exceptions import HTTPUnauthorized
 
 from backy import utils
-from backy.api import BackyAPI
-from backy.client import APIClient, CLIClient
+from backy.cli.client import CLIClient
+from backy.daemon.api import BackyAPI, Client
+from backy.daemon.tests.test_daemon import daemon
+from backy.rbd.quarantine import QuarantineReport
 from backy.revision import Revision
 from backy.tests import Ellipsis
-
-from ..quarantine import QuarantineReport
-from .test_daemon import daemon
 
 
 @pytest.fixture
@@ -62,9 +61,7 @@ async def api_client(api, aiohttp_client, log):
         headers={hdrs.AUTHORIZATION: "Bearer testtoken", "taskid": "ABCD"},
         raise_for_status=True,
     )
-    api_client = APIClient(
-        "<server>", "http://localhost:0", "token", "task", log
-    )
+    api_client = Client("<server>", "http://localhost:0", "token", "task", log)
     await api_client.session.close()
     api_client.session = client
     return api_client

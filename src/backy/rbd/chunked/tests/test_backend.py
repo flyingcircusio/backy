@@ -39,9 +39,9 @@ def test_purge(rbdbackup, log):
     rbdbackup.scan()
     # Reassign as the scan will create a new reference
     r = rbdbackup.history[0]
-    assert len(list(r.backend.store.ls())) == 1
-    r.backend.purge()
-    assert len(list(r.backend.store.ls())) == 1
+    assert len(list(backend.store.ls())) == 1
+    backend.purge()
+    assert len(list(backend.store.ls())) == 1
     r.remove()
-    r.backend.purge()
-    assert len(list(r.backend.store.ls())) == 0
+    backend.purge()
+    assert len(list(backend.store.ls())) == 0

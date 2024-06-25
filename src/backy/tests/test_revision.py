@@ -67,7 +67,6 @@ def test_store_revision_data(backup, clock, log):
     with open(r.info_filename, encoding="utf-8") as info:
         assert yaml.safe_load(info) == {
             "parent": "asdf",
-            "backend_type": backup.default_backend_type,
             "uuid": "asdf2",
             "stats": {"bytes_written": 0},
             "tags": [],
@@ -84,7 +83,6 @@ def test_store_revision_data_no_parent(backup, clock, log):
     with open(r.info_filename, encoding="utf-8") as info:
         assert yaml.safe_load(info) == {
             "parent": "",
-            "backend_type": backup.default_backend_type,
             "uuid": "asdf2",
             "stats": {"bytes_written": 0},
             "tags": [],

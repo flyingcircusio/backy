@@ -216,7 +216,6 @@ async def test_simple_sync(daemons, log):
     new_rev1 = b0.history[1]
     assert new_rev1.backup == b0
     assert new_rev1.timestamp == rev1.timestamp
-    assert new_rev1.backend_type == ""
     assert new_rev1.stats == rev1.stats
     assert new_rev1.tags == rev1.tags
     assert new_rev1.orig_tags == new_rev1.tags

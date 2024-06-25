@@ -5,6 +5,7 @@ import pytest
 
 from backy.ext_deps import BACKY_CMD, BASH
 from backy.rbd import RbdBackup
+from backy.rbd.conftest import create_rev
 from backy.revision import Revision
 from backy.tests import Ellipsis
 
@@ -41,7 +42,7 @@ def test_smoketest_internal(tmp_path, log):
     backup = RbdBackup(backup_dir, log)
 
     # Backup first state
-    rev1 = Revision.create(backup, {"manual:test"}, log)
+    rev1 = create_rev(backup, {"manual:test"})
     backup.backup(rev1.uuid)
 
     # Restore first state from the newest revision
@@ -55,7 +56,7 @@ def test_smoketest_internal(tmp_path, log):
 
     # Backup second state
     backup.source.filename = source2
-    rev2 = Revision.create(backup, {"test"}, log)
+    rev2 = create_rev(backup, {"test"})
     backup.backup(rev2.uuid)
     assert len(backup.history) == 2
 
@@ -71,7 +72,7 @@ def test_smoketest_internal(tmp_path, log):
 
     # Backup second state again
     backup.source.filename = source2
-    rev3 = Revision.create(backup, {"manual:test"}, log)
+    rev3 = create_rev(backup, {"manual:test"})
     backup.backup(rev3.uuid)
     assert len(backup.history) == 3
 
@@ -89,7 +90,7 @@ def test_smoketest_internal(tmp_path, log):
 
     # Backup third state
     backup.source.filename = source3
-    rev4 = Revision.create(backup, {"test"}, log)
+    rev4 = create_rev(backup, {"test"})
     backup.backup(rev4.uuid)
     assert len(backup.history) == 4
 
@@ -112,7 +113,7 @@ def test_smoketest_internal(tmp_path, log):
 @pytest.mark.slow
 def test_smoketest_external():
     output = subprocess.check_output(
-        [BASH, os.path.dirname(__file__) + "/../../../smoketest.sh"],
+        [BASH, os.path.dirname(__file__) + "/smoketest.sh"],
         env=os.environ | {"BACKY_CMD": BACKY_CMD},
     )
     output = output.decode("utf-8")

@@ -20,12 +20,21 @@ def main():
         "-v", "--verbose", action="store_true", help="verbose output"
     )
     parser.add_argument(
+        "-b",
+        "--backupdir",
+        default=".",
+        type=Path,
+        help=(
+            "directory where backups and logs are written to "
+            "(default: %(default)s)"
+        ),
+    )
+    parser.add_argument(
         "-t",
         "--taskid",
         default=generate_taskid(),
         help="ID to include in log messages (default: 4 random base32 chars)",
     )
-    parser.add_argument("-j", "--job", help="Job to work on.")
 
     subparsers = parser.add_subparsers()
 
@@ -35,7 +44,7 @@ def main():
         help="Perform a backup",
     )
     p.set_defaults(func="backup")
-    parser.add_argument("-r", "--revision", help="Revision to work on.")
+    p.add_argument("revision", help="Revision to work on.")
 
     # RESTORE
     p = subparsers.add_parser(
@@ -50,7 +59,7 @@ def main():
         dest="restore_backend",
         help="(default: %(default)s)",
     )
-    parser.add_argument("-r", "--revision", help="Revision to work on.")
+    p.add_argument("revision", help="Revision to work on.")
     p.add_argument(
         "target",
         metavar="TARGET",
@@ -70,7 +79,7 @@ def main():
         "verify",
         help="Verify specified revision",
     )
-    parser.add_argument("-r", "--revision", help="Revision to work on.")
+    p.add_argument("revision", help="Revision to work on.")
     p.set_defaults(func="verify")
 
     args = parser.parse_args()
@@ -79,23 +88,21 @@ def main():
         parser.print_usage()
         sys.exit(0)
 
-    backupdir = Path("/srv/backy/" + args.job)  # TODO
-
     # Logging
     logging.init_logging(
         args.verbose,
-        backupdir / "backy.log",
+        args.backupdir / "backy.log",
         defaults={"taskid": args.taskid},
     )
     log = structlog.stdlib.get_logger(subsystem="command")
     log.debug("invoked", args=" ".join(sys.argv))
 
     try:
-        b = RbdBackup(backupdir, log)
+        b = RbdBackup(args.backupdir, log)
         # XXX scheduler?
         b._clean()
         ret = 0
-        match args.fun:
+        match args.func:
             case "backup":
                 success = b.backup(args.revision)
                 ret = int(not success)

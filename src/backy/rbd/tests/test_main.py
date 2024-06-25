@@ -28,26 +28,7 @@ def test_display_usage(capsys, argv):
     out, err = capsys.readouterr()
     assert (
         """\
-usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR] [-t TASKID]
-              {client,backup,restore,purge,find,status,\
-upgrade,scheduler,distrust,verify,forget,tags,expire,push,pull}
-              ...
-"""
-        == out
-    )
-    assert err == ""
-
-
-def test_display_client_usage(capsys, argv):
-    argv.append("client")
-    with pytest.raises(SystemExit) as exit:
-        main()
-    assert exit.value.code == 0
-    out, err = capsys.readouterr()
-    assert (
-        """\
-usage: pytest client [-h] [-c CONFIG] [-p PEER] [--url URL] [--token TOKEN]
-                     {jobs,status,run,runall,reload,check} ...
+usage: pytest [-h] [-v] [-b BACKUPDIR] [-t TASKID] {backup,restore,gc,verify} ...
 """
         == out
     )
@@ -63,33 +44,9 @@ def test_display_help(capsys, argv):
     assert (
         Ellipsis(
             """\
-usage: pytest [-h] [-v] [-l LOGFILE] [-b BACKUPDIR] [-t TASKID]
-              {client,backup,restore,purge,find,status,\
-upgrade,scheduler,distrust,verify,forget,tags,expire,push,pull}
-              ...
+usage: pytest [-h] [-v] [-b BACKUPDIR] [-t TASKID] {backup,restore,gc,verify} ...
 
 Backup and restore for block devices.
-
-positional arguments:
-...
-"""
-        )
-        == out
-    )
-    assert err == ""
-
-
-def test_display_client_help(capsys, argv):
-    argv.extend(["client", "--help"])
-    with pytest.raises(SystemExit) as exit:
-        main()
-    assert exit.value.code == 0
-    out, err = capsys.readouterr()
-    assert (
-        Ellipsis(
-            """\
-usage: pytest client [-h] [-c CONFIG] [-p PEER] [--url URL] [--token TOKEN]
-                     {jobs,status,run,runall,reload,check} ...
 
 positional arguments:
 ...
@@ -113,10 +70,6 @@ def print_args(*args, return_value=None, **kw):
     print(args)
     pprint.pprint(kw)
     return return_value
-
-
-async def async_print_args(*args, **kw):
-    print_args(*args, **kw)
 
 
 @pytest.mark.parametrize("success", [False, True])
@@ -147,7 +100,7 @@ source:
         "backup",
         partialmethod(print_args, return_value=success),
     )
-    argv.extend(["-v", "backup", "manual:test"])
+    argv.extend(["-v", "backup", "asdf"])
     utils.log_data = ""
     with pytest.raises(SystemExit) as exit:
         main()
@@ -155,7 +108,7 @@ source:
     assert (
         Ellipsis(
             """\
-(<backy.backup.Backup object at 0x...>, {'manual:test'}, False)
+(<backy.rbd.backup.RbdBackup object at 0x...>, 'asdf')
 {}
 """
         )
@@ -164,10 +117,9 @@ source:
     assert (
         Ellipsis(
             f"""\
-... D command/invoked                     args='... -v backup manual:test'
-... D command/parsed                      func='backup' func_args={{'force': False, 'tags': 'manual:test'}}
-... D quarantine/scan                     entries=0
-... D command/return-code                 code={int(not success)}
+... D -                    command/invoked                     args='... -v backup asdf'
+... D -                    quarantine/scan                     entries=0
+... D -                    command/return-code                 code={int(not success)}
 """
         )
         == utils.log_data
@@ -177,7 +129,7 @@ source:
 
 # TODO: test call restore, verify, gc
 def test_call_unexpected_exception(
-    capsys, backup, argv, monkeypatch, log, tmp_path
+    capsys, rbdbackup, argv, monkeypatch, log, tmp_path
 ):
     def do_raise(*args, **kw):
         raise RuntimeError("test")
@@ -187,24 +139,23 @@ def test_call_unexpected_exception(
 
     monkeypatch.setattr(os, "_exit", lambda x: None)
 
-    argv.extend(
-        ["-l", str(tmp_path / "backy.log"), "-b", str(backup.path), "gc"]
-    )
+    argv.extend(["-b", str(rbdbackup.path), "gc"])
     utils.log_data = ""
     with pytest.raises(SystemExit):
         main()
     out, err = capsys.readouterr()
+    print(utils.log_data)
     assert "" == out
     assert (
         Ellipsis(
             """\
-... D command/invoked                     args='... -l ... -b ... status'
-... D command/parsed                      func='status' func_args={'yaml_': False, 'revision': 'all'}
-... E command/failed                      exception_class='builtins.RuntimeError' exception_msg='test'
+... D -                    command/invoked                     args='... -b ... gc'
+... D -                    quarantine/scan                     entries=0
+... E -                    command/failed                      exception_class='builtins.RuntimeError' exception_msg='test'
 exception>\tTraceback (most recent call last):
-exception>\t  File ".../src/backy/main.py", line ..., in main
-exception>\t    ret = func(**func_args)
-exception>\t  File ".../src/backy/tests/test_main.py", line ..., in do_raise
+exception>\t  File ".../src/backy/rbd/__init__.py", line ..., in main
+exception>\t    b.gc()
+exception>\t  File ".../src/backy/rbd/tests/test_main.py", line ..., in do_raise
 exception>\t    raise RuntimeError("test")
 exception>\tRuntimeError: test
 """

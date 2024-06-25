@@ -4,6 +4,7 @@ import os
 import pytest
 
 from backy.rbd import RbdBackup
+from backy.revision import Revision
 
 fixtures = os.path.dirname(__file__) + "/tests/samples"
 
@@ -15,10 +16,17 @@ def rbdbackup(schedule, tmp_path, log):
             {
                 "source": {
                     "type": "file",
-                    "filename": "test",
+                    "filename": "input-file",
                 },
                 "schedule": schedule.to_dict(),
             },
             f,
         )
     return RbdBackup(tmp_path, log)
+
+
+def create_rev(rbdbackup, tags):
+    r = Revision.create(rbdbackup, tags, rbdbackup.log)
+    r.materialize()
+    rbdbackup.scan()
+    return r

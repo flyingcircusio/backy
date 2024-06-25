@@ -10,7 +10,7 @@ from backy.rbd.sources.flyingcircus.source import FlyingCircusRootDisk
 
 
 @pytest.fixture
-def fcrd(log):
+def fcrd(log, rbdbackup):
     return FlyingCircusRootDisk(
         {
             "pool": "test",
@@ -18,6 +18,7 @@ def fcrd(log):
             "vm": "test01",
             "consul_acl_token": "12345",
         },
+        rbdbackup,
         log,
     )
 

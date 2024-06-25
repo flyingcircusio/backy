@@ -1,17 +1,17 @@
-# -*- encoding: utf-8 -*-
-
 import argparse
 import asyncio
 import errno
+import re
 import sys
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Dict, Literal, Optional
 
 import humanize
 import structlog
 import tzlocal
 import yaml
-from aiohttp import ClientConnectionError
+from aiohttp import ClientResponseError
+from aiohttp.web_exceptions import HTTPNotFound
 from rich import print as rprint
 from rich.table import Column, Table
 from structlog.stdlib import BoundLogger
@@ -201,7 +201,7 @@ class Command(object):
             "Next Tags",
         )
 
-        jobs = await self.api.fetch_status(filter_re)
+        jobs = self.api.fetch_status(filter_re)
         jobs.sort(key=lambda j: j["job"])
         for job in jobs:
             overdue = (
@@ -228,7 +228,7 @@ class Command(object):
                 next_time,
                 job["next_tags"],
             )
-        backups = await self.api.list_backups()
+        backups = self.api.list_backups()
         if filter_re:
             backups = list(filter(re.compile(filter_re).search, backups))
         for b in backups:
@@ -241,8 +241,8 @@ class Command(object):
         """Show job status overview"""
         t = Table("Status", "#")
         state_summary: Dict[str, int] = {}
-        jobs = await self.api.get_jobs()
-        jobs += [{"status": "Dead"} for _ in await self.api.list_backups()]
+        jobs = self.api.get_jobs()
+        jobs += [{"status": "Dead"} for _ in self.api.list_backups()]
         for job in jobs:
             state_summary.setdefault(job["status"], 0)
             state_summary[job["status"]] += 1
@@ -254,7 +254,7 @@ class Command(object):
     def run(self, job: str):
         """Trigger immediate run for one job"""
         try:
-            await self.api.run_job(job)
+            self.api.run_job(job)
         except ClientResponseError as e:
             if e.status == HTTPNotFound.status_code:
                 self.log.error("unknown-job", job=job)
@@ -264,18 +264,18 @@ class Command(object):
 
     def runall(self):
         """Trigger immediate run for all jobs"""
-        jobs = await self.api.get_jobs()
+        jobs = self.api.get_jobs()
         for job in jobs:
-            await self.run(job["name"])
+            self.run(job["name"])
 
     def reload(self):
         """Reload the configuration."""
         self.log.info("reloading-daemon")
-        await self.api.reload_daemon()
+        self.api.reload_daemon()
         self.log.info("reloaded-daemon")
 
     def check(self):
-        status = await self.api.fetch_status()
+        status = self.api.fetch_status()
 
         exitcode = 0
 

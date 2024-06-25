@@ -1,19 +1,14 @@
-import datetime
 import re
 import sys
-from asyncio import get_running_loop
-from typing import TYPE_CHECKING, Dict, Iterator, List
+from typing import TYPE_CHECKING, Dict, List
 
-import aiohttp
 import humanize
-from aiohttp import ClientResponseError, ClientTimeout, TCPConnector, hdrs
+from aiohttp import ClientResponseError
 from aiohttp.web_exceptions import HTTPNotFound
 from rich import print as rprint
 from rich.table import Column, Table
 from structlog.stdlib import BoundLogger
 
-import backy.backup
-from backy.revision import Revision
 from backy.utils import format_datetime_local
 
 if TYPE_CHECKING:

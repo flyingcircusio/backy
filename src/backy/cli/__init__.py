@@ -18,10 +18,11 @@ from structlog.stdlib import BoundLogger
 
 import backy.daemon
 from backy import logging
-from backy.backup import Backup, RestoreBackend
-from backy.utils import format_datetime_local, generate_taskid
+from backy.backup import Backup
 
-from .client import APIClient, CLIClient
+# XXX invert this dependency
+from backy.rbd.backup import RestoreBackend
+from backy.utils import format_datetime_local, generate_taskid
 
 
 class Command(object):
@@ -151,70 +152,6 @@ class Command(object):
         b = Backup(self.path, self.log)
         b.verify(revision)
 
-    def client(
-        self,
-        config: Path,
-        peer: str,
-        url: str,
-        token: str,
-        apifunc: str,
-        **kwargs,
-    ) -> int:
-        async def run() -> int:
-            if peer and (url or token):
-                self.log.error(
-                    "client-argparse-error",
-                    _fmt_msg="--peer conflicts with --url and --token",
-                )
-                return 1
-            if bool(url) ^ bool(token):
-                self.log.error(
-                    "client-argparse-error",
-                    _fmt_msg="--url and --token require each other",
-                )
-                return 1
-            if url and token:
-                api = APIClient("<server>", url, token, self.taskid, self.log)
-            else:
-                d = backy.daemon.BackyDaemon(config, self.log)
-                d._read_config()
-                if peer:
-                    if peer not in d.peers:
-                        self.log.error(
-                            "client-peer-unknown",
-                            _fmt_msg="The peer {peer} is not known. "
-                            "Select a known peer or specify --url and "
-                            "--token.\n"
-                            "The following peers are known: {known}",
-                            peer=peer,
-                            known=", ".join(d.peers.keys()),
-                        )
-                        return 1
-                    api = APIClient.from_conf(
-                        peer, d.peers[peer], self.taskid, self.log
-                    )
-                else:
-                    if "token" not in d.api_cli_default:
-                        self.log.error(
-                            "client-missing-defaults",
-                            _fmt_msg="The config file is missing default "
-                            "parameters. Please specify --url and --token",
-                        )
-                        return 1
-                    api = APIClient.from_conf(
-                        "<server>", d.api_cli_default, self.taskid, self.log
-                    )
-            async with CLIClient(api, self.log) as c:
-                try:
-                    await getattr(c, apifunc)(**kwargs)
-                except ClientConnectionError:
-                    c.log.error("connection-error", exc_style="banner")
-                    c.log.debug("connection-error", exc_info=True)
-                    return 1
-            return 0
-
-        return asyncio.run(run())
-
     def tags(
         self,
         action: Literal["set", "add", "remove"],
@@ -247,39 +184,135 @@ class Command(object):
         b.expire()
         b.warn_pending_changes()
 
+    def jobs(self, filter_re=""):
+        """List status of all known jobs. Optionally filter by regex."""
 
-def setup_argparser():
-    return parser, client
+        tz = format_datetime_local(None)[1]
+
+        t = Table(
+            "Job",
+            "SLA",
+            "SLA overdue",
+            "Status",
+            f"Last Backup ({tz})",
+            "Last Tags",
+            Column("Last Duration", justify="right"),
+            f"Next Backup ({tz})",
+            "Next Tags",
+        )
+
+        jobs = await self.api.fetch_status(filter_re)
+        jobs.sort(key=lambda j: j["job"])
+        for job in jobs:
+            overdue = (
+                humanize.naturaldelta(job["sla_overdue"])
+                if job["sla_overdue"]
+                else "-"
+            )
+            last_duration = (
+                humanize.naturaldelta(job["last_duration"])
+                if job["last_duration"]
+                else "-"
+            )
+            last_time = format_datetime_local(job["last_time"])[0]
+            next_time = format_datetime_local(job["next_time"])[0]
+
+            t.add_row(
+                job["job"],
+                job["sla"],
+                overdue,
+                job["status"],
+                last_time,
+                job["last_tags"],
+                last_duration,
+                next_time,
+                job["next_tags"],
+            )
+        backups = await self.api.list_backups()
+        if filter_re:
+            backups = list(filter(re.compile(filter_re).search, backups))
+        for b in backups:
+            t.add_row(b, "-", "-", "Dead", "-", "", "-", "-", "")
+
+        rprint(t)
+        print("{} jobs shown".format(len(jobs) + len(backups)))
+
+    def status(self):
+        """Show job status overview"""
+        t = Table("Status", "#")
+        state_summary: Dict[str, int] = {}
+        jobs = await self.api.get_jobs()
+        jobs += [{"status": "Dead"} for _ in await self.api.list_backups()]
+        for job in jobs:
+            state_summary.setdefault(job["status"], 0)
+            state_summary[job["status"]] += 1
+
+        for state in sorted(state_summary):
+            t.add_row(state, str(state_summary[state]))
+        rprint(t)
+
+    def run(self, job: str):
+        """Trigger immediate run for one job"""
+        try:
+            await self.api.run_job(job)
+        except ClientResponseError as e:
+            if e.status == HTTPNotFound.status_code:
+                self.log.error("unknown-job", job=job)
+                sys.exit(1)
+            raise
+        self.log.info("triggered-run", job=job)
+
+    def runall(self):
+        """Trigger immediate run for all jobs"""
+        jobs = await self.api.get_jobs()
+        for job in jobs:
+            await self.run(job["name"])
+
+    def reload(self):
+        """Reload the configuration."""
+        self.log.info("reloading-daemon")
+        await self.api.reload_daemon()
+        self.log.info("reloaded-daemon")
+
+    def check(self):
+        status = await self.api.fetch_status()
+
+        exitcode = 0
+
+        for job in status:
+            log = self.log.bind(job_name=job["job"])
+            if job["manual_tags"]:
+                log.info(
+                    "check-manual-tags",
+                    manual_tags=job["manual_tags"],
+                )
+            if job["unsynced_revs"]:
+                self.log.info(
+                    "check-unsynced-revs", unsynced_revs=job["unsynced_revs"]
+                )
+            if job["sla"] != "OK":
+                log.critical(
+                    "check-sla-violation",
+                    last_time=str(job["last_time"]),
+                    sla_overdue=job["sla_overdue"],
+                )
+                exitcode = max(exitcode, 2)
+            if job["quarantine_reports"]:
+                log.warning(
+                    "check-quarantined", reports=job["quarantine_reports"]
+                )
+                exitcode = max(exitcode, 1)
+
+        self.log.info("check-exit", exitcode=exitcode, jobs=len(status))
+        raise SystemExit(exitcode)
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Backy command line client.",
     )
-
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="verbose output"
-    )
-
-    parser.add_argument(
-        "-l",
-        "--logfile",
-        type=Path,
-        help=(
-            "file name to write log output in. "
-            "(default: /var/log/backy.log for `scheduler`, "
-            "ignored for `client`, $backupdir/backy.log otherwise)"
-        ),
-    )
-    parser.add_argument(
-        "-b",
-        "--backupdir",
-        default=".",
-        type=Path,
-        help=(
-            "directory where backups and logs are written to "
-            "(default: %(default)s)"
-        ),
     )
     parser.add_argument(
         "-t",
@@ -287,15 +320,6 @@ def main():
         default=generate_taskid(),
         help="id to include in log messages (default: 4 random base32 chars)",
     )
-
-    subparsers = parser.add_subparsers()
-
-    # CLIENT
-    client = subparsers.add_parser(
-        "client",
-        help="Query the api",
-    )
-    g = client.add_argument_group()
     g.add_argument(
         "-c",
         "--config",
@@ -303,15 +327,10 @@ def main():
         default="/etc/backy.conf",
         help="(default: %(default)s)",
     )
-    g.add_argument("-p", "--peer", help="(default: read from config file)")
-    g = client.add_argument_group()
-    g.add_argument("--url")
-    g.add_argument("--token")
-    client.set_defaults(func="client")
-    client_parser = client.add_subparsers()
 
-    # CLIENT jobs
-    p = client_parser.add_parser("jobs", help="List status of all known jobs")
+    subparsers = parser.add_subparsers()
+
+    p = subparsers.add_parser("jobs", help="List status of all known jobs")
     p.add_argument(
         "filter_re",
         default="",
@@ -319,37 +338,26 @@ def main():
         nargs="?",
         help="Optional job filter regex",
     )
-    p.set_defaults(apifunc="jobs")
+    p.set_defaults(func="jobs")
 
-    # CLIENT status
-    p = client_parser.add_parser("status", help="Show job status overview")
-    p.set_defaults(apifunc="status")
+    p = subparsers.add_parser("status", help="Show job status overview")
+    p.set_defaults(func="status")
 
-    # CLIENT run
-    p = client_parser.add_parser(
-        "run", help="Trigger immediate run for one job"
-    )
+    p = subparsers.add_parser("run", help="Trigger immediate run for one job")
     p.add_argument("job", metavar="<job>", help="Name of the job to run")
-    p.set_defaults(apifunc="run")
+    p.set_defaults(func="run")
 
-    # CLIENT runall
-    p = client_parser.add_parser(
+    p = subparsers.add_parser(
         "runall", help="Trigger immediate run for all jobs"
     )
-    p.set_defaults(apifunc="runall")
+    p.set_defaults(func="runall")
 
-    # CLIENT reload
-    p = client_parser.add_parser("reload", help="Reload the configuration")
-    p.set_defaults(apifunc="reload")
-
-    # CLIENT check
-    p = client_parser.add_parser(
+    p = subparsers.add_parser(
         "check",
         help="Check whether all jobs adhere to their schedules' SLA",
     )
-    p.set_defaults(apifunc="check")
+    p.set_defaults(func="check")
 
-    # BACKUP
     p = subparsers.add_parser(
         "backup",
         help="Perform a backup",
@@ -360,7 +368,6 @@ def main():
     p.add_argument("tags", help="Tags to apply to the backup")
     p.set_defaults(func="backup")
 
-    # RESTORE
     p = subparsers.add_parser(
         "restore",
         help="Restore (a given revision) to a given target",
@@ -387,14 +394,12 @@ def main():
     )
     p.set_defaults(func="restore")
 
-    # BACKUP
     p = subparsers.add_parser(
         "purge",
         help="Purge the backup store (i.e. chunked) from unused data",
     )
     p.set_defaults(func="purge")
 
-    # FIND
     p = subparsers.add_parser(
         "find",
         help="Print full path or uuid of specified revisions",
@@ -413,7 +418,6 @@ def main():
     )
     p.set_defaults(func="find")
 
-    # STATUS
     p = subparsers.add_parser(
         "status",
         help="Show backup status. Show inventory and summary information",
@@ -427,28 +431,6 @@ def main():
         help="use revision SPEC as filter (default: %(default)s)",
     )
     p.set_defaults(func="status")
-
-    # upgrade
-    p = subparsers.add_parser(
-        "upgrade",
-        help="Upgrade this backup (incl. its data) to the newest "
-        "supported version",
-    )
-    p.set_defaults(func="upgrade")
-
-    # SCHEDULER DAEMON
-    p = subparsers.add_parser(
-        "scheduler",
-        help="Run the scheduler",
-    )
-    p.set_defaults(func="scheduler")
-    p.add_argument(
-        "-c",
-        "--config",
-        type=Path,
-        default="/etc/backy.conf",
-        help="(default: %(default)s)",
-    )
 
     # DISTRUST
     p = subparsers.add_parser(
@@ -464,7 +446,6 @@ def main():
     )
     p.set_defaults(func="distrust")
 
-    # VERIFY
     p = subparsers.add_parser(
         "verify",
         help="Verify specified revisions",
@@ -478,7 +459,6 @@ def main():
     )
     p.set_defaults(func="verify")
 
-    # FORGET
     p = subparsers.add_parser(
         "forget",
         help="Forget specified revision",
@@ -492,7 +472,6 @@ def main():
     )
     p.set_defaults(func="forget")
 
-    # TAGS
     p = subparsers.add_parser(
         "tags",
         help="Modify tags on revision",
@@ -529,12 +508,12 @@ def main():
     )
     p.set_defaults(func="tags")
 
-    # EXPIRE
     p = subparsers.add_parser(
         "expire",
         help="Expire tags according to schedule",
     )
     p.set_defaults(func="expire")
+    args = parser.parse_args()
 
     if not hasattr(args, "func"):
         parser.print_usage()
@@ -544,7 +523,7 @@ def main():
     logging.init_logging(
         args.verbose,
         args.logfile,
-        defaults={"job_name": default_job_name, "taskid": args.taskid},
+        defaults={"taskid": args.taskid},
     )
     log = structlog.stdlib.get_logger(subsystem="command")
     log.debug("invoked", args=" ".join(sys.argv))

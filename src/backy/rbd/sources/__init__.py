@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from importlib.metadata import entry_points
 from typing import Type
 
 from structlog.stdlib import BoundLogger
@@ -46,15 +45,17 @@ class BackySourceFactory(ABC):
 def select_source(type_: str) -> Type[BackySourceFactory]:
     match type_:
         case "flyingcircus":
-            from backy.sources.flyingcircus.source import FlyingCircusRootDisk
+            from backy.rbd.sources.flyingcircus.source import (
+                FlyingCircusRootDisk,
+            )
 
             return FlyingCircusRootDisk
         case "ceph-rbd":
-            from backy.sources.ceph.source import CephRBD
+            from backy.rbd.sources.ceph.source import CephRBD
 
             return CephRBD
         case "file":
-            from backy.sources.file import File
+            from backy.rbd.sources.file import File
 
             return File
         case _:

@@ -4,10 +4,10 @@ from unittest import mock
 
 import pytest
 
-import backy.sources.ceph
+import backy.rbd.sources.ceph
 from backy.ext_deps import RBD
-from backy.sources.ceph.diff import RBDDiffV1
-from backy.sources.ceph.rbd import RBDClient
+from backy.rbd.sources.ceph.diff import RBDDiffV1
+from backy.rbd.sources.ceph.rbd import RBDClient
 
 
 @mock.patch("subprocess.check_output")

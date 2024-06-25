@@ -2,11 +2,11 @@ import time
 
 from structlog.stdlib import BoundLogger
 
-import backy.backends
 import backy.utils
-from backy.revision import Revision, Trust
+from backy.revision import Revision
 
-from ...backends import BackyBackend
+from ... import RbdBackup
+from ...chunked import ChunkedFileBackend
 from ...quarantine import QuarantineReport
 from .. import BackySource, BackySourceContext, BackySourceFactory
 from .rbd import RBDClient
@@ -24,13 +24,16 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
     always_full: bool
     log: BoundLogger
     rbd: RBDClient
+    revision: Revision
+    backup: RbdBackup
 
-    def __init__(self, config: dict, log: BoundLogger):
+    def __init__(self, config: dict, backup: RbdBackup, log: BoundLogger):
         self.pool = config["pool"]
         self.image = config["image"]
         self.always_full = config.get("full-always", False)
         self.log = log.bind(subsystem="ceph")
         self.rbd = RBDClient(self.log)
+        self.backup = backup
 
     def ready(self) -> bool:
         """Check whether the source can be backed up.
@@ -67,7 +70,7 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
     def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
         self._delete_old_snapshots()
 
-    def backup(self, target: BackyBackend) -> None:
+    def backup(self, target: ChunkedFileBackend) -> None:
         if self.always_full:
             self.log.info("backup-always-full")
             self.full(target)
@@ -90,7 +93,7 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
             break
         self.diff(target, parent)
 
-    def diff(self, target: BackyBackend, parent: Revision) -> None:
+    def diff(self, target: ChunkedFileBackend, parent: Revision) -> None:
         self.log.info("diff")
         snap_from = "backy-" + parent.uuid
         snap_to = "backy-" + self.revision.uuid
@@ -102,11 +105,11 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
         self.revision.stats["bytes_written"] = bytes
 
         # TMP Gather statistics to see where to optimize
-        from backy.backends.chunked.chunk import chunk_stats
+        from backy.rbd.chunked.chunk import chunk_stats
 
         self.revision.stats["chunk_stats"] = chunk_stats
 
-    def full(self, target: BackyBackend) -> None:
+    def full(self, target: ChunkedFileBackend) -> None:
         self.log.info("full")
         s = self.rbd.export(
             "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
@@ -122,11 +125,11 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
         self.revision.stats["bytes_written"] = copied
 
         # TMP Gather statistics to see if we actually are aligned.
-        from backy.backends.chunked.chunk import chunk_stats
+        from backy.rbd.chunked.chunk import chunk_stats
 
         self.revision.stats["chunk_stats"] = chunk_stats
 
-    def verify(self, target: BackyBackend) -> bool:
+    def verify(self, target: ChunkedFileBackend) -> bool:
         s = self.rbd.image_reader(
             "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
         )
@@ -137,7 +140,7 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
             return backy.utils.files_are_roughly_equal(
                 source,
                 target_,
-                report=lambda s, t, o: self.revision.backup.quarantine.add_report(
+                report=lambda s, t, o: self.backup.quarantine.add_report(
                     QuarantineReport(s, t, o)
                 ),
             )

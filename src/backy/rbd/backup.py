@@ -4,21 +4,20 @@ import subprocess
 import time
 from enum import Enum
 from pathlib import Path
-from typing import IO, Literal
+from typing import IO
 
-import yaml
 from structlog.stdlib import BoundLogger
 
-import backy.backup.backends.chunked
+import backy
 
 from ..backup import Backup
-from .backends import BackendException, BackyBackend, select_backend
-from .ext_deps import BACKY_EXTRACT
+from ..ext_deps import BACKY_EXTRACT
+from ..revision import Revision, Trust
+from ..utils import CHUNK_SIZE, copy, posix_fadvise
+from .chunked import ChunkedFileBackend
+from .chunked.chunk import BackendException
 from .quarantine import QuarantineStore
-from .revision import Revision, Trust, filter_schedule_tags
-from .schedule import Schedule
 from .sources import BackySourceFactory, select_source
-from .utils import CHUNK_SIZE, copy, posix_fadvise
 
 # Locking strategy:
 #
@@ -89,6 +88,9 @@ class RbdBackup(Backup):
     @Backup.locked(target=".backup", mode="exclusive")
     @Backup.locked(target=".purge", mode="shared")
     def backup(self, revision: str) -> bool:
+        new_revision = self.find_by_uuid(revision)
+        self.prevent_remote_rev([new_revision])
+
         self.path.joinpath("last").unlink(missing_ok=True)
         self.path.joinpath("last.rev").unlink(missing_ok=True)
 
@@ -99,8 +101,7 @@ class RbdBackup(Backup):
                 "Source is not ready (does it exist? can you access it?)"
             )
 
-        new_revision = self.find_by_uuid(revision)
-        backend = new_revision.backend
+        backend = ChunkedFileBackend(new_revision, self.log)
         with self.source(new_revision) as source:
             try:
                 source.backup(backend)
@@ -134,20 +135,19 @@ class RbdBackup(Backup):
         for revision in reversed(self.get_history(clean=True, local=True)):
             if revision.trust == Trust.DISTRUSTED:
                 self.log.warning("inconsistent")
-                revision.backend.verify()
+                backend.verify()
                 break
         return verified
 
     @Backup.locked(target=".purge", mode="shared")
     def verify(self, revision: str) -> None:
-        revs = self.find_revisions(revision)
-        self.prevent_remote_rev(revs)
-        for r in revs:
-            r.backend.verify()
+        rev = self.find_by_uuid(revision)
+        self.prevent_remote_rev([rev])
+        ChunkedFileBackend(rev, self.log).verify()
 
     @Backup.locked(target=".purge", mode="exclusive")
     def gc(self) -> None:
-        self.local_history[-1].backend.purge()
+        ChunkedFileBackend(self.local_history[-1], self.log).purge()
         self.clear_purge_pending()
 
     #################
@@ -161,8 +161,8 @@ class RbdBackup(Backup):
         target: str,
         restore_backend: RestoreBackend = RestoreBackend.AUTO,
     ) -> None:
-        r = self.find(revision)
-        s = r.backend.open("rb")
+        r = self.find_by_uuid(revision)
+        s = ChunkedFileBackend(r, self.log).open("rb")
         if restore_backend == RestoreBackend.AUTO:
             if self.backy_extract_supported(s):
                 restore_backend = RestoreBackend.RUST
@@ -178,11 +178,8 @@ class RbdBackup(Backup):
         elif restore_backend == RestoreBackend.RUST:
             self.restore_backy_extract(r, target)
 
-    def backy_extract_supported(self, file: IO) -> bool:
+    def backy_extract_supported(self, file: "backy.rbd.chunked.File") -> bool:
         log = self.log.bind(subsystem="backy-extract")
-        if not isinstance(file, backy.backends.chunked.File):
-            log.debug("unsupported-backend")
-            return False
         if file.size % CHUNK_SIZE != 0:
             log.debug("not-chunk-aligned")
             return False

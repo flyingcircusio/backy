@@ -4,8 +4,8 @@ import subprocess
 
 import pytest
 
-import backy.sources.ceph
-from backy.sources.ceph.rbd import RBDClient
+import backy.rbd.sources.ceph
+from backy.rbd.sources.ceph.rbd import RBDClient
 
 
 class CephCLIBase:

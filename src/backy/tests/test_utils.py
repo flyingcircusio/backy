@@ -12,6 +12,10 @@ from backy.utils import (
     copy_overwrite,
     files_are_equal,
     files_are_roughly_equal,
+    punch_hole,
+    TimeOut,
+    TimeOutError,
+    _fake_fallocate,
 )
 
 
@@ -337,3 +341,62 @@ def test_unmocked_now_returns_time_time_float():
     now = backy.utils.now()
     after = datetime.datetime.now(ZoneInfo("UTC"))
     assert before <= now <= after
+
+
+
+@pytest.fixture
+def testfile(tmp_path):
+    fn = str(tmp_path / "myfile")
+    with open(fn, "wb") as f:
+        f.write(b"\xde\xad\xbe\xef" * 32)
+    return fn
+
+
+def test_punch_hole(testfile):
+    with open(testfile, "r+b") as f:
+        f.seek(0)
+        punch_hole(f, 2, 4)
+        f.seek(0)
+        assert f.read(8) == b"\xde\xad\x00\x00\x00\x00\xbe\xef"
+
+
+def test_punch_hole_needs_length(testfile):
+    with pytest.raises(IOError):
+        with open(testfile, "r+b") as f:
+            punch_hole(f, 10, 0)
+
+
+def test_punch_hole_needs_writable_file(testfile):
+    with pytest.raises(OSError):
+        with open(testfile, "rb") as f:
+            punch_hole(f, 0, 1)
+
+
+def test_punch_hole_needs_nonnegative_offset(testfile):
+    with pytest.raises(OSError):
+        with open(testfile, "r+b") as f:
+            punch_hole(f, -1, 1)
+
+
+def test_fake_fallocate_only_punches_holes(testfile):
+    with pytest.raises(NotImplementedError):
+        with open(testfile, "r+b") as f:
+            _fake_fallocate(f, 0, 0, 10)
+
+def test_timeout(capsys):
+    timeout = TimeOut(0.05, 0.01)
+    while timeout.tick():
+        print("tick")
+    assert timeout.timed_out
+    out, err = capsys.readouterr()
+    assert "tick\ntick\ntick" in out
+
+
+def test_raise_on_timeout(capsys):
+    timeout = TimeOut(0.05, 0.01, raise_on_timeout=True)
+    with pytest.raises(TimeOutError):
+        while True:
+            timeout.tick()
+            print("tick")
+    out, err = capsys.readouterr()
+    assert "tick\ntick\ntick" in out

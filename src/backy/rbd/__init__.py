@@ -79,7 +79,7 @@ def main():
         parser.print_usage()
         sys.exit(0)
 
-    backupdir = Path()  # TODO
+    backupdir = Path("/srv/backy/" + args.job)  # TODO
 
     # Logging
     logging.init_logging(

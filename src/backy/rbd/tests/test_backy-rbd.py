@@ -3,8 +3,9 @@ import subprocess
 
 import pytest
 
-import backy.backup
 from backy.ext_deps import BACKY_CMD, BASH
+from backy.rbd import RbdBackup
+from backy.revision import Revision
 from backy.tests import Ellipsis
 
 
@@ -37,14 +38,15 @@ def test_smoketest_internal(tmp_path, log):
                 % source1
             ).encode("utf-8")
         )
-    backup = backy.backup.Backup(backup_dir, log)
+    backup = RbdBackup(backup_dir, log)
 
     # Backup first state
-    backup.backup({"manual:test"})
+    rev1 = Revision.create(backup, {"manual:test"}, log)
+    backup.backup(rev1.uuid)
 
-    # Restore first state form newest revision at position 0
+    # Restore first state from the newest revision
     restore_target = str(tmp_path / "image1.restore")
-    backup.restore("0", restore_target)
+    backup.restore(rev1.uuid, restore_target)
     with pytest.raises(IOError):
         open(backup.history[-1].filename, "wb")
     with pytest.raises(IOError):
@@ -53,54 +55,57 @@ def test_smoketest_internal(tmp_path, log):
 
     # Backup second state
     backup.source.filename = source2
-    backup.backup({"test"}, force=True)
+    rev2 = Revision.create(backup, {"test"}, log)
+    backup.backup(rev2.uuid)
     assert len(backup.history) == 2
 
     # Restore second state from second backup which is the newest at position 0
-    backup.restore("0", restore_target)
+    backup.restore(rev2.uuid, restore_target)
     d1 = open(source2, "rb").read()
     d2 = open(restore_target, "rb").read()
     assert d1 == d2
 
     # Our original backup is now at position 1. Lets restore that again.
-    backup.restore("1", restore_target)
+    backup.restore(rev1.uuid, restore_target)
     assert open(source1, "rb").read() == open(restore_target, "rb").read()
 
     # Backup second state again
     backup.source.filename = source2
-    backup.backup({"manual:test"})
+    rev3 = Revision.create(backup, {"manual:test"}, log)
+    backup.backup(rev3.uuid)
     assert len(backup.history) == 3
 
     # Restore image2 from its most recent at position 0
-    backup.restore("0", restore_target)
+    backup.restore(rev3.uuid, restore_target)
     assert open(source2, "rb").read() == open(restore_target, "rb").read()
 
     # Restore image2 from its previous backup, now at position 1
-    backup.restore("1", restore_target)
+    backup.restore(rev2.uuid, restore_target)
     assert open(source2, "rb").read() == open(restore_target, "rb").read()
 
     # Our original backup is now at position 2. Lets restore that again.
-    backup.restore("2", restore_target)
+    backup.restore(rev1.uuid, restore_target)
     assert open(source1, "rb").read() == open(restore_target, "rb").read()
 
     # Backup third state
     backup.source.filename = source3
-    backup.backup({"test"}, True)
+    rev4 = Revision.create(backup, {"test"}, log)
+    backup.backup(rev4.uuid)
     assert len(backup.history) == 4
 
     # Restore image3 from the most curent state
-    backup.restore("0", restore_target)
+    backup.restore(rev4.uuid, restore_target)
     assert open(source3, "rb").read() == open(restore_target, "rb").read()
 
     # Restore image2 from position 1 and 2
-    backup.restore("1", restore_target)
+    backup.restore(rev3.uuid, restore_target)
     assert open(source2, "rb").read() == open(restore_target, "rb").read()
 
-    backup.restore("2", restore_target)
+    backup.restore(rev2.uuid, restore_target)
     assert open(source2, "rb").read() == open(restore_target, "rb").read()
 
     # Restore image1 from position 3
-    backup.restore("3", restore_target)
+    backup.restore(rev1.uuid, restore_target)
     assert open(source1, "rb").read() == open(restore_target, "rb").read()
 
 

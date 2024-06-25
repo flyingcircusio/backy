@@ -1,8 +1,0 @@
----
-schedule:
-    daily:
-        interval: 1d
-        keep: 7
-source:
-    type: file
-    filename: input-file

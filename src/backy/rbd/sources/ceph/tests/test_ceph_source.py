@@ -8,11 +8,10 @@ from unittest import mock
 import pytest
 
 import backy.utils
-from backy.backends.chunked import ChunkedFileBackend
-from backy.backends.cowfile import COWFileBackend
+from backy.rbd.chunked import ChunkedFileBackend
+from backy.rbd.sources import select_source
+from backy.rbd.sources.ceph.source import CephRBD
 from backy.revision import Revision
-from backy.sources import select_source
-from backy.sources.ceph.source import CephRBD
 
 BLOCK = backy.utils.PUNCH_SIZE
 
@@ -113,7 +112,7 @@ def test_choose_full_without_parent(ceph_rbd_imagesource, backup, log):
     revision = Revision.create(backup, set(), log)
 
     with source(revision) as s:
-        s.backup(revision.backend)
+        s.backup(ChunkedFileBackend(revision, log))
 
     assert not source.diff.called
     assert source.full.called
@@ -136,7 +135,7 @@ def test_choose_full_without_snapshot(ceph_rbd_imagesource, backup, log):
     revision2 = Revision.create(backup, set(), log)
 
     with source(revision2):
-        source.backup(revision2.backend)
+        source.backup(ChunkedFileBackend(revision2, log))
 
     assert not source.diff.called
     assert source.full.called
@@ -162,7 +161,7 @@ def test_choose_diff_with_snapshot(ceph_rbd_imagesource, backup, log):
     revision2 = Revision.create(backup, set(), log)
 
     with source(revision2):
-        source.backup(revision2.backend)
+        source.backup(ChunkedFileBackend(revision2, log))
 
     assert source.diff.called
     assert not source.full.called
@@ -172,7 +171,7 @@ def test_diff_backup(ceph_rbd_imagesource, backup, tmp_path, log):
     """When doing a diff backup between two revisions with snapshot, the RBDDiff needs
     to be called properly, a snapshot for the new revision needs to be created and the
     snapshot of the previous revision needs to be removed after the successfull backup."""
-    from backy.sources.ceph.diff import RBDDiffV1
+    from backy.rbd.sources.ceph.diff import RBDDiffV1
 
     source = ceph_rbd_imagesource
 
@@ -188,7 +187,7 @@ def test_diff_backup(ceph_rbd_imagesource, backup, tmp_path, log):
     )
     revision.timestamp = backy.utils.now() + datetime.timedelta(seconds=1)
 
-    with parent.backend.open("wb") as f:
+    with ChunkedFileBackend(parent, log).open("wb") as f:
         f.write(b"asdf")
 
     backup.scan()
@@ -206,7 +205,9 @@ def test_diff_backup(ceph_rbd_imagesource, backup, tmp_path, log):
             io.BytesIO(SAMPLE_RBDDIFF)
         )
         with source(revision):
-            source.diff(revision.backend, revision.get_parent())
+            source.diff(
+                ChunkedFileBackend(revision, log), revision.get_parent()
+            )
             backup.history.append(revision)
         export.assert_called_with(
             "test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802",
@@ -231,7 +232,7 @@ def test_full_backup(ceph_rbd_imagesource, backup, tmp_path, log):
 
     with mock.patch("backy.sources.ceph.rbd.RBDClient.export") as export:
         export.return_value = io.BytesIO(b"Han likes Leia.")
-        backend = revision.backend
+        backend = ChunkedFileBackend(revision, log)
         with source(revision):
             source.full(backend)
         export.assert_called_with("test/foo@backy-a0")
@@ -250,7 +251,7 @@ def test_full_backup(ceph_rbd_imagesource, backup, tmp_path, log):
 
     with mock.patch("backy.sources.ceph.rbd.RBDClient.export") as export:
         export.return_value = io.BytesIO(b"Han loves Leia.")
-        backend = revision2.backend
+        backend = ChunkedFileBackend(revision2, log)
         with source(revision2):
             source.full(backend)
 
@@ -283,13 +284,14 @@ def test_full_backup_integrates_changes(
 
     # check fidelity
     for content, rev in [(content0, rev0), (content1, rev1)]:
+        backend = ChunkedFileBackend(rev, log)
         with mock.patch("backy.sources.ceph.rbd.RBDClient.export") as export:
             export.return_value = io.BytesIO(content)
             with source(rev):
-                source.full(rev.backend)
+                source.full(backend)
             export.assert_called_with("test/foo@backy-{}".format(rev.uuid))
 
-        with rev.backend.open("rb") as f:
+        with backend.open("rb") as f:
             assert content == f.read()
 
 
@@ -307,7 +309,7 @@ def test_verify_fail(backup, tmp_path, ceph_rbd_imagesource, log):
     with open(rbd_source, "w") as f:
         f.write("Han likes Leia.")
 
-    backend = revision.backend
+    backend = ChunkedFileBackend(revision, log)
     with backend.open("wb") as f:
         f.write(b"foobar")
     # The backend has false data, so this needs to be detected.
@@ -331,9 +333,10 @@ def test_verify(ceph_rbd_imagesource, backup, tmp_path, log):
         f.write(b"Han likes Leia.")
     source.rbd.unmap(rbd_source)
 
-    with revision.backend.open("wb") as f:
+    backend = ChunkedFileBackend(revision, log)
+    with backend.open("wb") as f:
         f.write(b"Han likes Leia.")
         f.flush()
 
     with source(revision):
-        assert source.verify(revision.backend)
+        assert source.verify(backend)

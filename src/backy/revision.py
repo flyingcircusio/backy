@@ -1,18 +1,16 @@
 import datetime
 from enum import Enum
 from pathlib import Path
-from typing import IO, TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Optional
 
 import shortuuid
 import yaml
 from structlog.stdlib import BoundLogger
 
 from . import utils
-from .backends import select_backend
 from .utils import SafeFile
 
 if TYPE_CHECKING:
-    from .backends import BackyBackend
     from .backup import Backup
 
 
@@ -92,8 +90,6 @@ class Revision(object):
         r.server = metadata.get("server", "")
         # Assume trusted by default to support migration
         r.trust = Trust(metadata.get("trust", Trust.TRUSTED.value))
-        # If the metadata does not show the backend type, then it's cowfile.
-        r.backend_type = metadata.get("backend_type", "cowfile")
         return r
 
     @property

@@ -4,9 +4,9 @@ import random
 import lzo
 import pytest
 
-from backy.backends.chunked.chunk import Chunk, InconsistentHash
-from backy.backends.chunked.file import File
-from backy.backends.chunked.store import Store
+from backy.rbd.chunked.chunk import Chunk, InconsistentHash
+from backy.rbd.chunked.file import File
+from backy.rbd.chunked.store import Store
 
 
 def test_simple_open_write_read_seek(tmp_path, log):

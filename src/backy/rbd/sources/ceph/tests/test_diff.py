@@ -5,7 +5,7 @@ import struct
 
 import pytest
 
-from backy.sources.ceph.diff import (
+from backy.rbd.sources.ceph.diff import (
     Data,
     FromSnap,
     RBDDiffV1,

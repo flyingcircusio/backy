@@ -2,7 +2,7 @@ import struct
 from collections import namedtuple
 from typing import IO, Optional
 
-from backy.fallocate import punch_hole
+from backy.utils import punch_hole
 
 
 def unpack_from(fmt, f):

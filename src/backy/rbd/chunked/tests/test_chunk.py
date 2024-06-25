@@ -3,9 +3,9 @@ from unittest.mock import Mock
 import lzo
 import pytest
 
-from backy.backends.chunked.chunk import Chunk, InconsistentHash, hash
-from backy.backends.chunked.file import File
-from backy.backends.chunked.store import Store
+from backy.rbd.chunked.chunk import Chunk, InconsistentHash, hash
+from backy.rbd.chunked.file import File
+from backy.rbd.chunked.store import Store
 
 SPACE_CHUNK = b" " * Chunk.CHUNK_SIZE
 SPACE_CHUNK_HASH = "c01b5d75bfe6a1fa5bca6e492c5ab09a"

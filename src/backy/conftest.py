@@ -1,8 +1,6 @@
 import datetime
-import json
 import os
 import random
-import shutil
 from unittest import mock
 from zoneinfo import ZoneInfo
 
@@ -11,11 +9,8 @@ import structlog
 
 import backy.backup
 import backy.logging
-import backy.main
 import backy.schedule
 from backy import utils
-
-fixtures = os.path.dirname(__file__) + "/tests/samples"
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -24,14 +19,6 @@ def fix_pytest_coverage_465():
         os.environ["COV_CORE_SOURCE"] = os.path.abspath(
             os.environ["COV_CORE_SOURCE"]
         )
-
-
-@pytest.fixture
-def simple_file_config(tmp_path, monkeypatch, log):
-    shutil.copy(fixtures + "/simple_file/config", str(tmp_path))
-    monkeypatch.chdir(tmp_path)
-    b = backy.backup.Backup(tmp_path, log)
-    return b
 
 
 def pytest_assertrepr_compare(op, left, right):
@@ -82,23 +69,6 @@ def schedule():
     schedule = backy.schedule.Schedule()
     schedule.configure({"daily": {"interval": "1d", "keep": 5}})
     return schedule
-
-
-@pytest.fixture(params=["chunked", "cowfile"])
-def backup(request, schedule, tmp_path, log):
-    with open(str(tmp_path / "config"), "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "source": {
-                    "type": "file",
-                    "filename": "test",
-                    "backend": request.param,
-                },
-                "schedule": schedule.to_dict(),
-            },
-            f,
-        )
-    return backy.backup.Backup(tmp_path, log)
 
 
 @pytest.fixture(scope="session")

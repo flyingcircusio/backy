@@ -7,8 +7,7 @@ from typing import Optional, Tuple, TypeAlias
 import lzo
 import mmh3
 
-import backy.backends.chunked
-from backy.backends import BackendException
+import backy.rbd.chunked
 from backy.utils import posix_fadvise
 
 Hash: TypeAlias = str
@@ -17,6 +16,10 @@ chunk_stats = {
     "write_full": 0,
     "write_partial": 0,
 }
+
+
+class BackendException(IOError):
+    pass
 
 
 class InconsistentHash(BackendException):

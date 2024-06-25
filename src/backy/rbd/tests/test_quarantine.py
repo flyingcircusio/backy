@@ -1,4 +1,4 @@
-from backy.quarantine import QuarantineReport, QuarantineStore
+from backy.rbd.quarantine import QuarantineReport, QuarantineStore
 from backy.tests import Ellipsis
 
 

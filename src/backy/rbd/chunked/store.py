@@ -3,7 +3,7 @@ from typing import Iterable, Set
 
 from structlog.stdlib import BoundLogger
 
-from backy.backends.chunked.chunk import Hash
+from backy.rbd.chunked.chunk import Hash
 
 # A chunkstore, is responsible for all revisions for a single backup, for now.
 # We can start having statistics later how much reuse between images is

@@ -6,18 +6,16 @@ from structlog.stdlib import BoundLogger
 from backy.revision import Revision, Trust
 from backy.utils import END, report_status
 
-from .. import BackyBackend
 from .chunk import Chunk, Hash
 from .file import File
 from .store import Store
 
 
-class ChunkedFileBackend(BackyBackend):
+class ChunkedFileBackend:
     # multiple Backends may share the same store
     STORES: dict[Path, Store] = dict()
 
     def __init__(self, revision: Revision, log: BoundLogger):
-        assert revision.backend_type == "chunked"
         self.backup = revision.backup
         self.revision = revision
         path = self.backup.path / "chunks"
@@ -66,10 +64,7 @@ class ChunkedFileBackend(BackyBackend):
 
         # Load verified chunks to avoid duplicate work
         for revision in self.backup.get_history(clean=True, local=True):
-            if (
-                revision.trust != Trust.VERIFIED
-                or revision.backend_type != "chunked"
-            ):
+            if revision.trust != Trust.VERIFIED:
                 continue
             verified_chunks.update(
                 type(self)(revision, self.log).open()._mapping.values()

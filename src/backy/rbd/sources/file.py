@@ -1,11 +1,14 @@
-from typing import Optional
-
 from structlog.stdlib import BoundLogger
 
-import backy.backends
-from backy.quarantine import QuarantineReport
-from backy.revision import Revision, Trust
-from backy.sources import BackySource, BackySourceContext, BackySourceFactory
+import backy.rbd.chunked
+from backy.rbd import RbdBackup
+from backy.rbd.quarantine import QuarantineReport
+from backy.rbd.sources import (
+    BackySource,
+    BackySourceContext,
+    BackySourceFactory,
+)
+from backy.revision import Revision
 from backy.utils import copy, copy_overwrite, files_are_equal
 
 
@@ -13,9 +16,11 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
     filename: str
     cow: bool
     revision: Revision
+    backup: RbdBackup
     log: BoundLogger
 
-    def __init__(self, config: dict, log: BoundLogger):
+    def __init__(self, config: dict, backup: RbdBackup, log: BoundLogger):
+        self.backup = backup
         self.filename = config["filename"]
         self.cow = config.get("cow", True)
         self.log = log.bind(filename=self.filename, subsystem="file")
@@ -41,7 +46,7 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
             return False
         return True
 
-    def backup(self, target: "backy.backends.BackyBackend") -> None:
+    def backup(self, target: "backy.rbd.chunked.ChunkedFileBackend") -> None:
         self.log.debug("backup")
         s = open(self.filename, "rb")
         parent = self.revision.get_parent()
@@ -55,14 +60,14 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
 
         self.revision.stats["bytes_written"] = bytes
 
-    def verify(self, target: "backy.backends.BackyBackend") -> bool:
+    def verify(self, target: "backy.rbd.chunked.ChunkedFileBackend") -> bool:
         self.log.info("verify")
         s = open(self.filename, "rb")
         with s as source, target.open("rb") as target_:
             return files_are_equal(
                 source,
                 target_,
-                report=lambda s, t, o: self.revision.backup.quarantine.add_report(
+                report=lambda s, t, o: self.backup.quarantine.add_report(
                     QuarantineReport(s, t, o)
                 ),
             )

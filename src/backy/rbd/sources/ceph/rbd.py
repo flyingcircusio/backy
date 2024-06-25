@@ -5,10 +5,10 @@ from typing import IO, BinaryIO, Iterator
 
 from structlog.stdlib import BoundLogger
 
-import backy.sources.ceph
+import backy.rbd.sources.ceph
+from backy.ext_deps import RBD
+from backy.utils import CHUNK_SIZE
 
-from ...ext_deps import RBD
-from ...utils import CHUNK_SIZE
 from .diff import RBDDiffV1
 
 
@@ -115,7 +115,7 @@ class RBDClient(object):
     @contextlib.contextmanager
     def export_diff(self, new: str, old: str) -> Iterator[RBDDiffV1]:
         self.log.info("export-diff")
-        if backy.sources.ceph.CEPH_RBD_SUPPORTS_WHOLE_OBJECT_DIFF:
+        if backy.rbd.sources.ceph.CEPH_RBD_SUPPORTS_WHOLE_OBJECT_DIFF:
             EXPORT_WHOLE_OBJECT = ["--whole-object"]
         else:
             EXPORT_WHOLE_OBJECT = []

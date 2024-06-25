@@ -5,18 +5,20 @@ import uuid
 import consulate
 from structlog.stdlib import BoundLogger
 
-from ...utils import TimeOut, TimeOutError
+from backy.utils import TimeOut, TimeOutError
+
+from ... import RbdBackup
 from ..ceph.source import CephRBD
 
 
 class FlyingCircusRootDisk(CephRBD):
     snapshot_timeout = 90
 
-    def __init__(self, config, log: BoundLogger):
+    def __init__(self, config, backup: RbdBackup, log: BoundLogger):
         self.config = config
         self.vm = config["vm"]
         self.consul_acl_token = config.get("consul_acl_token")
-        super(FlyingCircusRootDisk, self).__init__(config, log)
+        super(FlyingCircusRootDisk, self).__init__(config, backup, log)
         self.log = self.log.bind(vm=self.vm, subsystem="fc-disk")
 
     def create_snapshot(self, name: str) -> None:

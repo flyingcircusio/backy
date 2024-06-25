@@ -6,7 +6,7 @@ import time
 from collections import defaultdict
 from typing import Optional, Tuple
 
-import backy.backends.chunked
+import backy.rbd.chunked
 
 from .chunk import Chunk, Hash
 

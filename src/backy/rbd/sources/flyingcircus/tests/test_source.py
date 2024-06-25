@@ -5,8 +5,8 @@ from unittest import mock
 import consulate
 import pytest
 
-from backy.sources import select_source
-from backy.sources.flyingcircus.source import FlyingCircusRootDisk
+from backy.rbd.sources import select_source
+from backy.rbd.sources.flyingcircus.source import FlyingCircusRootDisk
 
 
 @pytest.fixture

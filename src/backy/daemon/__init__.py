@@ -1,5 +1,9 @@
+# -*- encoding: utf-8 -*-
+
+import argparse
 import asyncio
 import datetime
+import errno
 import fcntl
 import os
 import os.path as p
@@ -7,13 +11,22 @@ import signal
 import sys
 import time
 from pathlib import Path
-from typing import IO, List, Optional, Pattern, TypedDict
+from typing import IO, List, Literal, Optional, Pattern, TypedDict
 
 import aiofiles.os as aos
 import aioshutil
+import humanize
+import structlog
+import tzlocal
 import yaml
+from aiohttp import ClientConnectionError
+from rich import print as rprint
+from rich.table import Column, Table
 from structlog.stdlib import BoundLogger
 
+from backy.utils import format_datetime_local, generate_taskid
+
+from . import logging
 from .api import BackyAPI
 from .backup import Backup
 from .revision import filter_manual_tags
@@ -276,71 +289,12 @@ class BackyDaemon(object):
         self.log.info("stopping-loop")
         self.loop.stop()
 
-    class StatusDict(TypedDict):
-        job: str
-        sla: str
-        sla_overdue: int
-        status: str
-        last_time: Optional[datetime.datetime]
-        last_tags: Optional[str]
-        last_duration: Optional[float]
-        next_time: Optional[datetime.datetime]
-        next_tags: Optional[str]
-        manual_tags: str
-        quarantine_reports: int
-        unsynced_revs: int
-        local_revs: int
-
-    def status(
-        self, filter_re: Optional[Pattern[str]] = None
-    ) -> List[StatusDict]:
-        """Collects status information for all jobs."""
-        result: List["BackyDaemon.StatusDict"] = []
-        for job in list(self.jobs.values()):
-            if filter_re and not filter_re.search(job.name):
-                continue
-            job.backup.scan()
-            manual_tags = set()
-            unsynced_revs = 0
-            history = job.backup.clean_history
-            for rev in history:
-                manual_tags |= filter_manual_tags(rev.tags)
-                if rev.pending_changes:
-                    unsynced_revs += 1
-            result.append(
-                dict(
-                    job=job.name,
-                    sla="OK" if job.sla else "TOO OLD",
-                    sla_overdue=job.sla_overdue,
-                    status=job.status,
-                    last_time=history[-1].timestamp if history else None,
-                    last_tags=(
-                        ",".join(job.schedule.sorted_tags(history[-1].tags))
-                        if history
-                        else None
-                    ),
-                    last_duration=(
-                        history[-1].stats.get("duration", 0)
-                        if history
-                        else None
-                    ),
-                    next_time=job.next_time,
-                    next_tags=(
-                        ",".join(job.schedule.sorted_tags(job.next_tags))
-                        if job.next_tags
-                        else None
-                    ),
-                    manual_tags=", ".join(manual_tags),
-                    quarantine_reports=len(job.backup.quarantine.report_ids),
-                    unsynced_revs=unsynced_revs,
-                    local_revs=len(
-                        job.backup.get_history(clean=True, local=True)
-                    ),
-                )
-            )
-        return result
-
     async def purge_old_files(self):
+        # This is a safety belt so we do not accidentlly NOT delete old backups
+        # of deleted VMs.
+        # XXX This should likely be implemented as a check to indicate that
+        # we missed a deletion marker and should delete something and not
+        # silently delete it.
         while True:
             try:
                 self.log.info("purge-scanning")
@@ -360,6 +314,8 @@ class BackyDaemon(object):
             await asyncio.sleep(24 * 60 * 60)
 
     async def purge_pending_backups(self):
+        # XXX This isn't to purge "pending backups" but this means
+        # "process pending purges" ...
         while True:
             try:
                 self.log.info("purge-pending-scanning")
@@ -380,11 +336,42 @@ class BackyDaemon(object):
             await asyncio.sleep(24 * 60 * 60)
 
 
-def main(config_file: Path, log: BoundLogger):  # pragma: no cover
+def main():
+    parser = argparse.ArgumentParser(
+        description="Backy daemon - runs the scheduler and API.",
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="verbose output"
+    )
+    parser.add_argument(
+        "-l",
+        "--logfile",
+        default=Path("/var/log/backy.log"),
+        type=Path,
+        help=(
+            "file name to write log output in. "
+            "(default: /var/log/backy.log for `scheduler`, "
+            "ignored for `client`, $backupdir/backy.log otherwise)"
+        ),
+    )
+    parser.add_argument(
+        "-c",
+        "--config",
+        type=Path,
+        default="/etc/backy.conf",
+        help="(default: %(default)s)",
+    )
+    args = parser.parse_args()
+
+    # Logging
+    logging.init_logging(args.verbose, args.logfile)
+    log = structlog.stdlib.get_logger(subsystem="command")
+    log.debug("invoked", args=" ".join(sys.argv))
+
     global daemon
 
     loop = asyncio.get_event_loop()
-    daemon = BackyDaemon(config_file, log)
+    daemon = BackyDaemon(args.config, log)
     daemon.start(loop)
     daemon.api_server()
     daemon.run_forever()

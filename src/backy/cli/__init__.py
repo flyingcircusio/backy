@@ -17,10 +17,10 @@ from rich.table import Column, Table
 from structlog.stdlib import BoundLogger
 
 import backy.daemon
+from backy import logging
+from backy.backup import Backup, RestoreBackend
 from backy.utils import format_datetime_local, generate_taskid
 
-from . import logging
-from .backup import Backup, RestoreBackend
 from .client import APIClient, CLIClient
 
 
@@ -242,33 +242,25 @@ class Command(object):
         return int(not success)
 
     def expire(self) -> None:
+        # XXX needs to update from remote API peers first (pull)
         b = backy.backup.Backup(self.path, self.log)
         b.expire()
         b.warn_pending_changes()
 
-    def push(self, config: Path) -> int:
-        d = backy.daemon.BackyDaemon(config, self.log)
-        d._read_config()
-        b = backy.backup.Backup(self.path, self.log)
-        errors = asyncio.run(b.push_metadata(d.peers, self.taskid))
-        return int(bool(errors))
-
-    def pull(self, config: Path) -> int:
-        d = backy.daemon.BackyDaemon(config, self.log)
-        d._read_config()
-        b = backy.backup.Backup(self.path, self.log)
-        errors = asyncio.run(b.pull_metadata(d.peers, self.taskid))
-        return int(bool(errors))
-
 
 def setup_argparser():
+    return parser, client
+
+
+def main():
     parser = argparse.ArgumentParser(
-        description="Backup and restore for block devices.",
+        description="Backy command line client.",
     )
 
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="verbose output"
     )
+
     parser.add_argument(
         "-l",
         "--logfile",
@@ -544,69 +536,14 @@ def setup_argparser():
     )
     p.set_defaults(func="expire")
 
-    # PUSH
-    p = subparsers.add_parser(
-        "push",
-        help="Push pending changes to remote servers",
-    )
-    p.add_argument(
-        "-c",
-        "--config",
-        type=Path,
-        default="/etc/backy.conf",
-        help="(default: %(default)s)",
-    )
-    p.set_defaults(func="push")
-
-    # PULL
-    p = subparsers.add_parser(
-        "pull",
-        help="Push pending changes to remote servers",
-    )
-    p.add_argument(
-        "-c",
-        "--config",
-        type=Path,
-        default="/etc/backy.conf",
-        help="(default: %(default)s)",
-    )
-    p.set_defaults(func="pull")
-
-    return parser, client
-
-
-def main():
-    parser, client_parser = setup_argparser()
-    args = parser.parse_args()
-
     if not hasattr(args, "func"):
         parser.print_usage()
         sys.exit(0)
-    if args.func == "client" and not hasattr(args, "apifunc"):
-        client_parser.print_usage()
-        sys.exit(0)
-
-    default_logfile: Optional[Path]
-    match args.func:
-        case "scheduler":
-            default_logfile = Path("/var/log/backy.log")
-        case "client":
-            default_logfile = None
-        case _:
-            default_logfile = args.backupdir / "backy.log"
-
-    match (args.func, vars(args).get("apifunc")):
-        case ("scheduler", _):
-            default_job_name = "-"
-        case ("client", "check"):
-            default_job_name = "-"
-        case _:
-            default_job_name = ""
 
     # Logging
     logging.init_logging(
         args.verbose,
-        args.logfile or default_logfile,
+        args.logfile,
         defaults={"job_name": default_job_name, "taskid": args.taskid},
     )
     log = structlog.stdlib.get_logger(subsystem="command")

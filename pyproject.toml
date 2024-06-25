@@ -76,7 +76,10 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-backy = "backy.main:main"
+backy = "backy.cli:main"
+backyd = "backy.daemon:main"
+backy-rbd = "backy.rbd:main"
+backy-s3 = "backy.s3:main"
 
 [[tool.mypy.overrides]]
 module = "backy.*"

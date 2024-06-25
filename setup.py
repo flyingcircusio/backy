@@ -71,10 +71,6 @@ setup(
             "pytest-timeout",
         ],
     },
-    entry_points="""
-        [console_scripts]
-            backy = backy.main:main
-    """,
     author=(
         "Christian Theune <ct@flyingcircus.io>, "
         "Christian Kauhaus <kc@flyingcircus.io>, "
@@ -97,11 +93,7 @@ Programming Language :: Python :: 3.7
 Programming Language :: Python :: 3.8
 Programming Language :: Python :: 3.9
 Topic :: System :: Archiving :: Backup
-"""[
-        :-1
-    ].split(
-        "\n"
-    ),
+"""[:-1].split("\n"),
     description=__doc__.strip(),
     long_description=long_desc(),
     packages=find_packages("src"),

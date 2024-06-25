@@ -20,155 +20,54 @@ if TYPE_CHECKING:
     from backy.daemon import BackyDaemon
 
 
-class APIClientManager:
-    connector: TCPConnector
-    peers: dict[str, dict]
-    clients: dict[str, "APIClient"]
-    taskid: str
-    log: BoundLogger
-
-    def __init__(self, peers: Dict[str, dict], taskid: str, log: BoundLogger):
-        self.connector = TCPConnector()
-        self.peers = peers
-        self.clients = dict()
-        self.taskid = taskid
-        self.log = log.bind(subsystem="APIClientManager")
-
-    def __getitem__(self, name: str) -> "APIClient":
-        if name and name not in self.clients:
-            self.clients[name] = APIClient.from_conf(
-                name, self.peers[name], self.taskid, self.log, self.connector
+# XXX this is partially duplicated in the daemon
+def status(self, filter_re: Optional[Pattern[str]] = None) -> List[StatusDict]:
+    """Collects status information for all jobs."""
+    # XXX with a database backend, we can evaluate this in live actually
+    # so this should move to the CLI client
+    result: List["BackyDaemon.StatusDict"] = []
+    for job in list(self.jobs.values()):
+        if filter_re and not filter_re.search(job.name):
+            continue
+        job.backup.scan()
+        manual_tags = set()
+        unsynced_revs = 0
+        history = job.backup.clean_history
+        for rev in history:
+            manual_tags |= filter_manual_tags(rev.tags)
+            if rev.pending_changes:
+                unsynced_revs += 1
+        result.append(
+            dict(
+                job=job.name,
+                sla="OK" if job.sla else "TOO OLD",
+                sla_overdue=job.sla_overdue,
+                status=job.status,
+                last_time=history[-1].timestamp if history else None,
+                last_tags=(
+                    ",".join(job.schedule.sorted_tags(history[-1].tags))
+                    if history
+                    else None
+                ),
+                last_duration=(
+                    history[-1].stats.get("duration", 0) if history else None
+                ),
+                next_time=job.next_time,
+                next_tags=(
+                    ",".join(job.schedule.sorted_tags(job.next_tags))
+                    if job.next_tags
+                    else None
+                ),
+                manual_tags=", ".join(manual_tags),
+                quarantine_reports=len(job.backup.quarantine.report_ids),
+                unsynced_revs=unsynced_revs,
+                local_revs=len(job.backup.get_history(clean=True, local=True)),
             )
-        return self.clients[name]
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.peers)
-
-    async def close(self) -> None:
-        for c in self.clients.values():
-            await c.close()
-        await self.connector.close()
-
-    async def __aenter__(self) -> "APIClientManager":
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.close()
-
-
-class APIClient:
-    log: BoundLogger
-    server_name: str
-    session: aiohttp.ClientSession
-
-    def __init__(
-        self,
-        server_name: str,
-        url: str,
-        token: str,
-        taskid: str,
-        log,
-        connector=None,
-    ):
-        assert get_running_loop().is_running()
-        self.log = log.bind(subsystem="APIClient")
-        self.server_name = server_name
-        self.session = aiohttp.ClientSession(
-            url,
-            headers={hdrs.AUTHORIZATION: "Bearer " + token, "taskid": taskid},
-            raise_for_status=True,
-            timeout=ClientTimeout(30, connect=10),
-            connector=connector,
-            connector_owner=connector is None,
         )
-
-    @classmethod
-    def from_conf(cls, server_name, conf, *args, **kwargs):
-        return cls(
-            server_name,
-            conf["url"],
-            conf["token"],
-            *args,
-            **kwargs,
-        )
-
-    async def fetch_status(
-        self, filter: str = ""
-    ) -> List["BackyDaemon.StatusDict"]:
-        async with self.session.get(
-            "/v1/status", params={"filter": filter}
-        ) as response:
-            jobs = await response.json()
-            for job in jobs:
-                if job["last_time"]:
-                    job["last_time"] = datetime.datetime.fromisoformat(
-                        job["last_time"]
-                    )
-                if job["next_time"]:
-                    job["next_time"] = datetime.datetime.fromisoformat(
-                        job["next_time"]
-                    )
-            return jobs
-
-    async def reload_daemon(self):
-        async with self.session.post(f"/v1/reload") as response:
-            return
-
-    async def get_jobs(self) -> List[dict]:
-        async with self.session.get("/v1/jobs") as response:
-            return await response.json()
-
-    async def run_job(self, name: str):
-        async with self.session.post(f"/v1/jobs/{name}/run") as response:
-            return
-
-    async def list_backups(self) -> List[str]:
-        async with self.session.get("/v1/backups") as response:
-            return await response.json()
-
-    async def run_purge(self, name: str):
-        async with self.session.post(f"/v1/backups/{name}/purge") as response:
-            return
-
-    async def touch_backup(self, name: str):
-        async with self.session.post(f"/v1/backups/{name}/touch") as response:
-            return
-
-    async def get_revs(
-        self, backup: "backy.backup.Backup", only_clean: bool = True
-    ) -> List[Revision]:
-        async with self.session.get(
-            f"/v1/backups/{backup.name}/revs",
-            params={"only_clean": int(only_clean)},
-        ) as response:
-            json = await response.json()
-            revs = [Revision.from_dict(r, backup, self.log) for r in json]
-            for r in revs:
-                r.backend_type = ""
-                r.orig_tags = r.tags
-                r.server = self.server_name
-            return revs
-
-    async def put_tags(self, rev: Revision, autoremove: bool = False):
-        async with self.session.put(
-            f"/v1/backups/{rev.backup.name}/revs/{rev.uuid}/tags",
-            json={"old_tags": list(rev.orig_tags), "new_tags": list(rev.tags)},
-            params={"autoremove": int(autoremove)},
-        ) as response:
-            return
-
-    async def close(self):
-        await self.session.close()
-
-    async def __aenter__(self) -> "APIClient":
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.close()
+    return result
 
 
 class CLIClient:
-    api: APIClient
     log: BoundLogger
 
     def __init__(self, apiclient, log):

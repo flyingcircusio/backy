@@ -162,7 +162,9 @@ class File(object):
         elif whence == io.SEEK_CUR:
             position = position + offset
         else:
-            raise ValueError("`whence` does not support mode {}".format(whence))
+            raise ValueError(
+                "`whence` does not support mode {}".format(whence)
+            )
 
         if position < 0:
             raise ValueError("Can not seek before the beginning of a file.")

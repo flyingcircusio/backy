@@ -43,48 +43,6 @@ class RestoreBackend(Enum):
         return self.value
 
 
-def locked(target=None, mode=None):
-    if mode == "shared":
-        mode = fcntl.LOCK_SH
-    elif mode == "exclusive":
-        mode = fcntl.LOCK_EX | fcntl.LOCK_NB
-    else:
-        raise ValueError("Unknown lock mode '{}'".format(mode))
-
-    def wrap(f):
-        def locked_function(self, *args, skip_lock=False, **kw):
-            if skip_lock:
-                return f(self, *args, **kw)
-            if target in self._lock_fds:
-                raise RuntimeError("Bug: Locking is not re-entrant.")
-            target_path = self.path / target
-            if not target_path.exists():
-                target_path.touch()
-            self._lock_fds[target] = target_path.open()
-            try:
-                fcntl.flock(self._lock_fds[target], mode)
-            except BlockingIOError:
-                self.log.warning(
-                    "lock-no-exclusive",
-                    _fmt_msg="Failed to get exclusive lock for '{function}'.",
-                    function=f.__name__,
-                )
-                raise
-            else:
-                try:
-                    return f(self, *args, **kw)
-                finally:
-                    fcntl.flock(self._lock_fds[target], fcntl.LOCK_UN)
-            finally:
-                self._lock_fds[target].close()
-                del self._lock_fds[target]
-
-        locked_function.__name__ = "locked({}, {})".format(f.__name__, target)
-        return locked_function
-
-    return wrap
-
-
 class RbdBackup(Backup):
     """A backup of a VM.
 
@@ -121,11 +79,15 @@ class RbdBackup(Backup):
 
         self.quarantine = QuarantineStore(self.path, self.log)
 
+    @property
+    def problem_reports(self):
+        return [f"{len(self.quarantine.report_ids)} quarantined blocks"]
+
     #################
     # Making backups
 
-    @locked(target=".backup", mode="exclusive")
-    @locked(target=".purge", mode="shared")
+    @Backup.locked(target=".backup", mode="exclusive")
+    @Backup.locked(target=".purge", mode="shared")
     def backup(self, revision: str) -> bool:
         self.path.joinpath("last").unlink(missing_ok=True)
         self.path.joinpath("last.rev").unlink(missing_ok=True)
@@ -176,14 +138,14 @@ class RbdBackup(Backup):
                 break
         return verified
 
-    @locked(target=".purge", mode="shared")
+    @Backup.locked(target=".purge", mode="shared")
     def verify(self, revision: str) -> None:
         revs = self.find_revisions(revision)
         self.prevent_remote_rev(revs)
         for r in revs:
             r.backend.verify()
 
-    @locked(target=".purge", mode="exclusive")
+    @Backup.locked(target=".purge", mode="exclusive")
     def gc(self) -> None:
         self.local_history[-1].backend.purge()
         self.clear_purge_pending()
@@ -226,7 +188,9 @@ class RbdBackup(Backup):
             return False
         try:
             version = subprocess.check_output(
-                [BACKY_EXTRACT, "--version"], encoding="utf-8", errors="replace"
+                [BACKY_EXTRACT, "--version"],
+                encoding="utf-8",
+                errors="replace",
             )
             if not version.startswith("backy-extract"):
                 log.debug("unknown-version")
@@ -253,7 +217,7 @@ class RbdBackup(Backup):
                 f"backy-extract failed with return code {return_code}. Maybe try `--backend python`?"
             )
 
-    @locked(target=".purge", mode="shared")
+    @Backup.locked(target=".purge", mode="shared")
     def restore_file(self, source: IO, target_name: str) -> None:
         """Bulk-copy from open revision `source` to target file."""
         self.log.debug("restore-file", source=source.name, target=target_name)
@@ -265,7 +229,7 @@ class RbdBackup(Backup):
                 pass
             copy(source, target)
 
-    @locked(target=".purge", mode="shared")
+    @Backup.locked(target=".purge", mode="shared")
     def restore_stdout(self, source: IO) -> None:
         """Emit restore data to stdout (for pipe processing)."""
         self.log.debug("restore-stdout", source=source.name)

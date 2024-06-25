@@ -1,8 +1,9 @@
 import datetime
+import fcntl
 import re
 from math import ceil, floor
 from pathlib import Path
-from typing import IO, List, Literal, Optional, Type
+from typing import List, Literal, Optional, TypedDict
 
 import tzlocal
 import yaml
@@ -21,8 +22,24 @@ from .revision import Revision, Trust, filter_schedule_tags
 from .schedule import Schedule
 
 
+class StatusDict(TypedDict):
+    job: str
+    sla: str
+    sla_overdue: int
+    status: str
+    last_time: Optional[datetime.datetime]
+    last_tags: Optional[str]
+    last_duration: Optional[float]
+    next_time: Optional[datetime.datetime]
+    next_tags: Optional[str]
+    manual_tags: str
+    problem_reports: List[str]
+    unsynced_revs: int
+    local_revs: int
+
+
 class Backup(object):
-    """A backup of a VM."""
+    """A generic backup of some data source."""
 
     path: Path
     config: dict
@@ -50,6 +67,56 @@ class Backup(object):
 
         self.schedule = Schedule()
         self.schedule.configure(self.config["schedule"])
+
+    @property
+    def problem_reports(self) -> list[str]:
+        return []
+
+    # I placed this on the class because this is usually used in conjunction
+    # with the class and improves cohesiveness and readability IMHO.
+    @staticmethod
+    def locked(target=None, mode=None):
+        if mode == "shared":
+            mode = fcntl.LOCK_SH
+        elif mode == "exclusive":
+            mode = fcntl.LOCK_EX | fcntl.LOCK_NB
+        else:
+            raise ValueError("Unknown lock mode '{}'".format(mode))
+
+        def wrap(f):
+            def locked_function(self, *args, skip_lock=False, **kw):
+                if skip_lock:
+                    return f(self, *args, **kw)
+                if target in self._lock_fds:
+                    raise RuntimeError("Bug: Locking is not re-entrant.")
+                target_path = self.path / target
+                if not target_path.exists():
+                    target_path.touch()
+                self._lock_fds[target] = target_path.open()
+                try:
+                    fcntl.flock(self._lock_fds[target], mode)
+                except BlockingIOError:
+                    self.log.warning(
+                        "lock-no-exclusive",
+                        _fmt_msg="Failed to get exclusive lock for '{function}'.",
+                        function=f.__name__,
+                    )
+                    raise
+                else:
+                    try:
+                        return f(self, *args, **kw)
+                    finally:
+                        fcntl.flock(self._lock_fds[target], fcntl.LOCK_UN)
+                finally:
+                    self._lock_fds[target].close()
+                    del self._lock_fds[target]
+
+            locked_function.__name__ = "locked({}, {})".format(
+                f.__name__, target
+            )
+            return locked_function
+
+        return wrap
 
     @property
     def name(self) -> str:
@@ -117,8 +184,10 @@ class Backup(object):
         if missing_tags:
             self.log.error(
                 "unknown-tags",
-                _fmt_msg="The following tags are missing from the schedule: {unknown_tags}\n"
-                "Check the config file, add the `manual:` prefix or disable tag validation (-f)",
+                _fmt_msg="The following tags are missing from the schedule: "
+                "{unknown_tags}\n"
+                "Check the config file, add the `manual:` prefix or disable "
+                "tag validation (-f)",
                 unknown_tags=", ".join(missing_tags),
             )
             raise RuntimeError("Unknown tags")
@@ -129,7 +198,8 @@ class Backup(object):
         if pending:
             self.log.warning(
                 "pending-changes",
-                _fmt_msg="Synchronize with remote server (backy push) or risk loosing changes",
+                _fmt_msg="Synchronize with remote server (backy push) or "
+                "risk loosing changes",
                 revisions=",".join(r.uuid for r in pending),
             )
 
@@ -139,9 +209,11 @@ class Backup(object):
         if remote:
             self.log.error(
                 "remote-revs-disallowed",
-                _fmt_msg="Can not modify trust state of remote revisions locally.\n"
+                _fmt_msg="Can not modify trust state of remote revisions "
+                "locally.\n"
                 "Either include a filter to exclude them (local)\n"
-                "or edit them on the origin server and pull the changes (backy pull)",
+                "or edit them on the origin server and pull the changes "
+                "(backy pull)",
                 revisions=",".join(r.uuid for r in remote),
             )
             raise RuntimeError("Remote revs disallowed")
@@ -326,7 +398,7 @@ class Backup(object):
         try:
             date = datetime.datetime.fromisoformat(spec)
             date = date.replace(tzinfo=date.tzinfo or tzlocal.get_localzone())
-            l = list_get(
+            L = list_get(
                 [i for i, r in enumerate(self.history) if r.timestamp <= date],
                 -1,
                 -1,
@@ -336,11 +408,12 @@ class Backup(object):
                 0,
                 len(self.history),
             )
-            print(spec, l, r)
-            assert (
-                0 <= r - l <= 1
-            ), "can not index with date if multiple revision have the same timestamp"
-            return (l + r) / 2.0
+            print(spec, L, r)
+            assert 0 <= r - L <= 1, (
+                "can not index with date if multiple revision have the same "
+                "timestamp"
+            )
+            return (L + r) / 2.0
         except ValueError:
             return None
 

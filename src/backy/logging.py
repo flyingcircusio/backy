@@ -118,7 +118,9 @@ class MultiOptimisticLogger:
 
 
 def prefix(prefix, line):
-    return "{}>\t".format(prefix) + line.replace("\n", "\n{}>\t".format(prefix))
+    return "{}>\t".format(prefix) + line.replace(
+        "\n", "\n{}>\t".format(prefix)
+    )
 
 
 class ConsoleFileRenderer:
@@ -143,7 +145,9 @@ class ConsoleFileRenderer:
         self.min_level = self.LEVELS.index(min_level.lower())
         if colorama is None:
             print(
-                _MISSING.format(who=self.__class__.__name__, package="colorama")
+                _MISSING.format(
+                    who=self.__class__.__name__, package="colorama"
+                )
             )
         if COLORIZED_TTY_OUTPUT:
             colorama.init()
@@ -212,10 +216,13 @@ class ConsoleFileRenderer:
         level = event_dict.pop("level", None)
         if level is not None:
             write(
-                self._level_to_color[level] + level[0].upper() + RESET_ALL + " "
+                self._level_to_color[level]
+                + level[0].upper()
+                + RESET_ALL
+                + " "
             )
 
-        job_name = event_dict.pop("job_name", "")
+        job_name = event_dict.pop("job_name", "-")
         sub_taskid = event_dict.pop("sub_taskid", None)
         if sub_taskid:
             job_name += f"[{sub_taskid}]"
@@ -358,7 +365,6 @@ def init_logging(
     logfile: Optional[Path] = None,
     defaults: Optional[dict] = None,
 ):
-
     console_file_renderer = ConsoleFileRenderer(
         min_level="trace" if verbose else "info",
     )

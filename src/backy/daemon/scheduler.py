@@ -5,26 +5,29 @@ import hashlib
 import os
 import random
 import subprocess
+from collections import defaultdict
 from datetime import timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Optional, Set
+from typing import TYPE_CHECKING, List, Literal, Optional, Set
 
 import yaml
-from aiohttp import ClientError
+from aiohttp import ClientConnectionError, ClientError, ClientResponseError
+from aiohttp.web_exceptions import HTTPForbidden, HTTPNotFound
 from structlog.stdlib import BoundLogger
 
 import backy.utils
-
-from .backup import Backup
-from .client import APIClientManager
-from .ext_deps import BACKY_CMD
-from .schedule import Schedule
-from .utils import (
+from backy.backup import Backup
+from backy.ext_deps import BACKY_CMD
+from backy.revision import Revision
+from backy.schedule import Schedule
+from backy.utils import (
     SafeFile,
     format_datetime_local,
     generate_taskid,
     time_or_event,
 )
+
+from .api import Client, ClientManager
 
 if TYPE_CHECKING:
     from backy.daemon import BackyDaemon
@@ -141,20 +144,25 @@ class Job(object):
     async def _wait_for_leader(self, next_time: datetime.datetime) -> bool:
         api = None
         try:
-            api = APIClientManager(self.daemon.peers, self.taskid, self.log)
+            api = ClientManager(self.daemon.peers, self.taskid, self.log)
             statuses = await asyncio.gather(
-                *[api[server].fetch_status(f"^{self.name}$") for server in api],
+                *[
+                    api[server].fetch_status(f"^{self.name}$")
+                    for server in api
+                ],
                 return_exceptions=True,
             )
             leader = None
             leader_revs = len(self.backup.get_history(clean=True, local=True))
-            leader_status: "BackyDaemon.StatusDict"
+            leader_status: "backy.backup.StatusDict"
             self.log.info("local-revs", local_revs=leader_revs)
             for server, status in zip(api, statuses):
                 log = self.log.bind(server=server)
                 if isinstance(status, BaseException):
                     log.info(
-                        "server-unavailable", exc_info=status, exc_style="short"
+                        "server-unavailable",
+                        exc_info=status,
+                        exc_style="short",
                     )
                     continue
                 num_remote_revs = status[0]["local_revs"]
@@ -226,7 +234,9 @@ class Job(object):
         self.log.debug("loop-started")
         while True:
             self.taskid = generate_taskid()
-            self.log = self.log.bind(job_name=self.name, sub_taskid=self.taskid)
+            self.log = self.log.bind(
+                job_name=self.name, sub_taskid=self.taskid
+            )
 
             self.backup = Backup(self.path, self.log)
 
@@ -304,74 +314,6 @@ class Job(object):
                 self.errors = 0
                 self.backoff = 0
                 self.update_status("finished")
-
-    async def pull_metadata(self) -> None:
-        self.log.info("pull-metadata-started")
-        proc = await asyncio.create_subprocess_exec(
-            BACKY_CMD,
-            "-t",
-            self.taskid,
-            "-b",
-            self.path,
-            "-l",
-            self.logfile,
-            "pull",
-            "-c",
-            self.daemon.config_file,
-            close_fds=True,
-            start_new_session=True,  # Avoid signal propagation like Ctrl-C
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        try:
-            return_code = await proc.wait()
-            self.log.info(
-                "pull-metadata-finished",
-                return_code=return_code,
-                subprocess_pid=proc.pid,
-            )
-        except asyncio.CancelledError:
-            self.log.warning("pull-metadata-cancelled")
-            try:
-                proc.terminate()
-            except ProcessLookupError:
-                pass
-            raise
-
-    async def push_metadata(self) -> None:
-        self.log.info("push-metadata-started")
-        proc = await asyncio.create_subprocess_exec(
-            BACKY_CMD,
-            "-t",
-            self.taskid,
-            "-b",
-            self.path,
-            "-l",
-            self.logfile,
-            "push",
-            "-c",
-            self.daemon.config_file,
-            close_fds=True,
-            start_new_session=True,  # Avoid signal propagation like Ctrl-C
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        try:
-            return_code = await proc.wait()
-            self.log.info(
-                "push-metadata-finished",
-                return_code=return_code,
-                subprocess_pid=proc.pid,
-            )
-        except asyncio.CancelledError:
-            self.log.warning("push-metadata-cancelled")
-            try:
-                proc.terminate()
-            except ProcessLookupError:
-                pass
-            raise
 
     async def run_backup(self, tags: Set[str]) -> None:
         self.log.info("backup-started", tags=", ".join(tags))
@@ -550,16 +492,16 @@ class Job(object):
             self._task = None
             self.update_status("")
 
-    @locked(target=".backup", mode="exclusive")
+    @Backup.locked(target=".backup", mode="exclusive")
     async def push_metadata(self, peers, taskid: str) -> int:
         grouped = defaultdict(list)
-        for r in self.clean_history:
+        for r in self.backup.clean_history:
             if r.pending_changes:
                 grouped[r.server].append(r)
         self.log.info(
-            "push-start", changes=sum(len(l) for l in grouped.values())
+            "push-start", changes=sum(len(L) for L in grouped.values())
         )
-        async with APIClientManager(peers, taskid, self.log) as apis:
+        async with ClientManager(peers, taskid, self.log) as apis:
             errors = await asyncio.gather(
                 *[
                     self._push_metadata(apis[server], grouped[server])
@@ -569,9 +511,7 @@ class Job(object):
         self.log.info("push-end", errors=sum(errors))
         return sum(errors)
 
-    async def _push_metadata(
-        self, api: APIClient, revs: List[Revision]
-    ) -> bool:
+    async def _push_metadata(self, api: Client, revs: List[Revision]) -> bool:
         purge_required = False
         error = False
         for r in revs:
@@ -618,10 +558,10 @@ class Job(object):
                 error = True
         return error
 
-    @locked(target=".backup", mode="exclusive")
+    @Backup.locked(target=".backup", mode="exclusive")
     async def pull_metadata(self, peers: dict, taskid: str) -> int:
         async def remove_dead_peer():
-            for r in list(self.history):
+            for r in list(self.backup.history):
                 if r.server and r.server not in peers:
                     self.log.info(
                         "pull-removing-dead-peer",
@@ -632,7 +572,7 @@ class Job(object):
             return False
 
         self.log.info("pull-start")
-        async with APIClientManager(peers, taskid, self.log) as apis:
+        async with ClientManager(peers, taskid, self.log) as apis:
             errors = await asyncio.gather(
                 remove_dead_peer(),
                 *[self._pull_metadata(apis[server]) for server in apis],
@@ -640,7 +580,7 @@ class Job(object):
         self.log.info("pull-end", errors=sum(errors))
         return sum(errors)
 
-    async def _pull_metadata(self, api: APIClient) -> bool:
+    async def _pull_metadata(self, api: Client) -> bool:
         error = False
         log = self.log.bind(server=api.server_name)
         try:
@@ -666,16 +606,16 @@ class Job(object):
             remote_revs = []
 
         local_uuids = {
-            r.uuid for r in self.history if r.server == api.server_name
+            r.uuid for r in self.backup.history if r.server == api.server_name
         }
         remote_uuids = {r.uuid for r in remote_revs}
         for uuid in local_uuids - remote_uuids:
             log.warning("pull-removing-unknown-rev", rev_uuid=uuid)
-            self.find_by_uuid(uuid).remove(force=True)
+            self.backup.find_by_uuid(uuid).remove(force=True)
 
         for r in remote_revs:
             if r.uuid in local_uuids:
-                if r.to_dict() == self.find_by_uuid(r.uuid).to_dict():
+                if r.to_dict() == self.backup.find_by_uuid(r.uuid).to_dict():
                     continue
                 log.debug("pull-updating-rev", rev_uid=r.uuid)
             else:

@@ -1,10 +1,11 @@
 import datetime
 import re
+from asyncio import get_running_loop
 from json import JSONEncoder
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Tuple
 
-from aiohttp import hdrs, web
+import aiohttp
+from aiohttp import ClientTimeout, TCPConnector, hdrs, web
 from aiohttp.web_exceptions import (
     HTTPAccepted,
     HTTPBadRequest,
@@ -18,10 +19,12 @@ from aiohttp.web_middlewares import middleware
 from aiohttp.web_runner import AppRunner, TCPSite
 from structlog.stdlib import BoundLogger
 
-from backy.backup import Backup
+import backy.backup
+from backy.backup import Backup, StatusDict
 from backy.revision import Revision
-from backy.scheduler import Job
 from backy.utils import generate_taskid
+
+from .scheduler import Job
 
 if TYPE_CHECKING:
     from backy.daemon import BackyDaemon
@@ -37,6 +40,12 @@ class BackyJSONEncoder(JSONEncoder):
             super().default(o)
 
 
+def to_json(response: Any) -> aiohttp.web.StreamResponse:
+    if response is None:
+        raise web.HTTPNoContent()
+    return web.json_response(response, dumps=BackyJSONEncoder().encode)
+
+
 class BackyAPI:
     daemon: "BackyDaemon"
     sites: dict[Tuple[str, int], TCPSite]
@@ -49,7 +58,7 @@ class BackyAPI:
         self.daemon = daemon
         self.sites = {}
         self.app = web.Application(
-            middlewares=[self.log_conn, self.require_auth, self.to_json]
+            middlewares=[self.log_conn, self.require_auth]
         )
         self.app.add_routes(
             [
@@ -136,35 +145,30 @@ class BackyAPI:
         request["log"] = request["log"].bind(job_name="~" + client)
         return await handler(request)
 
-    @middleware
-    async def to_json(self, request: web.Request, handler):
-        resp = await handler(request)
-        if isinstance(resp, web.Response):
-            return resp
-        elif resp is None:
-            raise web.HTTPNoContent()
-        else:
-            return web.json_response(resp, dumps=BackyJSONEncoder().encode)
-
     async def get_status(
         self, request: web.Request
-    ) -> List["BackyDaemon.StatusDict"]:
+    ) -> aiohttp.web.StreamResponse:
         filter = request.query.get("filter", None)
         request["log"].info("get-status", filter=filter)
         if filter:
-            filter = re.compile(filter)
-        return self.daemon.status(filter)
+            filter_re = re.compile(filter)
+        return to_json(self.daemon.status(filter_re))
 
     async def reload_daemon(self, request: web.Request):
         request["log"].info("reload-daemon")
         self.daemon.reload()
+        return to_json(None)
 
-    async def get_jobs(self, request: web.Request) -> List[Job]:
+    async def get_jobs(self, request: web.Request):
         request["log"].info("get-jobs")
-        return list(self.daemon.jobs.values())
+        return to_json(list(self.daemon.jobs.values()))
 
     async def get_job(self, request: web.Request) -> Job:
         name = request.match_info.get("job_name")
+        if name is None:
+            request["log"].info("empty-job")
+            raise HTTPNotFound()
+
         request["log"].info("get-job", name=name)
         try:
             return self.daemon.jobs[name]
@@ -178,9 +182,9 @@ class BackyAPI:
         j.run_immediately.set()
         raise HTTPAccepted()
 
-    async def list_backups(self, request: web.Request) -> List[str]:
+    async def list_backups(self, request: web.Request):
         request["log"].info("list-backups")
-        return list(self.daemon.dead_backups.keys())
+        return to_json(list(self.daemon.dead_backups.keys()))
 
     async def get_backup(
         self, request: web.Request, allow_active: bool
@@ -207,13 +211,16 @@ class BackyAPI:
         backup = await self.get_backup(request, True)
         request["log"].info("touch-backup", name=backup.name)
         backup.touch()
+        raise web.HTTPNoContent()
 
-    async def get_revs(self, request: web.Request) -> List[Revision]:
+    async def get_revs(self, request: web.Request):
         backup = await self.get_backup(request, True)
         request["log"].info("get-revs", name=backup.name)
         backup.scan()
-        return backup.get_history(
-            local=True, clean=request.query.get("only_clean", "") == "1"
+        return to_json(
+            backup.get_history(
+                local=True, clean=request.query.get("only_clean", "") == "1"
+            )
         )
 
     async def put_tags(self, request: web.Request):
@@ -252,3 +259,149 @@ class BackyAPI:
         except BlockingIOError:
             request["log"].info("put-tags-locked")
             raise HTTPServiceUnavailable()
+        raise web.HTTPNoContent()
+
+
+class ClientManager:
+    connector: TCPConnector
+    peers: dict[str, dict]
+    clients: dict[str, "Client"]
+    taskid: str
+    log: BoundLogger
+
+    def __init__(self, peers: Dict[str, dict], taskid: str, log: BoundLogger):
+        self.connector = TCPConnector()
+        self.peers = peers
+        self.clients = dict()
+        self.taskid = taskid
+        self.log = log.bind(subsystem="ClientManager")
+
+    def __getitem__(self, name: str) -> "Client":
+        if name and name not in self.clients:
+            self.clients[name] = Client.from_conf(
+                name, self.peers[name], self.taskid, self.log, self.connector
+            )
+        return self.clients[name]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.peers)
+
+    async def close(self) -> None:
+        for c in self.clients.values():
+            await c.close()
+        await self.connector.close()
+
+    async def __aenter__(self) -> "ClientManager":
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+
+
+class Client:
+    log: BoundLogger
+    server_name: str
+    session: aiohttp.ClientSession
+
+    def __init__(
+        self,
+        server_name: str,
+        url: str,
+        token: str,
+        taskid: str,
+        log,
+        connector=None,
+    ):
+        assert get_running_loop().is_running()
+        self.log = log.bind(subsystem="APIClient")
+        self.server_name = server_name
+        self.session = aiohttp.ClientSession(
+            url,
+            headers={hdrs.AUTHORIZATION: "Bearer " + token, "taskid": taskid},
+            raise_for_status=True,
+            timeout=ClientTimeout(30, connect=10),
+            connector=connector,
+            connector_owner=connector is None,
+        )
+
+    @classmethod
+    def from_conf(cls, server_name, conf, *args, **kwargs):
+        return cls(
+            server_name,
+            conf["url"],
+            conf["token"],
+            *args,
+            **kwargs,
+        )
+
+    async def fetch_status(self, filter: str = "") -> List[StatusDict]:
+        async with self.session.get(
+            "/v1/status", params={"filter": filter}
+        ) as response:
+            jobs = await response.json()
+            for job in jobs:
+                if job["last_time"]:
+                    job["last_time"] = datetime.datetime.fromisoformat(
+                        job["last_time"]
+                    )
+                if job["next_time"]:
+                    job["next_time"] = datetime.datetime.fromisoformat(
+                        job["next_time"]
+                    )
+            return jobs
+
+    async def reload_daemon(self):
+        async with self.session.post("/v1/reload"):
+            return
+
+    async def get_jobs(self) -> List[dict]:
+        async with self.session.get("/v1/jobs") as response:
+            return await response.json()
+
+    async def run_job(self, name: str):
+        async with self.session.post(f"/v1/jobs/{name}/run"):
+            return
+
+    async def list_backups(self) -> List[str]:
+        async with self.session.get("/v1/backups") as response:
+            return await response.json()
+
+    async def run_purge(self, name: str):
+        async with self.session.post(f"/v1/backups/{name}/purge"):
+            return
+
+    async def touch_backup(self, name: str):
+        async with self.session.post(f"/v1/backups/{name}/touch"):
+            return
+
+    async def get_revs(
+        self, backup: "backy.backup.Backup", only_clean: bool = True
+    ) -> List[Revision]:
+        async with self.session.get(
+            f"/v1/backups/{backup.name}/revs",
+            params={"only_clean": int(only_clean)},
+        ) as response:
+            json = await response.json()
+            revs = [Revision.from_dict(r, backup, self.log) for r in json]
+            for r in revs:
+                r.backend_type = ""
+                r.orig_tags = r.tags
+                r.server = self.server_name
+            return revs
+
+    async def put_tags(self, rev: Revision, autoremove: bool = False):
+        async with self.session.put(
+            f"/v1/backups/{rev.backup.name}/revs/{rev.uuid}/tags",
+            json={"old_tags": list(rev.orig_tags), "new_tags": list(rev.tags)},
+            params={"autoremove": int(autoremove)},
+        ):
+            return
+
+    async def close(self):
+        await self.session.close()
+
+    async def __aenter__(self) -> "Client":
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()

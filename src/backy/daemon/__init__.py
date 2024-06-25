@@ -2,8 +2,6 @@
 
 import argparse
 import asyncio
-import datetime
-import errno
 import fcntl
 import os
 import os.path as p
@@ -11,28 +9,22 @@ import signal
 import sys
 import time
 from pathlib import Path
-from typing import IO, List, Literal, Optional, Pattern, TypedDict
+from typing import IO, List, Optional, Pattern
 
 import aiofiles.os as aos
 import aioshutil
-import humanize
 import structlog
-import tzlocal
 import yaml
-from aiohttp import ClientConnectionError
-from rich import print as rprint
-from rich.table import Column, Table
 from structlog.stdlib import BoundLogger
 
-from backy.utils import format_datetime_local, generate_taskid
+from backy import logging
+from backy.backup import Backup, StatusDict
+from backy.revision import filter_manual_tags
+from backy.schedule import Schedule
+from backy.utils import has_recent_changes, is_dir_no_symlink
 
-from . import logging
 from .api import BackyAPI
-from .backup import Backup
-from .revision import filter_manual_tags
-from .schedule import Schedule
 from .scheduler import Job
-from .utils import has_recent_changes, is_dir_no_symlink
 
 daemon: "BackyDaemon"
 
@@ -334,6 +326,58 @@ class BackyDaemon(object):
             except Exception:
                 self.log.exception("purge-pending")
             await asyncio.sleep(24 * 60 * 60)
+
+    # XXX this is duplicated in the client
+    def status(
+        self, filter_re: Optional[Pattern[str]] = None
+    ) -> List[StatusDict]:
+        """Collects status information for all jobs."""
+        # XXX with a database backend, we can evaluate this in live actually
+        # so this should move to the CLI client
+        result: List[StatusDict] = []
+        for job in list(self.jobs.values()):
+            if filter_re and not filter_re.search(job.name):
+                continue
+            job.backup.scan()
+            manual_tags = set()
+            unsynced_revs = 0
+            history = job.backup.clean_history
+            for rev in history:
+                manual_tags |= filter_manual_tags(rev.tags)
+                if rev.pending_changes:
+                    unsynced_revs += 1
+            result.append(
+                dict(
+                    job=job.name,
+                    sla="OK" if job.sla else "TOO OLD",
+                    sla_overdue=job.sla_overdue,
+                    status=job.status,
+                    last_time=history[-1].timestamp if history else None,
+                    last_tags=(
+                        ",".join(job.schedule.sorted_tags(history[-1].tags))
+                        if history
+                        else None
+                    ),
+                    last_duration=(
+                        history[-1].stats.get("duration", 0)
+                        if history
+                        else None
+                    ),
+                    next_time=job.next_time,
+                    next_tags=(
+                        ",".join(job.schedule.sorted_tags(job.next_tags))
+                        if job.next_tags
+                        else None
+                    ),
+                    manual_tags=", ".join(manual_tags),
+                    problem_reports=job.backup.problem_reports,
+                    unsynced_revs=unsynced_revs,
+                    local_revs=len(
+                        job.backup.get_history(clean=True, local=True)
+                    ),
+                )
+            )
+        return result
 
 
 def main():

@@ -21,7 +21,7 @@ import backy.source
 from backy import logging
 
 # XXX invert this dependency
-from backy.rbd.backup import RbdRepository, RestoreBackend
+from backy.rbd.backup import RestoreBackend
 from backy.repository import Repository
 from backy.utils import format_datetime_local, generate_taskid
 
@@ -47,7 +47,7 @@ class Command(object):
         return ret
 
     def init(self, type):
-        source = backy.source.KNOWN_SOURCES[type]
+        source = backy.source.factory_by_type(type)
         Repository.init(self.path, self.log, source=source)
 
     def status(self, yaml_: bool, revision: str) -> None:
@@ -343,15 +343,15 @@ def main():
             "working directory."
         ),
     )
-    p.add_argument(
-        "type",
-        choices=list(backy.source.KNOWN_SOURCES),
-        help="Type of the source.",
-    )
 
     subparsers = parser.add_subparsers()
 
     p = subparsers.add_parser("init", help="Create an empty backy repository.")
+    p.add_argument(
+        "type",
+        choices=backy.source.SOURCE_PLUGINS.names,
+        help="Type of the source.",
+    )
     p.set_defaults(func="init")
 
     p = subparsers.add_parser("jobs", help="List status of all known jobs")

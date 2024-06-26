@@ -3,7 +3,6 @@ import errno
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import structlog
 from structlog.stdlib import BoundLogger
@@ -11,17 +10,13 @@ from structlog.stdlib import BoundLogger
 from backy.utils import generate_taskid
 
 from .. import logging
-
-if TYPE_CHECKING:
-    from backy.repository import Repository
+from backy.source import Source
 
 
-class FileSource:
+
+class FileSource(Source):
     type_ = "file"
 
-    @classmethod
-    def init(cls, repository: "Repository", log: BoundLogger):
-        return {"type": cls.type_}
 
 
 def main():

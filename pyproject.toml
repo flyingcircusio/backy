@@ -75,6 +75,11 @@ zest-releaser = "^9.1.1"
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.poetry.plugins.'backy.sources']
+file = 'backy.file:FileSource'
+rbd = 'backy.rbd:RBDSource'
+s3 = 'backy.s3:S3Source'
+
 [tool.poetry.scripts]
 backy = "backy.cli:main"
 backyd = "backy.daemon:main"

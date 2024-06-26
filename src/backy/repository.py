@@ -78,9 +78,9 @@ class Repository(object):
         self.scan()
 
     @classmethod
-    def init(self, path: Path, log: BoundLogger, source: Source):
-        if (path / "config").exists():
-            raise RepositoryNotEmpty(self.path)
+    def init(cls, path: Path, log: BoundLogger, source: Source):
+        if (path / 'config').exists():
+            raise RepositoryNotEmpty(path)
 
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True)
@@ -89,10 +89,10 @@ class Repository(object):
 
         config = {"schedule": {}, "source": source_config}
 
-        with open(self.path / "config", "w") as f:
+        with open(path / 'config', 'w') as f:
             yaml.dump(config, f)
 
-        self.log.info(f"Initialized empty repository in {self.path}")
+        log.info(f"Initialized empty repository in {path}")
 
     @property
     def problem_reports(self) -> list[str]:

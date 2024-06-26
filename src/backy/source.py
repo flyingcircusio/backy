@@ -2,11 +2,12 @@ from pathlib import Path
 from typing import Any
 
 from structlog.stdlib import BoundLogger
+from importlib.metadata import entry_points
 
-from backy.file import FileSource
+SOURCE_PLUGINS = entry_points(group='backy.sources')
 
-# XXX Use plugin discovery here
-KNOWN_SOURCES: dict[str, "Source"] = {s.type_: s for s in [FileSource]}
+def factory_by_type(type_):
+    return SOURCE_PLUGINS[type_].load()
 
 
 class Source:

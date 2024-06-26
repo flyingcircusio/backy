@@ -80,6 +80,7 @@ backy = "backy.cli:main"
 backyd = "backy.daemon:main"
 backy-rbd = "backy.rbd:main"
 backy-s3 = "backy.s3:main"
+backy-file = "backy.file:main"
 
 [[tool.mypy.overrides]]
 module = "backy.*"

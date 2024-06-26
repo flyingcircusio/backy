@@ -6,7 +6,7 @@ from structlog.stdlib import BoundLogger
 import backy.revision
 
 if TYPE_CHECKING:
-    from backy.rbd import RbdBackup
+    from backy.rbd import RbdSource
 
 
 class BackySource(ABC):

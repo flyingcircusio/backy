@@ -18,7 +18,7 @@ import yaml
 from structlog.stdlib import BoundLogger
 
 from backy import logging
-from backy.backup import Backup, StatusDict
+from backy.repository import Repository, StatusDict
 from backy.revision import filter_manual_tags
 from backy.schedule import Schedule
 from backy.utils import has_recent_changes, is_dir_no_symlink
@@ -43,7 +43,7 @@ class BackyDaemon(object):
     config: dict
     schedules: dict[str, Schedule]
     jobs: dict[str, Job]
-    dead_backups: dict[str, Backup]
+    dead_backups: dict[str, Repository]
 
     backup_semaphores: dict[str, asyncio.BoundedSemaphore]
     log: BoundLogger
@@ -142,7 +142,7 @@ class BackyDaemon(object):
             if b.name in self.jobs or not b.is_dir(follow_symlinks=False):
                 continue
             try:
-                self.dead_backups[b.name] = Backup(
+                self.dead_backups[b.name] = Repository(
                     self.base_dir / b.name,
                     self.log.bind(job_name=b.name),
                 )

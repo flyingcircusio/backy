@@ -6,7 +6,7 @@ from functools import partialmethod
 
 import pytest
 
-import backy.backup
+import backy.repository
 from backy import utils
 from backy.revision import Revision
 from backy.tests import Ellipsis
@@ -172,7 +172,7 @@ source:
         )
 
     monkeypatch.setattr(
-        backy.backup.Backup,
+        backy.repository.Repository,
         "backup",
         partialmethod(print_args, return_value=success),
     )
@@ -184,7 +184,7 @@ source:
     assert (
         Ellipsis(
             """\
-(<backy.backup.Backup object at 0x...>, {'manual:test'}, False)
+(<backy.repository.Repository object at 0x...>, {'manual:test'}, False)
 {}
 """
         )

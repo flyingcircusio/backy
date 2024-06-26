@@ -1,4 +1,4 @@
-from backy.rbd import RbdBackup
+from backy.rbd import RbdSource
 from backy.rbd.sources.ceph.source import CephRBD
 
 
@@ -17,7 +17,7 @@ def test_configure_ceph_source(tmp_path, log):
         image: test04
 """
         )
-    backup = RbdBackup(tmp_path, log)
+    backup = RbdSource(tmp_path, log)
     assert isinstance(backup.source, CephRBD)
     assert backup.source.pool == "test"
     assert backup.source.image == "test04"

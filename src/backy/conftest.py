@@ -7,7 +7,6 @@ from zoneinfo import ZoneInfo
 import pytest
 import structlog
 
-import backy.backup
 import backy.logging
 import backy.schedule
 from backy import utils

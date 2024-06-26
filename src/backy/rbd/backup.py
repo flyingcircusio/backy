@@ -1,4 +1,3 @@
-import fcntl
 import os
 import subprocess
 import time
@@ -10,9 +9,10 @@ from structlog.stdlib import BoundLogger
 
 import backy
 
-from ..backup import Backup
 from ..ext_deps import BACKY_EXTRACT
+from ..repository import Repository
 from ..revision import Revision, Trust
+from ..source import Source
 from ..utils import CHUNK_SIZE, copy, posix_fadvise
 from .chunked import ChunkedFileBackend
 from .chunked.chunk import BackendException
@@ -42,7 +42,7 @@ class RestoreBackend(Enum):
         return self.value
 
 
-class RbdBackup(Backup):
+class RbdSource(Source):
     """A backup of a VM.
 
     Provides access to methods to
@@ -85,8 +85,8 @@ class RbdBackup(Backup):
     #################
     # Making backups
 
-    @Backup.locked(target=".backup", mode="exclusive")
-    @Backup.locked(target=".purge", mode="shared")
+    @Repository.locked(target=".backup", mode="exclusive")
+    @Repository.locked(target=".purge", mode="shared")
     def backup(self, revision: str) -> bool:
         new_revision = self.find_by_uuid(revision)
         self.prevent_remote_rev([new_revision])
@@ -139,13 +139,13 @@ class RbdBackup(Backup):
                 break
         return verified
 
-    @Backup.locked(target=".purge", mode="shared")
+    @Repository.locked(target=".purge", mode="shared")
     def verify(self, revision: str) -> None:
         rev = self.find_by_uuid(revision)
         self.prevent_remote_rev([rev])
         ChunkedFileBackend(rev, self.log).verify()
 
-    @Backup.locked(target=".purge", mode="exclusive")
+    @Repository.locked(target=".purge", mode="exclusive")
     def gc(self) -> None:
         ChunkedFileBackend(self.local_history[-1], self.log).purge()
         self.clear_purge_pending()
@@ -214,7 +214,7 @@ class RbdBackup(Backup):
                 f"backy-extract failed with return code {return_code}. Maybe try `--backend python`?"
             )
 
-    @Backup.locked(target=".purge", mode="shared")
+    @Repository.locked(target=".purge", mode="shared")
     def restore_file(self, source: IO, target_name: str) -> None:
         """Bulk-copy from open revision `source` to target file."""
         self.log.debug("restore-file", source=source.name, target=target_name)
@@ -226,7 +226,7 @@ class RbdBackup(Backup):
                 pass
             copy(source, target)
 
-    @Backup.locked(target=".purge", mode="shared")
+    @Repository.locked(target=".purge", mode="shared")
     def restore_stdout(self, source: IO) -> None:
         """Emit restore data to stdout (for pipe processing)."""
         self.log.debug("restore-stdout", source=source.name)

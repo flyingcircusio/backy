@@ -9,7 +9,7 @@ from rich import print as rprint
 from rich.table import Column, Table
 from structlog.stdlib import BoundLogger
 
-from backy.backup import StatusDict
+from backy.repository import StatusDict
 from backy.utils import format_datetime_local
 
 if TYPE_CHECKING:

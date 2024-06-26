@@ -1,10 +1,10 @@
 import argparse
-import asyncio
 import errno
+import os
 import re
 import sys
 from pathlib import Path
-from typing import Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 import humanize
 import structlog
@@ -18,11 +18,14 @@ from structlog.stdlib import BoundLogger
 
 import backy.daemon
 from backy import logging
-from backy.backup import Backup
+from backy.repository import Repository
+
+import backy.source
 
 # XXX invert this dependency
 from backy.rbd.backup import RestoreBackend
 from backy.utils import format_datetime_local, generate_taskid
+
 
 
 class Command(object):
@@ -33,12 +36,24 @@ class Command(object):
     log: BoundLogger
 
     def __init__(self, path: Path, taskid, log: BoundLogger):
-        self.path = path
+        self.path = path.resolve()
         self.taskid = taskid
         self.log = log
 
+    def __call__(self, cmdname: str, args: dict[str, Any]):
+        func = getattr(self, cmdname)
+        ret = func(**args)
+        if not isinstance(ret, int):
+            ret = 0
+        self.log.debug("return-code", code=ret)
+        return ret
+
+    def init(self, type):
+        source = backy.source.KNOWN_SOURCES[type]
+        Repository.init(self.path, self.log, source=source)
+
     def status(self, yaml_: bool, revision: str) -> None:
-        revs = Backup(self.path, self.log).find_revisions(revision)
+        revs = Repository(self.path, self.log).find_revisions(revision)
         if yaml_:
             print(yaml.safe_dump([r.to_dict() for r in revs]))
             return
@@ -166,7 +181,7 @@ class Command(object):
             expect_ = None
         else:
             expect_ = set(t.strip() for t in expect.split(","))
-        b = backy.backup.Backup(self.path, self.log)
+        b = backy.repository.Repository(self.path, self.log)
         success = b.tags(
             action,
             revision,
@@ -180,7 +195,7 @@ class Command(object):
 
     def expire(self) -> None:
         # XXX needs to update from remote API peers first (pull)
-        b = backy.backup.Backup(self.path, self.log)
+        b = backy.repository.Repository(self.path, self.log)
         b.expire()
         b.warn_pending_changes()
 
@@ -315,20 +330,29 @@ def main():
         "-v", "--verbose", action="store_true", help="verbose output"
     )
     parser.add_argument(
-        "-t",
-        "--taskid",
-        default=generate_taskid(),
-        help="id to include in log messages (default: 4 random base32 chars)",
-    )
-    g.add_argument(
         "-c",
         "--config",
         type=Path,
         default="/etc/backy.conf",
         help="(default: %(default)s)",
     )
+    parser.add_argument(
+        "-C",
+        default=".",
+        type=Path,
+        help=(
+            "Run as if backy was started in <path> instead of the current "
+            "working directory."
+        ),
+    )
+    p.add_argument("type",
+        choices=list(backy.source.KNOWN_SOURCES),
+        help="Type of the source.")
 
     subparsers = parser.add_subparsers()
+
+    p = subparsers.add_parser("init", help="Create an empty backy repository.")
+    p.set_defaults(func="init")
 
     p = subparsers.add_parser("jobs", help="List status of all known jobs")
     p.add_argument(
@@ -519,34 +543,27 @@ def main():
         parser.print_usage()
         sys.exit(0)
 
+    task_id = generate_taskid()
+
     # Logging
-    logging.init_logging(
-        args.verbose,
-        args.logfile,
-        defaults={"taskid": args.taskid},
-    )
+
+    logging.init_logging(args.verbose, defaults={"taskid": task_id})
     log = structlog.stdlib.get_logger(subsystem="command")
     log.debug("invoked", args=" ".join(sys.argv))
 
-    command = Command(args.backupdir, args.taskid, log)
-    func = getattr(command, args.func)
+    command = Command(args.C, task_id, log)
+    func = args.func
 
     # Pass over to function
     func_args = dict(args._get_kwargs())
     del func_args["func"]
     del func_args["verbose"]
-    del func_args["backupdir"]
-    del func_args["logfile"]
-    del func_args["taskid"]
+    del func_args["config"]
+    del func_args["C"]
 
     try:
         log.debug("parsed", func=args.func, func_args=func_args)
-        ret = func(**func_args)
-        if isinstance(ret, int):
-            log.debug("return-code", code=ret)
-            sys.exit(ret)
-        log.debug("successful")
-        sys.exit(0)
+        sys.exit(command(func, func_args))
     except Exception:
         log.exception("failed")
         sys.exit(1)

@@ -19,8 +19,8 @@ from aiohttp.web_middlewares import middleware
 from aiohttp.web_runner import AppRunner, TCPSite
 from structlog.stdlib import BoundLogger
 
-import backy.backup
-from backy.backup import Backup, StatusDict
+import backy.repository
+from backy.repository import Repository, StatusDict
 from backy.revision import Revision
 from backy.utils import generate_taskid
 
@@ -187,7 +187,7 @@ class BackyAPI:
 
     async def get_backup(
         self, request: web.Request, allow_active: bool
-    ) -> Backup:
+    ) -> Repository:
         name = request.match_info.get("backup_name")
         request["log"].info("get-backups", name=name)
         if name in self.daemon.dead_backups:
@@ -374,14 +374,14 @@ class Client:
             return
 
     async def get_revs(
-        self, backup: "backy.backup.Backup", only_clean: bool = True
+        self, repository: "backy.repository.Repository", only_clean: bool = True
     ) -> List[Revision]:
         async with self.session.get(
-            f"/v1/backups/{backup.name}/revs",
+            f"/v1/backups/{repository.name}/revs",
             params={"only_clean": int(only_clean)},
         ) as response:
             json = await response.json()
-            revs = [Revision.from_dict(r, backup, self.log) for r in json]
+            revs = [Revision.from_dict(r, repository, self.log) for r in json]
             for r in revs:
                 r.orig_tags = r.tags
                 r.server = self.server_name

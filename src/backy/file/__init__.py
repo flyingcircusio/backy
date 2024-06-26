@@ -1,32 +1,50 @@
 import argparse
 import errno
+import os
 import sys
 from pathlib import Path
+from structlog.stdlib import BoundLogger
 
 import structlog
 
 from backy.utils import generate_taskid
 
 from .. import logging
-from .backup import RbdSource, RestoreBackend
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from backy.repository import Repository
+
+class FileSource:
+    type_ = "file"
+
+    @classmethod
+    def init(cls, repository: Repository, log: BoundLogger):
+        return {'type': self.type_}
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Backup and restore for block devices.",
     )
-
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="verbose output"
     )
     parser.add_argument(
-        "-b",
-        "--backupdir",
+        "-c",
+        "--config",
+        type=Path,
+        default="/etc/backy.conf",
+        help="(default: %(default)s)",
+    )
+    parser.add_argument(
+        "-C",
         default=".",
         type=Path,
         help=(
-            "directory where backups and logs are written to "
-            "(default: %(default)s)"
+            "Run as if backy was started in <path> instead of the current "
+            "working directory."
         ),
     )
     parser.add_argument(
@@ -44,22 +62,14 @@ def main():
         help="Perform a backup",
     )
     p.set_defaults(func="backup")
-    p.add_argument("revision", help="Revision to work on.")
+    p.add_argument("revision", help="Revision to create.")
 
     # RESTORE
     p = subparsers.add_parser(
         "restore",
         help="Restore (a given revision) to a given target",
     )
-    p.add_argument(
-        "--backend",
-        type=RestoreBackend,
-        choices=list(RestoreBackend),
-        default=RestoreBackend.AUTO,
-        dest="restore_backend",
-        help="(default: %(default)s)",
-    )
-    p.add_argument("revision", help="Revision to work on.")
+    p.add_argument("revision", help="Revision to restore.")
     p.add_argument(
         "target",
         metavar="TARGET",
@@ -84,6 +94,8 @@ def main():
 
     args = parser.parse_args()
 
+    os.chdir(args.C)
+
     if not hasattr(args, "func"):
         parser.print_usage()
         sys.exit(0)
@@ -98,7 +110,7 @@ def main():
     log.debug("invoked", args=" ".join(sys.argv))
 
     try:
-        b = RbdSource(args.backupdir, log)
+        b = RbdBackup(args.backupdir, log)
         # XXX scheduler?
         b._clean()
         ret = 0

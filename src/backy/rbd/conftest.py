@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from backy.rbd import RbdBackup
+from backy.rbd import RbdSource
 from backy.revision import Revision
 
 fixtures = os.path.dirname(__file__) + "/tests/samples"
@@ -22,7 +22,7 @@ def rbdbackup(schedule, tmp_path, log):
             },
             f,
         )
-    return RbdBackup(tmp_path, log)
+    return RbdSource(tmp_path, log)
 
 
 def create_rev(rbdbackup, tags):

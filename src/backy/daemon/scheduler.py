@@ -16,7 +16,7 @@ from aiohttp.web_exceptions import HTTPForbidden, HTTPNotFound
 from structlog.stdlib import BoundLogger
 
 import backy.utils
-from backy.backup import Backup
+from backy.repository import Repository
 from backy.ext_deps import BACKY_CMD
 from backy.revision import Revision
 from backy.schedule import Schedule
@@ -41,7 +41,7 @@ class Job(object):
     next_time: Optional[datetime.datetime] = None
     next_tags: Optional[set[str]] = None
     path: Path
-    backup: Backup
+    backup: Repository
     logfile: Path
     last_config: Optional[dict] = None
     daemon: "BackyDaemon"
@@ -154,7 +154,7 @@ class Job(object):
             )
             leader = None
             leader_revs = len(self.backup.get_history(clean=True, local=True))
-            leader_status: "backy.backup.StatusDict"
+            leader_status: "backy.repository.StatusDict"
             self.log.info("local-revs", local_revs=leader_revs)
             for server, status in zip(api, statuses):
                 log = self.log.bind(server=server)
@@ -492,7 +492,7 @@ class Job(object):
             self._task = None
             self.update_status("")
 
-    @Backup.locked(target=".backup", mode="exclusive")
+    @Repository.locked(target=".backup", mode="exclusive")
     async def push_metadata(self, peers, taskid: str) -> int:
         grouped = defaultdict(list)
         for r in self.backup.clean_history:
@@ -558,7 +558,7 @@ class Job(object):
                 error = True
         return error
 
-    @Backup.locked(target=".backup", mode="exclusive")
+    @Repository.locked(target=".backup", mode="exclusive")
     async def pull_metadata(self, peers: dict, taskid: str) -> int:
         async def remove_dead_peer():
             for r in list(self.backup.history):

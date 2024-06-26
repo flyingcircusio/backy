@@ -20,6 +20,12 @@ from backy.utils import (
 
 from .revision import Revision, Trust, filter_schedule_tags
 from .schedule import Schedule
+from backy.source import Source
+
+
+
+class RepositoryNotEmpty(RuntimeError):
+    pass
 
 
 class StatusDict(TypedDict):
@@ -38,8 +44,8 @@ class StatusDict(TypedDict):
     local_revs: int
 
 
-class Backup(object):
-    """A generic backup of some data source."""
+class Repository(object):
+    """A repository of backup revisions of some object."""
 
     path: Path
     config: dict
@@ -60,13 +66,31 @@ class Backup(object):
         except IOError:
             self.log.error(
                 "could-not-read-config",
-                _fmt_msg="Could not read config file. Is --backupdir correct?",
+                _fmt_msg="Could not read config file. Is the path correct?",
                 config_path=str(self.path / "config"),
             )
             raise
 
         self.schedule = Schedule()
         self.schedule.configure(self.config["schedule"])
+
+    @classmethod
+    def init(self, path: Path, log: BoundLogger, source: Source):
+        if (path / 'config').exists():
+            raise RepositoryNotEmpty(self.path)
+
+        if not path.exists():
+            path.mkdir(parents=True, exist_ok=True)
+
+        source_config = source.init(path, log)
+
+        config = {'schedule': {}, 'source': source_config}
+
+        with open(self.path / 'config', 'w') as f:
+            yaml.dump(f, config)
+
+        self.log.info(f"Initialized empty repository in {self.path}")
+
 
     @property
     def problem_reports(self) -> list[str]:
@@ -121,6 +145,7 @@ class Backup(object):
     @property
     def name(self) -> str:
         return self.path.name
+
 
     def to_dict(self):
         return self.config

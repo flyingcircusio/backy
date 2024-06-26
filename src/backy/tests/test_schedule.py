@@ -21,7 +21,7 @@ def test_parse_duration():
 
 
 def test_first_backup_catches_up_all_tags_immediately_in_next_interval(
-    schedule, backup, clock
+    schedule, repository, clock
 ):
     schedule.configure(
         {
@@ -32,17 +32,17 @@ def test_first_backup_catches_up_all_tags_immediately_in_next_interval(
     assert (
         datetime(2015, 9, 2, 0, 0, 1, tzinfo=UTC),
         {"daily", "test"},
-    ) == schedule.next(backy.utils.now(), 1, backup)
+    ) == schedule.next(backy.utils.now(), 1, repository)
 
 
-def test_tag_first_interval_after_now(schedule, backup, clock):
+def test_tag_first_interval_after_now(schedule, repository, clock):
     assert (
         datetime(2015, 9, 2, 0, 0, 1, tzinfo=UTC),
         {"daily"},
     ) == schedule._next_ideal(backy.utils.now(), 1)
 
 
-def test_tag_second_interval_after_now(schedule, backup, clock):
+def test_tag_second_interval_after_now(schedule, repository, clock):
     assert (
         datetime(2015, 9, 3, 0, 0, 5, tzinfo=UTC),
         {"daily"},
@@ -51,7 +51,7 @@ def test_tag_second_interval_after_now(schedule, backup, clock):
     )
 
 
-def test_tag_second_interval_with_different_spread(schedule, backup, clock):
+def test_tag_second_interval_with_different_spread(schedule, repository, clock):
     assert (
         datetime(2015, 9, 3, 0, 0, 5, tzinfo=UTC),
         {"daily"},
@@ -60,34 +60,34 @@ def test_tag_second_interval_with_different_spread(schedule, backup, clock):
     )
 
 
-def test_tag_catchup_not_needed_for_recent(schedule, backup, clock):
+def test_tag_catchup_not_needed_for_recent(schedule, repository, clock):
     # A recent backup does not cause catchup to be triggered.
     revision = mock.Mock()
     revision.timestamp = clock.now() - timedelta(seconds=15)
     revision.tags = {"daily"}
     revision.stats = {"duration": 10}
-    backup.history.append(revision)
-    assert set() == schedule._missed(backup)
+    repository.history.append(revision)
+    assert set() == schedule._missed(repository)
     # This in turn causes the main next() function to return the regular next
     # interval.
     assert (
         datetime(2015, 9, 2, 0, 0, 1, tzinfo=UTC),
         {"daily"},
-    ) == schedule.next(clock.now(), 1, backup)
+    ) == schedule.next(clock.now(), 1, repository)
 
 
 def test_tag_catchup_does_not_stumble_on_adhoc_tags_in_backup(
-    schedule, backup, clock
+    schedule, repository, clock
 ):
     revision = mock.Mock()
     revision.timestamp = clock.now() - timedelta(seconds=15)
     revision.tags = {"test"}
     revision.stats = {"duration": 10}
-    backup.history.append(revision)
-    assert {"daily"} == schedule._missed(backup)
+    repository.history.append(revision)
+    assert {"daily"} == schedule._missed(repository)
 
 
-def test_tag_catchup_until_5_minutes_before_next(schedule, backup, clock):
+def test_tag_catchup_until_5_minutes_before_next(schedule, repository, clock):
     # If a backup has been overdue for too long, we expect the
     # tag to be scheduled soon anyway and we do not catch up to avoid
     # overload issues.
@@ -96,29 +96,31 @@ def test_tag_catchup_until_5_minutes_before_next(schedule, backup, clock):
     revision.tags = {"daily"}
     revision.stats = {"duration": 10}
     revision.write_info()
-    backup.history.append(revision)
-    assert {"daily"} == schedule._missed(backup)
+    repository.history.append(revision)
+    assert {"daily"} == schedule._missed(repository)
     # This in turn causes the main next() function to return the regular next
     # interval.
     assert (
         datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC),
         {"daily"},
-    ) == schedule.next(clock.now(), 1, backup)
+    ) == schedule.next(clock.now(), 1, repository)
     # As we approach the 5 minute mark before the next regular interval,
     # we then flip towards the ideal time.
     clock.now.return_value = datetime(2015, 9, 1, 23, 55, 0, tzinfo=UTC)
     assert (clock.now(), {"daily"}) == schedule.next(
-        datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC), 1, backup
+        datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC), 1, repository
     )
 
     clock.now.return_value = datetime(2015, 9, 1, 23, 55, 1, tzinfo=UTC)
     assert (
         datetime(2015, 9, 2, 0, 0, 1, tzinfo=UTC),
         {"daily"},
-    ) == schedule.next(datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC), 1, backup)
+    ) == schedule.next(
+        datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC), 1, repository
+    )
 
 
-def test_tag_catchup_needed_for_recently_missed(backup, clock):
+def test_tag_catchup_needed_for_recently_missed(repository, clock):
     revision = mock.Mock()
 
     schedule = backy.schedule.Schedule()
@@ -137,59 +139,59 @@ def test_tag_catchup_needed_for_recently_missed(backup, clock):
     revision.timestamp = clock.now() - timedelta(seconds=(24 * 60 * 60) * 1.2)
     revision.tags = {"daily"}
     revision.stats = {"duration": 10}
-    backup.history.append(revision)
+    repository.history.append(revision)
 
-    assert {"daily", "weekly", "hourly"} == schedule._missed(backup)
+    assert {"daily", "weekly", "hourly"} == schedule._missed(repository)
     # This in turn causes the main next() function to also
     # return this date.
     assert (
         datetime(2015, 9, 1, 7, 6, 47, tzinfo=UTC),
         {"daily", "weekly", "hourly"},
-    ) == schedule.next(clock.now(), 1, backup)
+    ) == schedule.next(clock.now(), 1, repository)
 
 
 def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
-    schedule, backup, clock, log
+    schedule, repository, clock, log
 ):
     def add_revision(timestamp):
-        revision = Revision.create(backup, {"daily"}, log)
-        revision.uuid = str(len(backup.history) + 1)
+        revision = Revision.create(repository, {"daily"}, log)
+        revision.uuid = str(len(repository.history) + 1)
         revision.timestamp = timestamp
         revision.materialize()
-        backup.history.append(revision)
-        backup.history.sort(key=lambda x: x.timestamp)
+        repository.history.append(revision)
+        repository.history.sort(key=lambda x: x.timestamp)
         return revision
 
     clock.now.return_value = datetime(2014, 5, 10, 10, 0, tzinfo=UTC)
     add_revision(datetime(2014, 5, 10, 10, 0, tzinfo=UTC))
-    assert [] == schedule.expire(backup)
-    backup.scan()
-    assert len(backup.history) == 1
-    assert backup.history[0].tags == {"daily"}
+    assert [] == schedule.expire(repository)
+    repository.scan()
+    assert len(repository.history) == 1
+    assert repository.history[0].tags == {"daily"}
 
     add_revision(datetime(2014, 5, 9, 10, 0, tzinfo=UTC))
     add_revision(datetime(2014, 5, 8, 10, 0, tzinfo=UTC))
     add_revision(datetime(2014, 5, 7, 10, 0, tzinfo=UTC))
     add_revision(datetime(2014, 5, 6, 10, 0, tzinfo=UTC))
-    assert [] == schedule.expire(backup)
-    backup.scan()
-    assert len(backup.history) == 5
-    assert [{"daily"}] * 5 == [r.tags for r in backup.history]
+    assert [] == schedule.expire(repository)
+    repository.scan()
+    assert len(repository.history) == 5
+    assert [{"daily"}] * 5 == [r.tags for r in repository.history]
 
     # This is the one revision more than the basic 'keep' parameter
     # but its still within the keep*interval frame so we keep it.
     add_revision(datetime(2014, 5, 6, 11, 0, tzinfo=UTC))
-    assert [] == schedule.expire(backup)
-    assert [{"daily"}] * 6 == [r.tags for r in backup.history]
+    assert [] == schedule.expire(repository)
+    assert [{"daily"}] * 6 == [r.tags for r in repository.history]
 
     # This revision is more than keep and also outside the interval.
     # It gets its tag removed and disappears.
     r = add_revision(datetime(2014, 5, 4, 11, 0, tzinfo=UTC))
     assert r.filename.with_suffix(".rev").exists()
-    removed = [x for x in schedule.expire(backup)]
+    removed = [x for x in schedule.expire(repository)]
     assert [r.uuid] == [x.uuid for x in removed]
-    backup.scan()
-    assert [{"daily"}] * 6 == [rev.tags for rev in backup.history]
+    repository.scan()
+    assert [{"daily"}] * 6 == [rev.tags for rev in repository.history]
     assert not r.filename.with_suffix(".rev").exists()
 
     # If we have manual tags, then those do not expire. However, the
@@ -199,11 +201,11 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
     r.tags = {"daily", "manual:test", "unknown"}
     r.write_info()
     assert r.filename.with_suffix(".rev").exists()
-    expired = schedule.expire(backup)
+    expired = schedule.expire(repository)
     assert [] == [x.uuid for x in expired]
-    backup.scan()
+    repository.scan()
     assert [{"manual:test"}] + [{"daily"}] * 6 == [
-        rev.tags for rev in backup.history
+        rev.tags for rev in repository.history
     ]
     assert r.filename.with_suffix(".rev").exists()
 

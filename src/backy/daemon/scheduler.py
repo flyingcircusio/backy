@@ -16,8 +16,8 @@ from aiohttp.web_exceptions import HTTPForbidden, HTTPNotFound
 from structlog.stdlib import BoundLogger
 
 import backy.utils
+from backy.ext_deps import BACKY_CLI_CMD, BACKY_RBD_CMD
 from backy.repository import Repository
-from backy.ext_deps import BACKY_CMD
 from backy.revision import Revision
 from backy.schedule import Schedule
 from backy.utils import (
@@ -31,6 +31,7 @@ from .api import Client, ClientManager
 
 if TYPE_CHECKING:
     from backy.daemon import BackyDaemon
+    from backy.repository import StatusDict
 
 
 class Job(object):
@@ -41,7 +42,7 @@ class Job(object):
     next_time: Optional[datetime.datetime] = None
     next_tags: Optional[set[str]] = None
     path: Path
-    backup: Repository
+    repository: Repository
     logfile: Path
     last_config: Optional[dict] = None
     daemon: "BackyDaemon"
@@ -65,7 +66,7 @@ class Job(object):
         self.source = config["source"]
         self.schedule_name = config["schedule"]
         self.update_config()
-        self.backup = Backup(self.path, self.log)
+        self.repository = Repository(self.path, self.log)
         self.last_config = config
 
     @property
@@ -92,9 +93,9 @@ class Job(object):
     @property
     def sla_overdue(self) -> int:
         """Amount of time the SLA is currently overdue."""
-        if not self.backup.clean_history:
+        if not self.repository.clean_history:
             return 0
-        age = backy.utils.now() - self.backup.clean_history[-1].timestamp
+        age = backy.utils.now() - self.repository.clean_history[-1].timestamp
         max_age = min(x["interval"] for x in self.schedule.schedule.values())
         if age > max_age * 1.5:
             return age.total_seconds()
@@ -146,15 +147,14 @@ class Job(object):
         try:
             api = ClientManager(self.daemon.peers, self.taskid, self.log)
             statuses = await asyncio.gather(
-                *[
-                    api[server].fetch_status(f"^{self.name}$")
-                    for server in api
-                ],
+                *[api[server].fetch_status(f"^{self.name}$") for server in api],
                 return_exceptions=True,
             )
             leader = None
-            leader_revs = len(self.backup.get_history(clean=True, local=True))
-            leader_status: "backy.repository.StatusDict"
+            leader_revs = len(
+                self.repository.get_history(clean=True, local=True)
+            )
+            leader_status: "StatusDict"
             self.log.info("local-revs", local_revs=leader_revs)
             for server, status in zip(api, statuses):
                 log = self.log.bind(server=server)
@@ -234,14 +234,12 @@ class Job(object):
         self.log.debug("loop-started")
         while True:
             self.taskid = generate_taskid()
-            self.log = self.log.bind(
-                job_name=self.name, sub_taskid=self.taskid
-            )
+            self.log = self.log.bind(job_name=self.name, sub_taskid=self.taskid)
 
-            self.backup = Backup(self.path, self.log)
+            self.repository = Repository(self.path, self.log)
 
             next_time, next_tags = self.schedule.next(
-                backy.utils.now(), self.spread, self.backup
+                backy.utils.now(), self.spread, self.repository
             )
 
             if self.errors:
@@ -273,13 +271,15 @@ class Job(object):
                 if not run_immediately and await self._wait_for_leader(
                     next_time
                 ):
-                    await self.pull_metadata()
+                    await self.repository.run_with_backup_lock(
+                        self.pull_metadata, self.daemon.peers, self.taskid
+                    )
                     await self.run_callback()
                 else:
                     speed = "slow"
                     if (
-                        self.backup.clean_history
-                        and self.backup.clean_history[-1].stats["duration"]
+                        self.repository.clean_history
+                        and self.repository.clean_history[-1].stats["duration"]
                         < 600
                     ):
                         speed = "fast"
@@ -288,11 +288,17 @@ class Job(object):
                     async with self.daemon.backup_semaphores[speed]:
                         self.update_status(f"running ({speed})")
 
+                        self.repository._clean()
                         await self.run_backup(next_tags)
-                        await self.pull_metadata()
+                        self.repository.scan()
+                        await self.repository.run_with_backup_lock(
+                            self.pull_metadata, self.daemon.peers, self.taskid
+                        )
                         await self.run_expiry()
-                        await self.push_metadata()
-                        await self.run_purge()
+                        await self.repository.run_with_backup_lock(
+                            self.push_metadata, self.daemon.peers, self.taskid
+                        )
+                        await self.run_gc()
                         await self.run_callback()
             except asyncio.CancelledError:
                 raise
@@ -317,16 +323,16 @@ class Job(object):
 
     async def run_backup(self, tags: Set[str]) -> None:
         self.log.info("backup-started", tags=", ".join(tags))
+        r = Revision.create(self.repository, tags, self.log)
+        r.materialize()
         proc = await asyncio.create_subprocess_exec(
-            BACKY_CMD,
+            BACKY_RBD_CMD,
             "-t",
             self.taskid,
             "-b",
             str(self.path),
-            "-l",
-            str(self.logfile),
             "backup",
-            ",".join(tags),
+            r.uuid,
             close_fds=True,
             start_new_session=True,  # Avoid signal propagation like Ctrl-C
             stdin=subprocess.DEVNULL,
@@ -354,51 +360,18 @@ class Job(object):
 
     async def run_expiry(self) -> None:
         self.log.info("expiry-started")
-        proc = await asyncio.create_subprocess_exec(
-            BACKY_CMD,
-            "-t",
-            self.taskid,
-            "-b",
-            self.path,
-            "-l",
-            self.logfile,
-            "expire",
-            close_fds=True,
-            start_new_session=True,  # Avoid signal propagation like Ctrl-C
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        try:
-            return_code = await proc.wait()
-            self.log.info(
-                "expiry-finished",
-                return_code=return_code,
-                subprocess_pid=proc.pid,
-            )
-            if return_code:
-                raise RuntimeError(
-                    f"Expiry failed with return code {return_code}"
-                )
-        except asyncio.CancelledError:
-            self.log.warning("expiry-cancelled")
-            try:
-                proc.terminate()
-            except ProcessLookupError:
-                pass
-            raise
+        # includes lock and repository.scan()
+        self.repository.expire()
 
-    async def run_purge(self) -> None:
-        self.log.info("purge-started")
+    async def run_gc(self) -> None:
+        self.log.info("gc-started")
         proc = await asyncio.create_subprocess_exec(
-            BACKY_CMD,
+            BACKY_RBD_CMD,
             "-t",
             self.taskid,
             "-b",
             str(self.path),
-            "-l",
-            str(self.logfile),
-            "purge",
+            "gc",
             # start_new_session=True,  # Avoid signal propagation like Ctrl-C.
             # close_fds=True,
             stdin=subprocess.DEVNULL,
@@ -408,12 +381,12 @@ class Job(object):
         try:
             return_code = await proc.wait()
             self.log.info(
-                "purge-finished",
+                "gc-finished",
                 return_code=return_code,
                 subprocess_pid=proc.pid,
             )
         except asyncio.CancelledError:
-            self.log.warning("purge-cancelled", subprocess_pid=proc.pid)
+            self.log.warning("gc-cancelled", subprocess_pid=proc.pid)
             try:
                 proc.terminate()
             except ProcessLookupError:
@@ -427,8 +400,9 @@ class Job(object):
 
         self.log.info("callback-started")
         read, write = os.pipe()
+        # TODO
         backy_proc = await asyncio.create_subprocess_exec(
-            BACKY_CMD,
+            BACKY_CLI_CMD,
             "-b",
             str(self.path),
             "-l",
@@ -492,10 +466,9 @@ class Job(object):
             self._task = None
             self.update_status("")
 
-    @Repository.locked(target=".backup", mode="exclusive")
     async def push_metadata(self, peers, taskid: str) -> int:
         grouped = defaultdict(list)
-        for r in self.backup.clean_history:
+        for r in self.repository.clean_history:
             if r.pending_changes:
                 grouped[r.server].append(r)
         self.log.info(
@@ -558,10 +531,9 @@ class Job(object):
                 error = True
         return error
 
-    @Repository.locked(target=".backup", mode="exclusive")
     async def pull_metadata(self, peers: dict, taskid: str) -> int:
         async def remove_dead_peer():
-            for r in list(self.backup.history):
+            for r in list(self.repository.history):
                 if r.server and r.server not in peers:
                     self.log.info(
                         "pull-removing-dead-peer",
@@ -585,7 +557,7 @@ class Job(object):
         log = self.log.bind(server=api.server_name)
         try:
             await api.touch_backup(self.name)
-            remote_revs = await api.get_revs(self)
+            remote_revs = await api.get_revs(self.repository)
             log.debug("pull-found-revs", revs=len(remote_revs))
         except ClientResponseError as e:
             if e.status in [
@@ -606,16 +578,21 @@ class Job(object):
             remote_revs = []
 
         local_uuids = {
-            r.uuid for r in self.backup.history if r.server == api.server_name
+            r.uuid
+            for r in self.repository.history
+            if r.server == api.server_name
         }
         remote_uuids = {r.uuid for r in remote_revs}
         for uuid in local_uuids - remote_uuids:
             log.warning("pull-removing-unknown-rev", rev_uuid=uuid)
-            self.backup.find_by_uuid(uuid).remove(force=True)
+            self.repository.find_by_uuid(uuid).remove(force=True)
 
         for r in remote_revs:
             if r.uuid in local_uuids:
-                if r.to_dict() == self.backup.find_by_uuid(r.uuid).to_dict():
+                if (
+                    r.to_dict()
+                    == self.repository.find_by_uuid(r.uuid).to_dict()
+                ):
                     continue
                 log.debug("pull-updating-rev", rev_uid=r.uuid)
             else:

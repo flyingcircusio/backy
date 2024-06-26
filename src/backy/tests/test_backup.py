@@ -6,7 +6,7 @@ from backy.revision import Revision
 
 
 @pytest.fixture
-def backup_with_revisions(backup, tmp_path):
+def repository_with_revisions(repository, tmp_path):
     with open(str(tmp_path / "123-0.rev"), "wb") as f:
         f.write(
             b"""\
@@ -40,33 +40,33 @@ server: remote1
 tags: [daily]
 """
         )
-    backup.scan()
-    return backup
+    repository.scan()
+    return repository
 
 
-def test_empty_revisions(backup):
-    assert backup.history == []
+def test_empty_revisions(repository):
+    assert repository.history == []
 
 
-def test_find_revision_empty(backup):
+def test_find_revision_empty(repository):
     with pytest.raises(KeyError):
-        backup.find("-1")
+        repository.find("-1")
     with pytest.raises(KeyError):
-        backup.find("last")
+        repository.find("last")
     with pytest.raises(KeyError):
-        backup.find("fdasfdka")
+        repository.find("fdasfdka")
 
 
-def test_load_revisions(backup_with_revisions):
-    a = backup_with_revisions
+def test_load_revisions(repository_with_revisions):
+    a = repository_with_revisions
     assert [x.uuid for x in a.history] == ["123-0", "123-1", "123-2"]
     assert a.history[0].get_parent() is None
     assert a.history[1].get_parent() is None
     assert a.history[2].get_parent().uuid == "123-1"
 
 
-def test_find_revisions(backup_with_revisions):
-    a = backup_with_revisions
+def test_find_revisions(repository_with_revisions):
+    a = repository_with_revisions
     assert a.find_revisions("all") == a.history
     assert a.find_revisions("1") == [a.find("1")]
     assert a.find_revisions("tag:dail") == []
@@ -114,9 +114,9 @@ def test_find_revisions(backup_with_revisions):
     assert a.find_revisions(
         "first(trust:verified)..last(reverse(2015-08-30..))"
     ) == [
-               a.find("123-0"),
-               a.find("123-1"),
-           ]
+        a.find("123-0"),
+        a.find("123-1"),
+    ]
     assert a.find_revisions("reverse(not(clean))") == [
         a.find("123-2"),
     ]
@@ -140,8 +140,8 @@ def test_find_revisions(backup_with_revisions):
     ]
 
 
-def test_find_revisions_should_raise_invalid_spec(backup_with_revisions):
-    a = backup_with_revisions
+def test_find_revisions_should_raise_invalid_spec(repository_with_revisions):
+    a = repository_with_revisions
     with pytest.raises(KeyError):
         a.find_revisions("aaaa..125")
     with pytest.raises(AssertionError):
@@ -156,8 +156,8 @@ def test_find_revisions_should_raise_invalid_spec(backup_with_revisions):
         a.find_revisions("2015-09..2015-08-30")
 
 
-def test_find_revision(backup_with_revisions):
-    a = backup_with_revisions
+def test_find_revision(repository_with_revisions):
+    a = repository_with_revisions
     assert a.find("last").uuid == "123-2"
     with pytest.raises(KeyError):
         a.find("-1")
@@ -175,39 +175,39 @@ def test_find_revision(backup_with_revisions):
     assert a.find(" first( tag:monthly  ) ").uuid == "123-0"
 
 
-def test_get_history(backup_with_revisions):
-    assert 2 == len(backup_with_revisions.clean_history)
+def test_get_history(repository_with_revisions):
+    assert 2 == len(repository_with_revisions.clean_history)
     assert (
-            backup_with_revisions.clean_history
-            == backup_with_revisions.get_history(clean=True)
+        repository_with_revisions.clean_history
+        == repository_with_revisions.get_history(clean=True)
     )
-    assert 1 == len(backup_with_revisions.local_history)
+    assert 1 == len(repository_with_revisions.local_history)
     assert (
-            backup_with_revisions.local_history
-            == backup_with_revisions.get_history(local=True)
+        repository_with_revisions.local_history
+        == repository_with_revisions.get_history(local=True)
     )
-    assert 1 == len(backup_with_revisions.get_history(clean=True, local=True))
+    assert 1 == len(
+        repository_with_revisions.get_history(clean=True, local=True)
+    )
 
 
-def test_ignore_duplicates(backup_with_revisions, tmp_path):
+def test_ignore_duplicates(repository_with_revisions, tmp_path):
     shutil.copy(str(tmp_path / "123-2.rev"), str(tmp_path / "123-3.rev"))
-    a = backup_with_revisions
+    a = repository_with_revisions
     a.scan()
     assert 3 == len(a.history)
 
 
-def test_find(simple_file_config, tmp_path, log):
-    backup = simple_file_config
-    rev = Revision.create(backup, set(), log, uuid="123-456")
+def test_find(repository, tmp_path, log):
+    rev = Revision.create(repository, set(), log, uuid="123-456")
     rev.materialize()
-    backup.scan()
-    assert tmp_path / "123-456" == backup.find("0").filename
+    repository.scan()
+    assert tmp_path / "123-456" == repository.find("0").filename
 
 
-def test_find_should_raise_if_not_found(simple_file_config, log):
-    backup = simple_file_config
-    rev = Revision.create(backup, set(), log)
+def test_find_should_raise_if_not_found(repository, log):
+    rev = Revision.create(repository, set(), log)
     rev.materialize()
-    backup.scan()
+    repository.scan()
     with pytest.raises(KeyError):
-        backup.find("no such revision")
+        repository.find("no such revision")

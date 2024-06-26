@@ -140,7 +140,7 @@ async def test_remove_peer(daemons, log):
     ds = await daemons(2)
 
     j0 = ds[0].jobs["test01"]
-    b0 = j0.backup
+    b0 = j0.repository
     rev0 = create_rev(b0, log)
 
     assert [r.uuid for r in b0.history] == [rev0.uuid]
@@ -159,11 +159,11 @@ async def test_remove_remote_backup(daemons, log):
     ds = await daemons(2)
 
     j0 = ds[0].jobs["test01"]
-    b0 = j0.backup
+    b0 = j0.repository
     rev0 = create_rev(b0, log)
 
     j1 = ds[1].jobs["test01"]
-    b1 = j1.backup
+    b1 = j1.repository
     rev1 = create_rev(b1, log)
 
     assert [r.uuid for r in b0.history] == [rev0.uuid]
@@ -194,11 +194,11 @@ async def test_simple_sync(daemons, log):
     ds = await daemons(3)
 
     j0 = ds[0].jobs["test01"]
-    b0 = j0.backup
+    b0 = j0.repository
     rev0 = create_rev(b0, log)
 
     j1 = ds[1].jobs["test01"]
-    b1 = j1.backup
+    b1 = j1.repository
     rev1 = create_rev(b1, log)
 
     # ignore offline servers
@@ -214,7 +214,7 @@ async def test_simple_sync(daemons, log):
 
     assert [r.uuid for r in b0.history] == [rev0.uuid, rev1.uuid]
     new_rev1 = b0.history[1]
-    assert new_rev1.backup == b0
+    assert new_rev1.repository == b0
     assert new_rev1.timestamp == rev1.timestamp
     assert new_rev1.stats == rev1.stats
     assert new_rev1.tags == rev1.tags
@@ -226,14 +226,14 @@ async def test_simple_sync(daemons, log):
     rev1.distrust()
     rev1.tags = {"manual:new"}
     rev1.write_info()
-    rev1.backup.scan()
+    rev1.repository.scan()
 
     await j0.pull_metadata()
     b0.scan()
 
     assert [r.uuid for r in b0.history] == [rev0.uuid, rev1.uuid]
     new_rev1 = b0.history[1]
-    assert new_rev1.backup == b0
+    assert new_rev1.repository == b0
     assert new_rev1.timestamp == rev1.timestamp
     assert new_rev1.backend_type == ""
     assert new_rev1.stats == rev1.stats
@@ -244,7 +244,7 @@ async def test_simple_sync(daemons, log):
 
     # mark rev for deletion
     new_rev1.remove()
-    new_rev1.backup.scan()
+    new_rev1.repository.scan()
     assert [r.uuid for r in b0.history] == [rev0.uuid, rev1.uuid]
     assert new_rev1.tags == set()
     assert new_rev1.orig_tags == rev1.tags
@@ -280,7 +280,7 @@ async def test_split_brain(daemons, log):
     await modify_authtokens(ds, [0, 1], [2, 3], allow=False, bidirectional=True)
 
     js = [d.jobs["test01"] for d in ds]
-    bs = [j.backup for j in js]
+    bs = [j.repository for j in js]
     revs = [create_rev(b, log) for b in bs]
 
     for b, r in zip(bs, revs):
@@ -288,7 +288,7 @@ async def test_split_brain(daemons, log):
 
     for j in js:
         await j.pull_metadata()
-        j.backup.scan()
+        j.repository.scan()
 
     del ds[0].config["jobs"]["test01"]
     ds[0]._apply_config()
@@ -388,7 +388,7 @@ def jobs_dry_run(daemons, monkeypatch, clock, log, seed_random, tz_berlin):
             await asyncio.sleep(delay)
 
         async def run_backup(job, tags, delta=datetime.timedelta()):
-            r = Revision.create(job.backup, tags, log)
+            r = Revision.create(job.repository, tags, log)
             r.timestamp = backy.utils.now() + delta
             r.stats["duration"] = 1
             r.write_info()

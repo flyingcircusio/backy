@@ -6,6 +6,7 @@ from structlog.stdlib import BoundLogger
 from backy.revision import Revision, Trust
 from backy.utils import END, report_status
 
+from ...repository import Repository
 from .chunk import Chunk, Hash
 from .file import File
 from .store import Store
@@ -14,13 +15,17 @@ from .store import Store
 class ChunkedFileBackend:
     # multiple Backends may share the same store
     STORES: dict[Path, Store] = dict()
+    repository: Repository
+    revision: Revision
+    store: Store
+    log: BoundLogger
 
     def __init__(self, revision: Revision, log: BoundLogger):
-        self.backup = revision.backup
+        self.repository = revision.repository
         self.revision = revision
-        path = self.backup.path / "chunks"
+        path = self.repository.path / "chunks"
         if path not in self.STORES:
-            self.STORES[path] = Store(self.backup.path / "chunks", log)
+            self.STORES[path] = Store(self.repository.path / "chunks", log)
         self.store = self.STORES[path]
         self.log = log.bind(subsystem="chunked")
 
@@ -38,7 +43,7 @@ class ChunkedFileBackend:
             overlay = True
         file = File(self.revision.filename, self.store, mode, overlay)
 
-        if file.writable() and self.backup.contains_distrusted:
+        if file.writable() and self.repository.contains_distrusted:
             # "Force write"-mode if any revision is distrusted.
             self.log.warn("forcing-full")
             self.store.force_writes = True
@@ -48,7 +53,7 @@ class ChunkedFileBackend:
     def purge(self) -> None:
         self.log.debug("purge")
         used_chunks: Set[Hash] = set()
-        for revision in self.backup.local_history:
+        for revision in self.repository.local_history:
             used_chunks.update(
                 type(self)(revision, self.log).open()._mapping.values()
             )
@@ -61,7 +66,7 @@ class ChunkedFileBackend:
         verified_chunks: Set[Hash] = set()
 
         # Load verified chunks to avoid duplicate work
-        for revision in self.backup.get_history(clean=True, local=True):
+        for revision in self.repository.get_history(clean=True, local=True):
             if revision.trust != Trust.VERIFIED:
                 continue
             verified_chunks.update(

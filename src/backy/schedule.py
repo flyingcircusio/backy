@@ -1,10 +1,13 @@
 import copy
 import datetime
 from datetime import timedelta
-from typing import Dict
+from typing import TYPE_CHECKING, Dict, Iterable, List, Set, Tuple
 
 import backy.utils
-from backy.revision import filter_schedule_tags
+from backy.revision import Revision, filter_schedule_tags
+
+if TYPE_CHECKING:
+    from backy.repository import Repository
 
 MINUTE = 60
 HOUR = 60 * MINUTE
@@ -57,21 +60,23 @@ class Schedule(object):
         self.schedule = {}
         self.config = {}
 
-    def configure(self, config):
+    def configure(self, config: dict) -> None:
         self.config = config
         self.schedule = copy.deepcopy(config)
         for tag, spec in self.schedule.items():
             self.schedule[tag]["interval"] = parse_duration(spec["interval"])
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return self.config
 
-    def next(self, relative, spread, archive):
+    def next(
+        self, relative: datetime.datetime, spread: int, repository: "Repository"
+    ) -> Tuple[datetime.datetime, Set[str]]:
         time, tags = ideal_time, ideal_tags = self._next_ideal(relative, spread)
-        missed_tags = self._missed(archive)
+        missed_tags = self._missed(repository)
         # The next run will include all missed tags
         tags.update(missed_tags)
-        if missed_tags and len(archive.history):
+        if missed_tags and len(repository.history):
             # Perform an immediate backup if we have any history at all.
             # and when we aren't running a regular backup within the next
             # 5 minutes anyway.
@@ -81,7 +86,9 @@ class Schedule(object):
                 tags = missed_tags
         return time, tags
 
-    def _next_ideal(self, relative, spread):
+    def _next_ideal(
+        self, relative: datetime.datetime, spread: int
+    ) -> Tuple[datetime.datetime, Set[str]]:
         next_times: Dict[datetime.datetime, set] = {}
         for tag, settings in self.schedule.items():
             t = next_times.setdefault(
@@ -92,11 +99,11 @@ class Schedule(object):
         next_tags = next_times[next_time]
         return next_time, next_tags
 
-    def _missed(self, archive):
+    def _missed(self, repository: "Repository") -> Set[str]:
         # Check whether we missed any
         now = backy.utils.now()
         missing_tags = set(self.schedule.keys())
-        for tag, last in archive.last_by_tag().items():
+        for tag, last in repository.last_by_tag().items():
             if tag not in self.schedule:
                 # Ignore ad-hoc tags for catching up.
                 continue
@@ -105,19 +112,19 @@ class Schedule(object):
                 missing_tags.remove(tag)
         return missing_tags
 
-    def expire(self, backup):
+    def expire(self, repository: "Repository") -> List["Revision"]:
         """Remove old revisions according to the backup schedule.
 
         Returns list of removed revisions.
         """
-        backup.scan()
+        repository.scan()
         removed = []
         # Clean out old backups: keep at least a certain number of copies
         # (keep) and ensure that we don't throw away copies that are newer
         # than keep * interval for this tag.
         # Phase 1: remove tags that are expired
         for tag, args in self.schedule.items():
-            revisions = backup.find_revisions("tag:" + tag)
+            revisions = repository.find_revisions("tag:" + tag)
             keep = args["keep"]
             if len(revisions) < keep:
                 continue
@@ -129,7 +136,7 @@ class Schedule(object):
                 old_revision.write_info()
 
         # Phase 2: remove all tags which have been created by a former schedule
-        for revision in backup.history:
+        for revision in repository.history:
             expired_tags = (
                 filter_schedule_tags(revision.tags) - self.schedule.keys()
             )
@@ -140,7 +147,7 @@ class Schedule(object):
         # Phase 3: delete revisions that have no tags any more.
         # We are deleting items of the history while iterating over it.
         # Use a copy of the list!
-        for revision in list(backup.history):
+        for revision in list(repository.history):
             if revision.tags:
                 continue
             removed.append(revision)
@@ -148,7 +155,7 @@ class Schedule(object):
 
         return removed
 
-    def sorted_tags(self, tags):
+    def sorted_tags(self, tags: Iterable[str]) -> Iterable[str]:
         """Return a list of tags, sorted by their interval. Smallest first."""
         t = {}
         for tag in tags:

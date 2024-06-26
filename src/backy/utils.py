@@ -15,12 +15,12 @@ import time
 import typing
 from asyncio import Event
 from typing import IO, Callable, Iterable, List, Literal, Optional, TypeVar
+from zoneinfo import ZoneInfo
 
 import aiofiles.os as aos
 import humanize
 import structlog
 import tzlocal
-from zoneinfo import ZoneInfo
 
 from .ext_deps import CP
 
@@ -473,9 +473,7 @@ async def has_recent_changes(path: str, reference_time: float) -> bool:
     return False
 
 
-async def delay_or_event(
-    delay: float, event: Event
-) -> Optional[Literal[True]]:
+async def delay_or_event(delay: float, event: Event) -> Optional[Literal[True]]:
     return await next(
         asyncio.as_completed([asyncio.sleep(delay), event.wait()])
     )

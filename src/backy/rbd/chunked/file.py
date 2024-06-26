@@ -4,11 +4,14 @@ import os
 import os.path
 import time
 from collections import defaultdict
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
 
 import backy.rbd.chunked
 
 from .chunk import Chunk, Hash
+
+if TYPE_CHECKING:
+    from backy.rbd.chunked import Store
 
 
 class File(object):
@@ -32,7 +35,7 @@ class File(object):
     flush_target = 10
 
     name: str
-    store: "backy.backends.chunked.Store"
+    store: "Store"
     closed: bool
     overlay: bool
     size: int
@@ -46,7 +49,7 @@ class File(object):
     def __init__(
         self,
         name: str | os.PathLike,
-        store: "backy.backends.chunked.Store",
+        store: "Store",
         mode: str = "rw",
         overlay: bool = False,
     ):
@@ -162,9 +165,7 @@ class File(object):
         elif whence == io.SEEK_CUR:
             position = position + offset
         else:
-            raise ValueError(
-                "`whence` does not support mode {}".format(whence)
-            )
+            raise ValueError("`whence` does not support mode {}".format(whence))
 
         if position < 0:
             raise ValueError("Can not seek before the beginning of a file.")

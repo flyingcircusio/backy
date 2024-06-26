@@ -3,25 +3,25 @@ import errno
 import os
 import sys
 from pathlib import Path
-from structlog.stdlib import BoundLogger
+from typing import TYPE_CHECKING
 
 import structlog
+from structlog.stdlib import BoundLogger
 
 from backy.utils import generate_taskid
 
 from .. import logging
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     from backy.repository import Repository
+
 
 class FileSource:
     type_ = "file"
 
     @classmethod
-    def init(cls, repository: Repository, log: BoundLogger):
-        return {'type': self.type_}
+    def init(cls, repository: "Repository", log: BoundLogger):
+        return {"type": cls.type_}
 
 
 def main():
@@ -110,7 +110,7 @@ def main():
     log.debug("invoked", args=" ".join(sys.argv))
 
     try:
-        b = RbdBackup(args.backupdir, log)
+        b = RbdRepository(args.backupdir, log)
         # XXX scheduler?
         b._clean()
         ret = 0

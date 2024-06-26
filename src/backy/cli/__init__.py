@@ -17,15 +17,13 @@ from rich.table import Column, Table
 from structlog.stdlib import BoundLogger
 
 import backy.daemon
-from backy import logging
-from backy.repository import Repository
-
 import backy.source
+from backy import logging
 
 # XXX invert this dependency
-from backy.rbd.backup import RestoreBackend
+from backy.rbd.backup import RbdRepository, RestoreBackend
+from backy.repository import Repository
 from backy.utils import format_datetime_local, generate_taskid
-
 
 
 class Command(object):
@@ -115,7 +113,7 @@ class Command(object):
             )
 
     def backup(self, tags: str, force: bool) -> int:
-        b = Backup(self.path, self.log)
+        b = RbdRepository(self.path, self.log)
         b._clean()
         try:
             tags_ = set(t.strip() for t in tags.split(","))
@@ -132,11 +130,11 @@ class Command(object):
     def restore(
         self, revision: str, target: str, restore_backend: RestoreBackend
     ) -> None:
-        b = Backup(self.path, self.log)
+        b = RbdRepository(self.path, self.log)
         b.restore(revision, target, restore_backend)
 
     def find(self, revision: str, uuid: bool) -> None:
-        b = Backup(self.path, self.log)
+        b = RbdRepository(self.path, self.log)
         for r in b.find_revisions(revision):
             if uuid:
                 print(r.uuid)
@@ -144,7 +142,7 @@ class Command(object):
                 print(r.filename)
 
     def forget(self, revision: str) -> None:
-        b = Backup(self.path, self.log)
+        b = RbdRepository(self.path, self.log)
         b.forget(revision)
         b.warn_pending_changes()
 
@@ -152,19 +150,19 @@ class Command(object):
         backy.daemon.main(config, self.log)
 
     def purge(self) -> None:
-        b = Backup(self.path, self.log)
+        b = RbdRepository(self.path, self.log)
         b.purge()
 
     def upgrade(self) -> None:
-        b = Backup(self.path, self.log)
+        b = RbdRepository(self.path, self.log)
         b.upgrade()
 
     def distrust(self, revision: str) -> None:
-        b = Backup(self.path, self.log)
+        b = RbdRepository(self.path, self.log)
         b.distrust(revision)
 
     def verify(self, revision: str) -> None:
-        b = Backup(self.path, self.log)
+        b = RbdRepository(self.path, self.log)
         b.verify(revision)
 
     def tags(
@@ -345,9 +343,11 @@ def main():
             "working directory."
         ),
     )
-    p.add_argument("type",
+    p.add_argument(
+        "type",
         choices=list(backy.source.KNOWN_SOURCES),
-        help="Type of the source.")
+        help="Type of the source.",
+    )
 
     subparsers = parser.add_subparsers()
 

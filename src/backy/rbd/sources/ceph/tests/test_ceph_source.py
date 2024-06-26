@@ -28,10 +28,10 @@ def check_output(monkeypatch):
 
 
 @pytest.fixture
-def ceph_rbd_imagesource(rbdclient, rbdbackup, nosleep, log):
+def ceph_rbd_imagesource(rbdclient, rbdrepository, nosleep, log):
     """Provides a CephRBD object configured for image pool/test, with rbd
     being mocked away and allowing snapshots on that image."""
-    source = CephRBD(dict(pool="test", image="foo"), rbdbackup, log)
+    source = CephRBD(dict(pool="test", image="foo"), rbdrepository, log)
     # rbdclient mock setup:
     rbdclient._ceph_cli._register_image_for_snaps("test/foo")
     source.rbd = rbdclient
@@ -54,12 +54,12 @@ def test_assign_revision(nosleep, log):
     assert context_manager.revision is revision
 
 
-def test_context_manager(rbdbackup, ceph_rbd_imagesource, log):
+def test_context_manager(rbdrepository, ceph_rbd_imagesource, log):
     """The imagesource context manager around a backup revision must create a
     corresponding snapshot at enter, and clean up at exit."""
     source = ceph_rbd_imagesource
 
-    revision = Revision.create(rbdbackup, set(), log, uuid="1")
+    revision = Revision.create(rbdrepository, set(), log, uuid="1")
     with source(revision):
         assert source.rbd.snap_ls("test/foo")[0]["name"] == "backy-1"
 
@@ -67,7 +67,7 @@ def test_context_manager(rbdbackup, ceph_rbd_imagesource, log):
 
 
 def test_context_manager_cleans_out_snapshots(
-    ceph_rbd_imagesource, rbdbackup, log
+    ceph_rbd_imagesource, rbdrepository, log
 ):
     """The imagesource context manager cleans up unexpected backy snapshot revisions.
     Snapshots without the prefix 'backy-' are left untouched."""
@@ -78,10 +78,10 @@ def test_context_manager_cleans_out_snapshots(
     # unexpected revision snapshots are cleaned
     source.rbd.snap_create("test/foo@backy-2")
 
-    revision = Revision.create(rbdbackup, set(), log, uuid="1")
+    revision = Revision.create(rbdrepository, set(), log, uuid="1")
     with source(revision):
         revision.materialize()
-        rbdbackup.scan()
+        rbdrepository.scan()
 
     assert source.rbd.snap_ls("test/foo") == [
         {
@@ -101,7 +101,7 @@ def test_context_manager_cleans_out_snapshots(
     ]
 
 
-def test_choose_full_without_parent(ceph_rbd_imagesource, rbdbackup, log):
+def test_choose_full_without_parent(ceph_rbd_imagesource, rbdrepository, log):
     """When backing up a revision without a parent, a full backup needs to happen.
     The diff function must not be called."""
     source = ceph_rbd_imagesource
@@ -109,7 +109,7 @@ def test_choose_full_without_parent(ceph_rbd_imagesource, rbdbackup, log):
     source.diff = mock.Mock()
     source.full = mock.Mock()
 
-    revision = Revision.create(rbdbackup, set(), log)
+    revision = Revision.create(rbdrepository, set(), log)
 
     with source(revision) as s:
         s.backup(ChunkedFileBackend(revision, log))
@@ -118,7 +118,7 @@ def test_choose_full_without_parent(ceph_rbd_imagesource, rbdbackup, log):
     assert source.full.called
 
 
-def test_choose_full_without_snapshot(ceph_rbd_imagesource, rbdbackup, log):
+def test_choose_full_without_snapshot(ceph_rbd_imagesource, rbdrepository, log):
     """When backing up a revision with an immediate parent that has no corresponding
     snapshot, that parent must be ignored and a full backup has to be made.
     The diff function must not be called."""
@@ -127,12 +127,12 @@ def test_choose_full_without_snapshot(ceph_rbd_imagesource, rbdbackup, log):
     source.diff = mock.Mock()
     source.full = mock.Mock()
 
-    revision1 = Revision.create(rbdbackup, set(), log)
+    revision1 = Revision.create(rbdrepository, set(), log)
     revision1.materialize()
 
-    rbdbackup.scan()
+    rbdrepository.scan()
 
-    revision2 = Revision.create(rbdbackup, set(), log)
+    revision2 = Revision.create(rbdrepository, set(), log)
 
     with source(revision2) as s:
         s.backup(ChunkedFileBackend(revision2, log))
@@ -141,7 +141,7 @@ def test_choose_full_without_snapshot(ceph_rbd_imagesource, rbdbackup, log):
     assert source.full.called
 
 
-def test_choose_diff_with_snapshot(ceph_rbd_imagesource, rbdbackup, log):
+def test_choose_diff_with_snapshot(ceph_rbd_imagesource, rbdrepository, log):
     """In an environment where a parent revision exists and has a snapshot, both
     revisions shall be diffed."""
     source = ceph_rbd_imagesource
@@ -149,16 +149,16 @@ def test_choose_diff_with_snapshot(ceph_rbd_imagesource, rbdbackup, log):
     source.diff = mock.Mock()
     source.full = mock.Mock()
 
-    revision1 = Revision.create(rbdbackup, set(), log, uuid="a1")
+    revision1 = Revision.create(rbdrepository, set(), log, uuid="a1")
     revision1.materialize()
 
     # part of test setup: we check backy's behavior when a previous version not only
     # exists, but also has a snapshot
     source.rbd.snap_create("test/foo@backy-a1")
 
-    rbdbackup.scan()
+    rbdrepository.scan()
 
-    revision2 = Revision.create(rbdbackup, set(), log)
+    revision2 = Revision.create(rbdrepository, set(), log)
 
     with source(revision2) as s:
         s.backup(ChunkedFileBackend(revision2, log))
@@ -167,7 +167,7 @@ def test_choose_diff_with_snapshot(ceph_rbd_imagesource, rbdbackup, log):
     assert not source.full.called
 
 
-def test_diff_backup(ceph_rbd_imagesource, rbdbackup, tmp_path, log):
+def test_diff_backup(ceph_rbd_imagesource, rbdrepository, tmp_path, log):
     """When doing a diff backup between two revisions with snapshot, the RBDDiff needs
     to be called properly, a snapshot for the new revision needs to be created and the
     snapshot of the previous revision needs to be removed after the successfull backup."""
@@ -176,21 +176,21 @@ def test_diff_backup(ceph_rbd_imagesource, rbdbackup, tmp_path, log):
     source = ceph_rbd_imagesource
 
     parent = Revision.create(
-        rbdbackup, set(), log, uuid="ed968696-5ab0-4fe0-af1c-14cadab44661"
+        rbdrepository, set(), log, uuid="ed968696-5ab0-4fe0-af1c-14cadab44661"
     )
     parent.materialize()
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
     revision = Revision.create(
-        rbdbackup, set(), log, uuid="f0e7292e-4ad8-4f2e-86d6-f40dca2aa802"
+        rbdrepository, set(), log, uuid="f0e7292e-4ad8-4f2e-86d6-f40dca2aa802"
     )
     revision.timestamp = backy.utils.now() + datetime.timedelta(seconds=1)
 
     with ChunkedFileBackend(parent, log).open("wb") as f:
         f.write(b"asdf")
 
-    rbdbackup.scan()
+    rbdrepository.scan()
     revision.materialize()
 
     # test setup: ensure that previous revision has a snapshot. It needs to be removed
@@ -210,7 +210,7 @@ def test_diff_backup(ceph_rbd_imagesource, rbdbackup, tmp_path, log):
             source.diff(
                 ChunkedFileBackend(revision, log), revision.get_parent()
             )
-            rbdbackup.history.append(revision)
+            rbdrepository.history.append(revision)
         export.assert_called_with(
             "test/foo@backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802",
             "backy-ed968696-5ab0-4fe0-af1c-14cadab44661",
@@ -223,14 +223,14 @@ def test_diff_backup(ceph_rbd_imagesource, rbdbackup, tmp_path, log):
     )
 
 
-def test_full_backup(ceph_rbd_imagesource, rbdbackup, tmp_path, log):
+def test_full_backup(ceph_rbd_imagesource, rbdrepository, tmp_path, log):
     source = ceph_rbd_imagesource
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
-    revision = Revision.create(rbdbackup, set(), log, uuid="a0")
+    revision = Revision.create(rbdrepository, set(), log, uuid="a0")
     revision.materialize()
-    rbdbackup.scan()
+    rbdrepository.scan()
 
     with mock.patch("backy.rbd.sources.ceph.rbd.RBDClient.export") as export:
         export.return_value = io.BytesIO(b"Han likes Leia.")
@@ -246,10 +246,10 @@ def test_full_backup(ceph_rbd_imagesource, rbdbackup, tmp_path, log):
         assert f.read() == b"Han likes Leia."
 
     # Now make another full backup. This overwrites the first.
-    revision2 = Revision.create(rbdbackup, set(), log, uuid="a1")
+    revision2 = Revision.create(rbdrepository, set(), log, uuid="a1")
     revision2.timestamp = backy.utils.now() + datetime.timedelta(seconds=1)
     revision2.materialize()
-    rbdbackup.scan()
+    rbdrepository.scan()
 
     with mock.patch("backy.rbd.sources.ceph.rbd.RBDClient.export") as export:
         export.return_value = io.BytesIO(b"Han loves Leia.")
@@ -266,7 +266,7 @@ def test_full_backup(ceph_rbd_imagesource, rbdbackup, tmp_path, log):
 
 
 def test_full_backup_integrates_changes(
-    ceph_rbd_imagesource, rbdbackup, tmp_path, log
+    ceph_rbd_imagesource, rbdrepository, tmp_path, log
 ):
     # The backup source changes between two consecutive full backups. Both
     # backup images should reflect the state of the source at the time the
@@ -276,11 +276,11 @@ def test_full_backup_integrates_changes(
     content0 = BLOCK * b"A" + BLOCK * b"B" + BLOCK * b"C" + BLOCK * b"D"
     content1 = BLOCK * b"A" + BLOCK * b"X" + BLOCK * b"\0" + BLOCK * b"D"
 
-    rev0 = Revision.create(rbdbackup, set(), log)
+    rev0 = Revision.create(rbdrepository, set(), log)
     rev0.materialize()
-    rbdbackup.scan()
+    rbdrepository.scan()
 
-    rev1 = Revision.create(rbdbackup, set(), log)
+    rev1 = Revision.create(rbdrepository, set(), log)
     rev1.timestamp = backy.utils.now() + datetime.timedelta(seconds=1)
     rev1.materialize()
 
@@ -299,15 +299,15 @@ def test_full_backup_integrates_changes(
             assert content == f.read()
 
 
-def test_verify_fail(rbdbackup, tmp_path, ceph_rbd_imagesource, log):
+def test_verify_fail(rbdrepository, tmp_path, ceph_rbd_imagesource, log):
     source = ceph_rbd_imagesource
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
-    revision = Revision.create(rbdbackup, set(), log)
+    revision = Revision.create(rbdrepository, set(), log)
     revision.materialize()
 
-    rbdbackup.scan()
+    rbdrepository.scan()
 
     rbd_source = str(tmp_path / "-dev-rbd0")
     with open(rbd_source, "w") as f:
@@ -319,18 +319,18 @@ def test_verify_fail(rbdbackup, tmp_path, ceph_rbd_imagesource, log):
     # The backend has false data, so this needs to be detected.
     with source(revision):
         assert not source.verify(backend)
-        assert len(rbdbackup.quarantine.report_ids) == 1
+        assert len(rbdrepository.quarantine.report_ids) == 1
 
 
-def test_verify(ceph_rbd_imagesource, rbdbackup, tmp_path, log):
+def test_verify(ceph_rbd_imagesource, rbdrepository, tmp_path, log):
     source = ceph_rbd_imagesource
 
     # Those revision numbers are taken from the sample snapshot and need
     # to match, otherwise our diff integration will (correctly) complain.
-    revision = Revision.create(rbdbackup, set(), log, uuid="a0")
+    revision = Revision.create(rbdrepository, set(), log, uuid="a0")
     revision.materialize()
 
-    rbdbackup.scan()
+    rbdrepository.scan()
 
     rbd_source = source.rbd.map("test/foo@backy-a0")["device"]
     with open(rbd_source, "wb") as f:

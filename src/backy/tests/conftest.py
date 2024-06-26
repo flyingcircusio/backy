@@ -1,12 +1,12 @@
-from zoneinfo import ZoneInfo
+import json
 
 import pytest
-import tzlocal
+
+from backy.repository import Repository
 
 
 @pytest.fixture
-def tz_berlin(monkeypatch):
-    """Fix time zone to gain independece from runtime environment."""
-    monkeypatch.setattr(
-        tzlocal, "get_localzone", lambda: ZoneInfo("Europe/Berlin")
-    )
+def repository(schedule, tmp_path, log):
+    with open(str(tmp_path / "config"), "w", encoding="utf-8") as f:
+        json.dump({"schedule": schedule.to_dict()}, f)
+    return Repository(tmp_path, log)

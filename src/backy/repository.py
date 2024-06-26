@@ -3,12 +3,13 @@ import fcntl
 import re
 from math import ceil, floor
 from pathlib import Path
-from typing import List, Literal, Optional, TypedDict
+from typing import IO, List, Literal, Optional, TypedDict
 
 import tzlocal
 import yaml
 from structlog.stdlib import BoundLogger
 
+from backy.source import Source
 from backy.utils import (
     duplicates,
     list_get,
@@ -20,8 +21,6 @@ from backy.utils import (
 
 from .revision import Revision, Trust, filter_schedule_tags
 from .schedule import Schedule
-from backy.source import Source
-
 
 
 class RepositoryNotEmpty(RuntimeError):
@@ -54,10 +53,12 @@ class Repository(object):
     log: BoundLogger
 
     _by_uuid: dict[str, Revision]
+    _lock_fds: dict[str, IO]
 
     def __init__(self, path: Path, log: BoundLogger):
         self.log = log.bind(subsystem="backup")
         self.path = path.resolve()
+        self._lock_fds = {}
 
         # Load config from file
         try:
@@ -74,9 +75,11 @@ class Repository(object):
         self.schedule = Schedule()
         self.schedule.configure(self.config["schedule"])
 
+        self.scan()
+
     @classmethod
     def init(self, path: Path, log: BoundLogger, source: Source):
-        if (path / 'config').exists():
+        if (path / "config").exists():
             raise RepositoryNotEmpty(self.path)
 
         if not path.exists():
@@ -84,13 +87,12 @@ class Repository(object):
 
         source_config = source.init(path, log)
 
-        config = {'schedule': {}, 'source': source_config}
+        config = {"schedule": {}, "source": source_config}
 
-        with open(self.path / 'config', 'w') as f:
-            yaml.dump(f, config)
+        with open(self.path / "config", "w") as f:
+            yaml.dump(config, f)
 
         self.log.info(f"Initialized empty repository in {self.path}")
-
 
     @property
     def problem_reports(self) -> list[str]:
@@ -145,7 +147,6 @@ class Repository(object):
     @property
     def name(self) -> str:
         return self.path.name
-
 
     def to_dict(self):
         return self.config
@@ -242,6 +243,10 @@ class Repository(object):
                 revisions=",".join(r.uuid for r in remote),
             )
             raise RuntimeError("Remote revs disallowed")
+
+    @locked(target=".backup", mode="exclusive")
+    def run_with_backup_lock(self, fun, *args, **kw):
+        return fun(*args, **kw)
 
     #################
     # Making backups

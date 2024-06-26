@@ -127,7 +127,8 @@ in
 
   devShells = {
     default = mkShellNoCC {
-      BACKY_CMD = "${poetryEnv}/bin/backy";
+      BACKY_CLI_CMD = "${poetryEnv}/bin/backy";
+      BACKY_RBD_CMD = "${poetryEnv}/bin/backy-rbd";
       packages = [
         poetryEnv
         poetry

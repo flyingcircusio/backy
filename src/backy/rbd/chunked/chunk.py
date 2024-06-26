@@ -2,13 +2,16 @@ import binascii
 import io
 import os
 import tempfile
-from typing import Optional, Tuple, TypeAlias
+from typing import TYPE_CHECKING, Optional, Tuple, TypeAlias
 
 import lzo
 import mmh3
 
 import backy.rbd.chunked
 from backy.utils import posix_fadvise
+
+if TYPE_CHECKING:
+    from backy.rbd.chunked import Store
 
 Hash: TypeAlias = str
 
@@ -39,13 +42,13 @@ class Chunk(object):
     CHUNK_SIZE = 4 * 1024**2  # 4 MiB chunks
 
     hash: Optional[Hash]
-    store: "backy.backends.chunked.Store"
+    store: "Store"
     clean: bool
     data: Optional[io.BytesIO]
 
     def __init__(
         self,
-        store: "backy.backends.chunked.Store",
+        store: "Store",
         hash: Optional[Hash],
     ):
         self.hash = hash

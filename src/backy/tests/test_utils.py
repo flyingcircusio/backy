@@ -9,13 +9,13 @@ import backy.utils
 from backy.tests import Ellipsis
 from backy.utils import (
     SafeFile,
+    TimeOut,
+    TimeOutError,
+    _fake_fallocate,
     copy_overwrite,
     files_are_equal,
     files_are_roughly_equal,
     punch_hole,
-    TimeOut,
-    TimeOutError,
-    _fake_fallocate,
 )
 
 
@@ -343,7 +343,6 @@ def test_unmocked_now_returns_time_time_float():
     assert before <= now <= after
 
 
-
 @pytest.fixture
 def testfile(tmp_path):
     fn = str(tmp_path / "myfile")
@@ -382,6 +381,7 @@ def test_fake_fallocate_only_punches_holes(testfile):
     with pytest.raises(NotImplementedError):
         with open(testfile, "r+b") as f:
             _fake_fallocate(f, 0, 0, 10)
+
 
 def test_timeout(capsys):
     timeout = TimeOut(0.05, 0.01)

@@ -3,13 +3,13 @@
 set -e
 umask 022
 
-if [[ -z "$BACKY_CMD" ]]; then
-  echo "error: BACKY_CMD is not set. Set it manually or call via pytest"
+if [[ -z "$BACKY_RBD_CMD" ]]; then
+  echo "error: BACKY_RBD_CMD is not set. Set it manually or call via pytest"
   exit 2
 fi
 
 BACKUP=$(mktemp -d -t backy.test.XXXXX)
-BACKY="$BACKY_CMD -l ${BACKUP}/backy.log"
+BACKY="$BACKY_RBD_CMD -l ${BACKUP}/backy.log"
 export TZ=Europe/Berlin
 
 mkdir ${BACKUP}/backup

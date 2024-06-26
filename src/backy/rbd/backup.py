@@ -12,7 +12,6 @@ import backy
 from ..ext_deps import BACKY_EXTRACT
 from ..repository import Repository
 from ..revision import Revision, Trust
-from ..source import Source
 from ..utils import CHUNK_SIZE, copy, posix_fadvise
 from .chunked import ChunkedFileBackend
 from .chunked.chunk import BackendException
@@ -42,7 +41,7 @@ class RestoreBackend(Enum):
         return self.value
 
 
-class RbdSource(Source):
+class RbdRepository(Repository):
     """A backup of a VM.
 
     Provides access to methods to
@@ -54,13 +53,8 @@ class RbdSource(Source):
     source: BackySourceFactory
     quarantine: QuarantineStore
 
-    _lock_fds: dict[str, IO]
-
     def __init__(self, path: Path, log: BoundLogger):
         super().__init__(path, log)
-        self._lock_fds = {}
-
-        self.scan()
 
         # Initialize our source
         try:
@@ -87,8 +81,8 @@ class RbdSource(Source):
 
     @Repository.locked(target=".backup", mode="exclusive")
     @Repository.locked(target=".purge", mode="shared")
-    def backup(self, revision: str) -> bool:
-        new_revision = self.find_by_uuid(revision)
+    def backup(self, rev_uuid: str) -> bool:
+        new_revision = self.find_by_uuid(rev_uuid)
         self.prevent_remote_rev([new_revision])
 
         self.path.joinpath("last").unlink(missing_ok=True)

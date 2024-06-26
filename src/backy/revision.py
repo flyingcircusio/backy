@@ -11,7 +11,7 @@ from . import utils
 from .utils import SafeFile
 
 if TYPE_CHECKING:
-    from .backup import Backup
+    from .repository import Repository
 
 
 TAG_MANUAL_PREFIX = "manual:"
@@ -32,7 +32,7 @@ def filter_manual_tags(tags):
 
 
 class Revision(object):
-    backup: "Backup"
+    repository: "Repository"
     uuid: str
     timestamp: datetime.datetime
     stats: dict
@@ -44,12 +44,12 @@ class Revision(object):
 
     def __init__(
         self,
-        backup: "Backup",
+        repository: "Repository",
         log: BoundLogger,
         uuid: Optional[str] = None,
         timestamp: Optional[datetime.datetime] = None,
     ) -> None:
-        self.backup = backup
+        self.repository = repository
         self.uuid = uuid if uuid else shortuuid.uuid()
         self.timestamp = timestamp if timestamp else utils.now()
         self.stats = {"bytes_written": 0}
@@ -60,7 +60,7 @@ class Revision(object):
     @classmethod
     def create(
         cls,
-        backup: "Backup",
+        backup: "Repository",
         tags: set[str],
         log: BoundLogger,
         *,
@@ -71,7 +71,9 @@ class Revision(object):
         return r
 
     @classmethod
-    def load(cls, file: Path, backup: "Backup", log: BoundLogger) -> "Revision":
+    def load(
+        cls, file: Path, backup: "Repository", log: BoundLogger
+    ) -> "Revision":
         with file.open(encoding="utf-8") as f:
             metadata = yaml.safe_load(f)
         r = cls.from_dict(metadata, backup, log)
@@ -95,7 +97,7 @@ class Revision(object):
     @property
     def filename(self) -> Path:
         """Full pathname of the image file."""
-        return self.backup.path / self.uuid
+        return self.repository.path / self.uuid
 
     @property
     def info_filename(self) -> Path:
@@ -154,9 +156,9 @@ class Revision(object):
                     filename.unlink()
                     self.log.debug("remove-end", filename=filename)
 
-            if self in self.backup.history:
-                self.backup.history.remove(self)
-                del self.backup._by_uuid[self.uuid]
+            if self in self.repository.history:
+                self.repository.history.remove(self)
+                del self.repository._by_uuid[self.uuid]
 
     def writable(self) -> None:
         if self.filename.exists():
@@ -171,7 +173,7 @@ class Revision(object):
     def get_parent(self, ignore_trust=False) -> Optional["Revision"]:
         """defaults to last rev if not in history"""
         prev = None
-        for r in self.backup.history:
+        for r in self.repository.history:
             if not ignore_trust and r.trust == Trust.DISTRUSTED:
                 continue
             if r.server != self.server:

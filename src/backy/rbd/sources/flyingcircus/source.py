@@ -7,18 +7,18 @@ from structlog.stdlib import BoundLogger
 
 from backy.utils import TimeOut, TimeOutError
 
-from ... import RbdSource
+from ... import RbdRepository
 from ..ceph.source import CephRBD
 
 
 class FlyingCircusRootDisk(CephRBD):
     snapshot_timeout = 90
 
-    def __init__(self, config, backup: RbdSource, log: BoundLogger):
+    def __init__(self, config, repository: RbdRepository, log: BoundLogger):
         self.config = config
         self.vm = config["vm"]
         self.consul_acl_token = config.get("consul_acl_token")
-        super(FlyingCircusRootDisk, self).__init__(config, backup, log)
+        super(FlyingCircusRootDisk, self).__init__(config, repository, log)
         self.log = self.log.bind(vm=self.vm, subsystem="fc-disk")
 
     def create_snapshot(self, name: str) -> None:

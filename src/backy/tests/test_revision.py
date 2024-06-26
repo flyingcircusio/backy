@@ -11,45 +11,45 @@ UTC = datetime.timezone.utc
 SAMPLE_DIR = Path(__file__).parent.joinpath("samples")
 
 
-def test_revision_base(backup, log):
-    revision = Revision.create(backup, set(), log, uuid="uuid")
+def test_revision_base(repository, log):
+    revision = Revision.create(repository, set(), log, uuid="uuid")
     assert revision.uuid == "uuid"
-    assert revision.backup is backup
+    assert revision.repository is repository
 
 
-def test_revision_create(backup, log):
-    backup.history = []
-    r = Revision.create(backup, {"1", "2"}, log)
+def test_revision_create(repository, log):
+    repository.history = []
+    r = Revision.create(repository, {"1", "2"}, log)
     assert r.uuid is not None
     assert r.tags == {"1", "2"}
     assert (backy.utils.now() - r.timestamp).total_seconds() < 10
-    assert r.backup is backup
+    assert r.repository is repository
 
 
-def test_revision_create_child(backup, log):
-    backup.history = [Revision.create(backup, set(), log, uuid="asdf")]
-    r = Revision.create(backup, {"test"}, log)
+def test_revision_create_child(repository, log):
+    repository.history = [Revision.create(repository, set(), log, uuid="asdf")]
+    r = Revision.create(repository, {"test"}, log)
     assert r.uuid is not None
     assert r.tags == {"test"}
     assert r.get_parent().uuid == "asdf"
     assert (backy.utils.now() - r.timestamp).total_seconds() < 10
-    assert r.backup is backup
+    assert r.repository is repository
 
 
-def test_load_sample1(backup, log):
-    r = Revision.load(SAMPLE_DIR / "sample1.rev", backup, log)
+def test_load_sample1(repository, log):
+    r = Revision.load(SAMPLE_DIR / "sample1.rev", repository, log)
     assert r.uuid == "asdf"
     assert r.timestamp == datetime.datetime(2015, 8, 1, 20, 0, tzinfo=UTC)
     assert r.get_parent() is None
-    assert r.backup is backup
+    assert r.repository is repository
 
 
-def test_load_sample2(backup, log):
-    r = Revision.load(SAMPLE_DIR / "sample2.rev", backup, log)
+def test_load_sample2(repository, log):
+    r = Revision.load(SAMPLE_DIR / "sample2.rev", repository, log)
     assert r.uuid == "asdf2"
     assert r.timestamp == datetime.datetime(2015, 8, 1, 21, 0, tzinfo=UTC)
     assert r.get_parent() is None
-    assert r.backup is backup
+    assert r.repository is repository
 
 
 def test_filenames_based_on_uuid_and_backup_dir(log):
@@ -60,9 +60,9 @@ def test_filenames_based_on_uuid_and_backup_dir(log):
     assert r.info_filename == Path("/srv/backup/foo/asdf.rev")
 
 
-def test_store_revision_data(backup, clock, log):
-    backup.history = [Revision.create(backup, set(), log, uuid="asdf")]
-    r = Revision.create(backup, set(), log, uuid="asdf2")
+def test_store_revision_data(repository, clock, log):
+    repository.history = [Revision.create(repository, set(), log, uuid="asdf")]
+    r = Revision.create(repository, set(), log, uuid="asdf2")
     r.write_info()
     with open(r.info_filename, encoding="utf-8") as info:
         assert yaml.safe_load(info) == {
@@ -77,8 +77,8 @@ def test_store_revision_data(backup, clock, log):
         }
 
 
-def test_store_revision_data_no_parent(backup, clock, log):
-    r = Revision.create(backup, set(), log, uuid="asdf2")
+def test_store_revision_data_no_parent(repository, clock, log):
+    r = Revision.create(repository, set(), log, uuid="asdf2")
     r.write_info()
     with open(r.info_filename, encoding="utf-8") as info:
         assert yaml.safe_load(info) == {
@@ -93,15 +93,15 @@ def test_store_revision_data_no_parent(backup, clock, log):
         }
 
 
-def test_delete_revision(backup, log):
-    r = Revision.create(backup, set(), log, uuid="123-456")
+def test_delete_revision(repository, log):
+    r = Revision.create(repository, set(), log, uuid="123-456")
     r.materialize()
-    assert backup.path.joinpath("123-456.rev").exists()
-    backup.scan()
-    backup.path.joinpath("123-456").open("w")
-    assert backup.path.joinpath("123-456.rev").exists()
+    assert repository.path.joinpath("123-456.rev").exists()
+    repository.scan()
+    repository.path.joinpath("123-456").open("w")
+    assert repository.path.joinpath("123-456.rev").exists()
     r.remove()
     # Ensure the revision data file exists - we do not implicitly create
     # it any longer.
-    assert not backup.path.joinpath("123-456").exists()
-    assert not backup.path.joinpath("123-456.rev").exists()
+    assert not repository.path.joinpath("123-456").exists()
+    assert not repository.path.joinpath("123-456.rev").exists()

@@ -6,10 +6,19 @@ from zoneinfo import ZoneInfo
 
 import pytest
 import structlog
+import tzlocal
 
 import backy.logging
 import backy.schedule
 from backy import utils
+
+
+@pytest.fixture
+def tz_berlin(monkeypatch):
+    """Fix time zone to gain independece from runtime environment."""
+    monkeypatch.setattr(
+        tzlocal, "get_localzone", lambda: ZoneInfo("Europe/Berlin")
+    )
 
 
 @pytest.fixture(autouse=True, scope="session")

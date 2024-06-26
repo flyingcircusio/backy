@@ -96,7 +96,7 @@ source:
         )
 
     monkeypatch.setattr(
-        backy.rbd.RbdSource,
+        backy.rbd.RbdRepository,
         "backup",
         partialmethod(print_args, return_value=success),
     )
@@ -108,7 +108,7 @@ source:
     assert (
         Ellipsis(
             """\
-(<backy.rbd.backup.RbdBackup object at 0x...>, 'asdf')
+(<backy.rbd.backup.RbdRepository object at 0x...>, 'asdf')
 {}
 """
         )
@@ -129,17 +129,17 @@ source:
 
 # TODO: test call restore, verify, gc
 def test_call_unexpected_exception(
-    capsys, rbdbackup, argv, monkeypatch, log, tmp_path
+    capsys, rbdrepository, argv, monkeypatch, log, tmp_path
 ):
     def do_raise(*args, **kw):
         raise RuntimeError("test")
 
-    monkeypatch.setattr(backy.rbd.RbdSource, "gc", do_raise)
+    monkeypatch.setattr(backy.rbd.RbdRepository, "gc", do_raise)
     import os
 
     monkeypatch.setattr(os, "_exit", lambda x: None)
 
-    argv.extend(["-b", str(rbdbackup.path), "gc"])
+    argv.extend(["-b", str(rbdrepository.path), "gc"])
     utils.log_data = ""
     with pytest.raises(SystemExit):
         main()

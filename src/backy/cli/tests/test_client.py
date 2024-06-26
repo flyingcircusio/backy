@@ -272,7 +272,7 @@ async def test_cli_check_ok(daemon, cli_client):
 
 async def test_cli_check_too_old(daemon, clock, cli_client, log):
     job = daemon.jobs["test01"]
-    revision = Revision.create(job.backup, set(), log)
+    revision = Revision.create(job.repository, set(), log)
     revision.timestamp = utils.now() - datetime.timedelta(hours=48)
     revision.stats["duration"] = 60.0
     revision.materialize()
@@ -298,7 +298,7 @@ async def test_cli_check_too_old(daemon, clock, cli_client, log):
 
 async def test_cli_check_manual_tags(daemon, cli_client, log):
     job = daemon.jobs["test01"]
-    revision = Revision.create(job.backup, {"manual:test"}, log)
+    revision = Revision.create(job.repository, {"manual:test"}, log)
     revision.stats["duration"] = 60.0
     revision.materialize()
 
@@ -323,7 +323,7 @@ async def test_cli_check_manual_tags(daemon, cli_client, log):
 
 async def test_cli_check_quarantine(daemon, cli_client, log):
     job = daemon.jobs["test01"]
-    job.backup.quarantine.add_report(QuarantineReport(b"a", b"b", 0))
+    job.repository.quarantine.add_report(QuarantineReport(b"a", b"b", 0))
 
     utils.log_data = ""
     try:

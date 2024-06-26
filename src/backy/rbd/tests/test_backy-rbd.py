@@ -3,8 +3,8 @@ import subprocess
 
 import pytest
 
-from backy.ext_deps import BACKY_CMD, BASH
-from backy.rbd import RbdSource
+from backy.ext_deps import BACKY_RBD_CMD, BASH
+from backy.rbd import RbdRepository
 from backy.rbd.conftest import create_rev
 from backy.revision import Revision
 from backy.tests import Ellipsis
@@ -39,74 +39,74 @@ def test_smoketest_internal(tmp_path, log):
                 % source1
             ).encode("utf-8")
         )
-    backup = RbdSource(backup_dir, log)
+    repository = RbdRepository(backup_dir, log)
 
     # Backup first state
-    rev1 = create_rev(backup, {"manual:test"})
-    backup.backup(rev1.uuid)
+    rev1 = create_rev(repository, {"manual:test"})
+    repository.backup(rev1.uuid)
 
     # Restore first state from the newest revision
     restore_target = str(tmp_path / "image1.restore")
-    backup.restore(rev1.uuid, restore_target)
+    repository.restore(rev1.uuid, restore_target)
     with pytest.raises(IOError):
-        open(backup.history[-1].filename, "wb")
+        open(repository.history[-1].filename, "wb")
     with pytest.raises(IOError):
-        open(backup.history[-1].info_filename, "wb")
+        open(repository.history[-1].info_filename, "wb")
     assert open(source1, "rb").read() == open(restore_target, "rb").read()
 
     # Backup second state
-    backup.source.filename = source2
-    rev2 = create_rev(backup, {"test"})
-    backup.backup(rev2.uuid)
-    assert len(backup.history) == 2
+    repository.source.filename = source2
+    rev2 = create_rev(repository, {"test"})
+    repository.backup(rev2.uuid)
+    assert len(repository.history) == 2
 
     # Restore second state from second backup which is the newest at position 0
-    backup.restore(rev2.uuid, restore_target)
+    repository.restore(rev2.uuid, restore_target)
     d1 = open(source2, "rb").read()
     d2 = open(restore_target, "rb").read()
     assert d1 == d2
 
     # Our original backup is now at position 1. Lets restore that again.
-    backup.restore(rev1.uuid, restore_target)
+    repository.restore(rev1.uuid, restore_target)
     assert open(source1, "rb").read() == open(restore_target, "rb").read()
 
     # Backup second state again
-    backup.source.filename = source2
-    rev3 = create_rev(backup, {"manual:test"})
-    backup.backup(rev3.uuid)
-    assert len(backup.history) == 3
+    repository.source.filename = source2
+    rev3 = create_rev(repository, {"manual:test"})
+    repository.backup(rev3.uuid)
+    assert len(repository.history) == 3
 
     # Restore image2 from its most recent at position 0
-    backup.restore(rev3.uuid, restore_target)
+    repository.restore(rev3.uuid, restore_target)
     assert open(source2, "rb").read() == open(restore_target, "rb").read()
 
     # Restore image2 from its previous backup, now at position 1
-    backup.restore(rev2.uuid, restore_target)
+    repository.restore(rev2.uuid, restore_target)
     assert open(source2, "rb").read() == open(restore_target, "rb").read()
 
     # Our original backup is now at position 2. Lets restore that again.
-    backup.restore(rev1.uuid, restore_target)
+    repository.restore(rev1.uuid, restore_target)
     assert open(source1, "rb").read() == open(restore_target, "rb").read()
 
     # Backup third state
-    backup.source.filename = source3
-    rev4 = create_rev(backup, {"test"})
-    backup.backup(rev4.uuid)
-    assert len(backup.history) == 4
+    repository.source.filename = source3
+    rev4 = create_rev(repository, {"test"})
+    repository.backup(rev4.uuid)
+    assert len(repository.history) == 4
 
     # Restore image3 from the most curent state
-    backup.restore(rev4.uuid, restore_target)
+    repository.restore(rev4.uuid, restore_target)
     assert open(source3, "rb").read() == open(restore_target, "rb").read()
 
     # Restore image2 from position 1 and 2
-    backup.restore(rev3.uuid, restore_target)
+    repository.restore(rev3.uuid, restore_target)
     assert open(source2, "rb").read() == open(restore_target, "rb").read()
 
-    backup.restore(rev2.uuid, restore_target)
+    repository.restore(rev2.uuid, restore_target)
     assert open(source2, "rb").read() == open(restore_target, "rb").read()
 
     # Restore image1 from position 3
-    backup.restore(rev1.uuid, restore_target)
+    repository.restore(rev1.uuid, restore_target)
     assert open(source1, "rb").read() == open(restore_target, "rb").read()
 
 
@@ -114,7 +114,7 @@ def test_smoketest_internal(tmp_path, log):
 def test_smoketest_external():
     output = subprocess.check_output(
         [BASH, os.path.dirname(__file__) + "/smoketest.sh"],
-        env=os.environ | {"BACKY_CMD": BACKY_CMD},
+        env=os.environ | {"BACKY_RBD_CMD": BACKY_RBD_CMD},
     )
     output = output.decode("utf-8")
     assert (

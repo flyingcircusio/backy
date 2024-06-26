@@ -43,7 +43,7 @@ class BackyDaemon(object):
     config: dict
     schedules: dict[str, Schedule]
     jobs: dict[str, Job]
-    dead_backups: dict[str, Repository]
+    dead_repositories: dict[str, Repository]
 
     backup_semaphores: dict[str, asyncio.BoundedSemaphore]
     log: BoundLogger
@@ -59,7 +59,7 @@ class BackyDaemon(object):
         self.schedules = {}
         self.backup_semaphores = {}
         self.jobs = {}
-        self.dead_backups = {}
+        self.dead_repositories = {}
         self._lock = None
         self.reload_api = asyncio.Event()
         self.api_addrs = ["::1", "127.0.0.1"]
@@ -137,12 +137,12 @@ class BackyDaemon(object):
                 del self.jobs[name]
                 self.log.info("deleted-job", job_name=name)
 
-        self.dead_backups.clear()
+        self.dead_repositories.clear()
         for b in os.scandir(self.base_dir):
             if b.name in self.jobs or not b.is_dir(follow_symlinks=False):
                 continue
             try:
-                self.dead_backups[b.name] = Repository(
+                self.dead_repositories[b.name] = Repository(
                     self.base_dir / b.name,
                     self.log.bind(job_name=b.name),
                 )
@@ -321,7 +321,7 @@ class BackyDaemon(object):
                     ):
                         continue
                     self.log.info("purging-pending", job=candidate.name)
-                    await Job(self, candidate.name, self.log).run_purge()
+                    await Job(self, candidate.name, self.log).run_gc()
                 self.log.info("purge-pending-finished")
             except Exception:
                 self.log.exception("purge-pending")
@@ -338,10 +338,10 @@ class BackyDaemon(object):
         for job in list(self.jobs.values()):
             if filter_re and not filter_re.search(job.name):
                 continue
-            job.backup.scan()
+            job.repository.scan()
             manual_tags = set()
             unsynced_revs = 0
-            history = job.backup.clean_history
+            history = job.repository.clean_history
             for rev in history:
                 manual_tags |= filter_manual_tags(rev.tags)
                 if rev.pending_changes:
@@ -370,10 +370,10 @@ class BackyDaemon(object):
                         else None
                     ),
                     manual_tags=", ".join(manual_tags),
-                    problem_reports=job.backup.problem_reports,
+                    problem_reports=job.repository.problem_reports,
                     unsynced_revs=unsynced_revs,
                     local_revs=len(
-                        job.backup.get_history(clean=True, local=True)
+                        job.repository.get_history(clean=True, local=True)
                     ),
                 )
             )

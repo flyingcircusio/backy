@@ -183,18 +183,18 @@ class BackyAPI:
 
     async def list_backups(self, request: web.Request):
         request["log"].info("list-backups")
-        return to_json(list(self.daemon.dead_backups.keys()))
+        return to_json(list(self.daemon.dead_repositories.keys()))
 
     async def get_backup(
         self, request: web.Request, allow_active: bool
     ) -> Repository:
         name = request.match_info.get("backup_name")
         request["log"].info("get-backups", name=name)
-        if name in self.daemon.dead_backups:
-            return self.daemon.dead_backups[name]
+        if name in self.daemon.dead_repositories:
+            return self.daemon.dead_repositories[name]
         if name in self.daemon.jobs:
             if allow_active:
-                return self.daemon.jobs[name].backup
+                return self.daemon.jobs[name].repository
             request["log"].info("get-backups-forbidden", name=name)
             raise HTTPForbidden()
         request["log"].info("get-backups-not-found", name=name)
@@ -389,7 +389,7 @@ class Client:
 
     async def put_tags(self, rev: Revision, autoremove: bool = False):
         async with self.session.put(
-            f"/v1/backups/{rev.backup.name}/revs/{rev.uuid}/tags",
+            f"/v1/backups/{rev.repository.name}/revs/{rev.uuid}/tags",
             json={"old_tags": list(rev.orig_tags), "new_tags": list(rev.tags)},
             params={"autoremove": int(autoremove)},
         ):

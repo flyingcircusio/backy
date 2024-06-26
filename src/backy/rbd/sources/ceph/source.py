@@ -5,7 +5,7 @@ from structlog.stdlib import BoundLogger
 import backy.utils
 from backy.revision import Revision
 
-from ... import RbdSource
+from ... import RbdRepository
 from ...chunked import ChunkedFileBackend
 from ...quarantine import QuarantineReport
 from .. import BackySource, BackySourceContext, BackySourceFactory
@@ -25,15 +25,17 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
     log: BoundLogger
     rbd: RBDClient
     revision: Revision
-    rbdbackup: RbdSource
+    repository: RbdRepository
 
-    def __init__(self, config: dict, backup: RbdSource, log: BoundLogger):
+    def __init__(
+        self, config: dict, repository: RbdRepository, log: BoundLogger
+    ):
         self.pool = config["pool"]
         self.image = config["image"]
         self.always_full = config.get("full-always", False)
         self.log = log.bind(subsystem="ceph")
         self.rbd = RBDClient(self.log)
-        self.rbdbackup = backup
+        self.repository = repository
 
     def ready(self) -> bool:
         """Check whether the source can be backed up.
@@ -140,7 +142,7 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
             return backy.utils.files_are_roughly_equal(
                 source,
                 target_,
-                report=lambda s, t, o: self.rbdbackup.quarantine.add_report(
+                report=lambda s, t, o: self.repository.quarantine.add_report(
                     QuarantineReport(s, t, o)
                 ),
             )
@@ -153,8 +155,10 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
         # full backups instead of new deltas based on the most recent valid
         # one.
         # XXX this will break if multiple servers are active
-        if not self.always_full and self.revision.backup.local_history:
-            keep_snapshot_revision = self.revision.backup.local_history[-1].uuid
+        if not self.always_full and self.revision.repository.local_history:
+            keep_snapshot_revision = self.revision.repository.local_history[
+                -1
+            ].uuid
         else:
             keep_snapshot_revision = None
         for snapshot in self.rbd.snap_ls(self._image_name):

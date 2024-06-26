@@ -25,10 +25,10 @@ def status(self, filter_re: Optional[Pattern[str]] = None) -> List[StatusDict]:
     for job in list(self.jobs.values()):
         if filter_re and not filter_re.search(job.name):
             continue
-        job.backup.scan()
+        job.repository.scan()
         manual_tags = set()
         unsynced_revs = 0
-        history = job.backup.clean_history
+        history = job.repository.clean_history
         for rev in history:
             manual_tags |= filter_manual_tags(rev.tags)
             if rev.pending_changes:
@@ -55,9 +55,11 @@ def status(self, filter_re: Optional[Pattern[str]] = None) -> List[StatusDict]:
                     else None
                 ),
                 manual_tags=", ".join(manual_tags),
-                quarantine_reports=len(job.backup.quarantine.report_ids),
+                quarantine_reports=len(job.repository.quarantine.report_ids),
                 unsynced_revs=unsynced_revs,
-                local_revs=len(job.backup.get_history(clean=True, local=True)),
+                local_revs=len(
+                    job.repository.get_history(clean=True, local=True)
+                ),
             )
         )
     return result

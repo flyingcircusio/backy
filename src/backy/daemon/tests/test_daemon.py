@@ -150,9 +150,9 @@ async def test_run_backup(daemon, log):
     job = daemon.jobs["test01"]
 
     await job.run_backup({"manual:asdf"})
-    job.backup.scan()
-    assert len(job.backup.history) == 1
-    revision = job.backup.history[0]
+    job.repository.scan()
+    assert len(job.repository.history) == 1
+    revision = job.repository.history[0]
     assert revision.tags == {"manual:asdf"}
     backend = ChunkedFileBackend(revision, log)
     with backend.open("r") as f:
@@ -161,9 +161,9 @@ async def test_run_backup(daemon, log):
     # Run again. This also covers the code path that works if
     # the target backup directory exists already.
     await job.run_backup({"manual:asdf"})
-    job.backup.scan()
-    assert len(job.backup.history) == 2
-    revision = job.backup.history[1]
+    job.repository.scan()
+    assert len(job.repository.history) == 2
+    revision = job.repository.history[1]
     assert revision.tags == {"manual:asdf"}
     backend = ChunkedFileBackend(revision, log)
     with backend.open("r") as f:
@@ -203,7 +203,7 @@ def test_sla_before_first_backup(daemon):
     # I agree that this gives us a blind spot in the beginning. I'll
     # think of something when this happens. Maybe keeping a log of errors
     # or so to notice that we tried previously.
-    assert len(job.backup.history) == 0
+    assert len(job.repository.history) == 0
     assert job.sla is True
 
 
@@ -213,31 +213,31 @@ def test_sla_over_time(daemon, clock, tmp_path, log):
     # I agree that this gives us a blind spot in the beginning. I'll
     # think of something when this happens. Maybe keeping a log of errors
     # or so to notice that we tried previously.
-    revision = Revision.create(job.backup, set(), log)
+    revision = Revision.create(job.repository, set(), log)
     # We're on a 24h cycle. 6 hours old backup is fine.
     revision.timestamp = utils.now() - datetime.timedelta(hours=6)
     revision.stats["duration"] = 60.0
     revision.materialize()
-    job.backup.scan()
-    assert len(job.backup.history) == 1
+    job.repository.scan()
+    assert len(job.repository.history) == 1
     assert job.sla is True
 
     # 24 hours is also fine.
     revision.timestamp = utils.now() - datetime.timedelta(hours=24)
     revision.write_info()
-    job.backup.scan()
+    job.repository.scan()
     assert job.sla is True
 
     # 32 hours is also fine.
     revision.timestamp = utils.now() - datetime.timedelta(hours=32)
     revision.write_info()
-    job.backup.scan()
+    job.repository.scan()
     assert job.sla is True
 
     # 24*1.5 hours is the last time that is OK.
     revision.timestamp = utils.now() - datetime.timedelta(hours=24 * 1.5)
     revision.write_info()
-    job.backup.scan()
+    job.repository.scan()
     assert job.sla is True
 
     # 1 second later we consider this not to be good any longer.
@@ -247,26 +247,26 @@ def test_sla_over_time(daemon, clock, tmp_path, log):
         - datetime.timedelta(seconds=1)
     )
     revision.write_info()
-    job.backup.scan()
+    job.repository.scan()
     assert job.sla is False
 
     # a running backup does not influence this.
     job.update_status("running (slow)")
-    r = Revision.create(job.backup, {"daily"}, log)
+    r = Revision.create(job.repository, {"daily"}, log)
     r.write_info()
     assert job.sla is False
 
 
 def test_incomplete_revs_dont_count_for_sla(daemon, clock, tmp_path, log):
     job = daemon.jobs["test01"]
-    r1 = Revision.create(job.backup, set(), log)
+    r1 = Revision.create(job.repository, set(), log)
     r1.timestamp = utils.now() - datetime.timedelta(hours=48)
     r1.stats["duration"] = 60.0
     r1.materialize()
-    r2 = Revision.create(job.backup, set(), log)
+    r2 = Revision.create(job.repository, set(), log)
     r2.timestamp = utils.now() - datetime.timedelta(hours=1)
     r2.materialize()
-    job.backup.scan()
+    job.repository.scan()
     assert False is job.sla
 
 
@@ -427,7 +427,7 @@ async def test_purge_pending(daemon, monkeypatch):
         "asyncio.sleep", mock.Mock(side_effect=asyncio.CancelledError())
     )
 
-    daemon.jobs["test01"].backup.set_purge_pending()
+    daemon.jobs["test01"].repository.set_purge_pending()
     del daemon.jobs["test01"]
 
     with pytest.raises(asyncio.CancelledError):

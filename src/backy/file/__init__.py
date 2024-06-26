@@ -7,16 +7,14 @@ from pathlib import Path
 import structlog
 from structlog.stdlib import BoundLogger
 
+from backy.source import Source
 from backy.utils import generate_taskid
 
 from .. import logging
-from backy.source import Source
-
 
 
 class FileSource(Source):
     type_ = "file"
-
 
 
 def main():

@@ -291,7 +291,7 @@ async def test_task_generator(daemon, clock, tmp_path, monkeypatch, tz_berlin):
         await cancel_and_wait(j)
     job = daemon.jobs["test01"]
 
-    async def null_coroutine():
+    async def null_coroutine(*args, **kw):
         return
 
     monkeypatch.setattr(job, "_wait_for_deadline", null_coroutine)
@@ -319,7 +319,7 @@ async def test_task_generator_backoff(
         await cancel_and_wait(j)
     job = daemon.jobs["test01"]
 
-    async def null_coroutine():
+    async def null_coroutine(*args, **kw):
         await asyncio.sleep(0.1)
 
     async def false_coroutine(*args, **kw):
@@ -339,7 +339,7 @@ async def test_task_generator_backoff(
 
     monkeypatch.setattr(job, "_wait_for_deadline", null_coroutine)
     monkeypatch.setattr(job, "run_expiry", null_coroutine)
-    monkeypatch.setattr(job, "run_purge", null_coroutine)
+    monkeypatch.setattr(job, "run_gc", null_coroutine)
     monkeypatch.setattr(job, "run_callback", null_coroutine)
     monkeypatch.setattr(job, "run_backup", failing_coroutine)
     monkeypatch.setattr(job, "pull_metadata", null_coroutine)
@@ -421,8 +421,8 @@ def test_daemon_status_filter_re(daemon):
 
 
 async def test_purge_pending(daemon, monkeypatch):
-    run_purge = mock.Mock()
-    monkeypatch.setattr("backy.scheduler.Job.run_purge", run_purge)
+    run_gc = mock.Mock()
+    monkeypatch.setattr("backy.daemon.scheduler.Job.run_gc", run_gc)
     monkeypatch.setattr(
         "asyncio.sleep", mock.Mock(side_effect=asyncio.CancelledError())
     )
@@ -433,4 +433,4 @@ async def test_purge_pending(daemon, monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         await daemon.purge_pending_backups()
 
-    run_purge.assert_called_once()
+    run_gc.assert_called_once()

@@ -60,13 +60,13 @@ class Revision(object):
     @classmethod
     def create(
         cls,
-        backup: "Repository",
+        repository: "Repository",
         tags: set[str],
         log: BoundLogger,
         *,
         uuid: Optional[str] = None,
     ) -> "Revision":
-        r = Revision(backup, log, uuid)
+        r = Revision(repository, log, uuid)
         r.tags = tags
         return r
 

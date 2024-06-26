@@ -235,7 +235,6 @@ async def test_simple_sync(daemons, log):
     new_rev1 = b0.history[1]
     assert new_rev1.repository == b0
     assert new_rev1.timestamp == rev1.timestamp
-    assert new_rev1.backend_type == ""
     assert new_rev1.stats == rev1.stats
     assert new_rev1.tags == rev1.tags
     assert new_rev1.orig_tags == rev1.tags
@@ -413,7 +412,7 @@ def jobs_dry_run(daemons, monkeypatch, clock, log, seed_random, tz_berlin):
 
         for job, start_delay in zip(jobs, start_delays):
             monkeypatch.setattr(job, "run_expiry", null_coroutine)
-            monkeypatch.setattr(job, "run_purge", null_coroutine)
+            monkeypatch.setattr(job, "run_gc", null_coroutine)
             monkeypatch.setattr(job, "run_callback", null_coroutine)
             monkeypatch.setattr(job, "run_backup", partial(run_backup, job))
             monkeypatch.setattr(job, "pull_metadata", null_coroutine)
@@ -483,7 +482,7 @@ async def test_wait_for_leader_parallel(jobs_dry_run):
 ... AAAA I test01[A4WN]         job/leader-found                    [server-0] leader=None leader_revs=1
 ... AAAA D test01[A4WN]         job/updating-status                 [server-0] status='waiting for worker slot (fast)'
 ... AAAA D test01[A4WN]         job/updating-status                 [server-0] status='running (fast)'
-... AAAA D revision/writing-info               revision_uuid='...' tags='daily'
+... AAAA D -                    revision/writing-info               revision_uuid='...' tags='daily'
 ...
 ... AAAA I test01[N6PW]         job/leader-finished                 [server-1] leader='server-0'
 ... AAAA D test01[N6PW]         job/updating-status                 [server-1] status='finished'
@@ -534,7 +533,7 @@ async def test_wait_for_leader_delayed(jobs_dry_run):
 ... AAAA I test01[N6PW]         job/leader-not-scheduled            [server-1] leader='server-0'
 ... AAAA D test01[N6PW]         job/updating-status                 [server-1] status='waiting for worker slot (slow)'
 ... AAAA D test01[N6PW]         job/updating-status                 [server-1] status='running (slow)'
-... AAAA D revision/writing-info               revision_uuid='...' tags='daily'
+... AAAA D -                    revision/writing-info               revision_uuid='...' tags='daily'
 ... AAAA D test01[N6PW]         job/updating-status                 [server-1] status='finished'
 ...
 """
@@ -598,12 +597,12 @@ async def test_wait_for_leader_crash(jobs_dry_run, monkeypatch):
 ... AAAA I test01[A4WN]         job/leader-found                    [server-0] leader=None leader_revs=1
 ... AAAA D test01[A4WN]         job/updating-status                 [server-0] status='waiting for worker slot (fast)'
 ... AAAA D test01[A4WN]         job/updating-status                 [server-0] status='running (fast)'
-... AAAA I daemon/api-reconfigure              [server-0] \n\
+... AAAA I -                    daemon/api-reconfigure              [server-0] \n\
 ...
 ... AAAA W test01[N6PW]         job/leader-failed                   [server-1] exception_class='aiohttp.client_exceptions.ClientResponseError' exception_msg="401, message='Unauthorized', url=URL('...')" leader='server-0'
 ... AAAA D test01[N6PW]         job/updating-status                 [server-1] status='waiting for worker slot (slow)'
 ... AAAA D test01[N6PW]         job/updating-status                 [server-1] status='running (slow)'
-... AAAA D revision/writing-info               revision_uuid='...' tags='daily'
+... AAAA D -                    revision/writing-info               revision_uuid='...' tags='daily'
 ... AAAA D test01[A4WN]         job/updating-status                 [server-0] status='finished'
 ...
 ... AAAA D test01[N6PW]         job/updating-status                 [server-1] status='finished'
@@ -646,7 +645,7 @@ async def test_wait_for_leader_stopped(jobs_dry_run):
 ... AAAA I test01[A4WN]         job/leader-stopped                  [server-1] leader='server-0'
 ... AAAA D test01[A4WN]         job/updating-status                 [server-1] status='waiting for worker slot (slow)'
 ... AAAA D test01[A4WN]         job/updating-status                 [server-1] status='running (slow)'
-... AAAA D revision/writing-info               revision_uuid='...' tags='daily'
+... AAAA D -                    revision/writing-info               revision_uuid='...' tags='daily'
 ... AAAA D test01[A4WN]         job/updating-status                 [server-1] status='finished'
 ...
 """
@@ -703,7 +702,7 @@ async def test_wait_for_leader_ambiguous_leader(jobs_dry_run, monkeypatch):
 ... AAAA I test01[A4WN]         job/leader-found                    [server-0] leader=None leader_revs=0
 ... AAAA D test01[A4WN]         job/updating-status                 [server-0] status='waiting for worker slot (slow)'
 ... AAAA D test01[A4WN]         job/updating-status                 [server-0] status='running (slow)'
-... AAAA D revision/writing-info               revision_uuid='...' tags='daily'
+... AAAA D -                    revision/writing-info               revision_uuid='...' tags='daily'
 ... AAAA D test01[A4WN]         job/updating-status                 [server-0] status='finished'
 ...
 """

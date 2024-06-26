@@ -95,9 +95,9 @@ class RbdRepository(Repository):
                 "Source is not ready (does it exist? can you access it?)"
             )
 
-        backend = ChunkedFileBackend(new_revision, self.log)
         with self.source(new_revision) as source:
             try:
+                backend = ChunkedFileBackend(new_revision, self.log)
                 source.backup(backend)
                 verified = source.verify(backend)
             except BackendException:
@@ -129,6 +129,7 @@ class RbdRepository(Repository):
         for revision in reversed(self.get_history(clean=True, local=True)):
             if revision.trust == Trust.DISTRUSTED:
                 self.log.warning("inconsistent")
+                backend = ChunkedFileBackend(revision, self.log)
                 backend.verify()
                 break
         return verified

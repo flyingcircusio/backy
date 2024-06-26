@@ -28,7 +28,8 @@ def test_display_usage(capsys, argv):
     out, err = capsys.readouterr()
     assert (
         """\
-usage: pytest [-h] [-v] [-b BACKUPDIR] [-t TASKID] {backup,restore,gc,verify} ...
+usage: pytest [-h] [-v] [-b BACKUPDIR] [-t TASKID]
+              {backup,restore,gc,verify} ...
 """
         == out
     )
@@ -44,7 +45,8 @@ def test_display_help(capsys, argv):
     assert (
         Ellipsis(
             """\
-usage: pytest [-h] [-v] [-b BACKUPDIR] [-t TASKID] {backup,restore,gc,verify} ...
+usage: pytest [-h] [-v] [-b BACKUPDIR] [-t TASKID]
+              {backup,restore,gc,verify} ...
 
 Backup and restore for block devices.
 

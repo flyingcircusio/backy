@@ -105,7 +105,7 @@ def main():
                 success = b.backup(args.revision)
                 ret = int(not success)
             case "restore":
-                b.restore(args.revisions, args.target, args.backend)
+                b.restore(args.revision, args.target, args.restore_backend)
             case "gc":
                 b.gc()
             case "verify":

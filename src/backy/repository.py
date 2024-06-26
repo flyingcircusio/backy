@@ -1,6 +1,7 @@
 import datetime
 import fcntl
 import re
+from enum import Enum
 from math import ceil, floor
 from pathlib import Path
 from typing import IO, List, Literal, Optional, TypedDict
@@ -19,6 +20,7 @@ from backy.utils import (
     unique,
 )
 
+from .ext_deps import BACKY_RBD_CMD, BACKY_S3_CMD
 from .revision import Revision, Trust, filter_schedule_tags
 from .schedule import Schedule
 
@@ -43,6 +45,21 @@ class StatusDict(TypedDict):
     local_revs: int
 
 
+class RepositoryType(Enum):
+    rbd = BACKY_RBD_CMD
+    s3 = BACKY_S3_CMD
+
+    @classmethod
+    def from_str(cls, str: str) -> "RepositoryType":
+        match str:
+            case "rbd":
+                return cls.rbd
+            case "s3":
+                return cls.s3
+            case _:
+                raise ValueError("invalid str for RepositoryType: " + str)
+
+
 class Repository(object):
     """A repository of backup revisions of some object."""
 
@@ -54,6 +71,7 @@ class Repository(object):
 
     _by_uuid: dict[str, Revision]
     _lock_fds: dict[str, IO]
+    type: RepositoryType
 
     def __init__(self, path: Path, log: BoundLogger):
         self.log = log.bind(subsystem="backup")
@@ -75,11 +93,13 @@ class Repository(object):
         self.schedule = Schedule()
         self.schedule.configure(self.config["schedule"])
 
+        self.type = RepositoryType.from_str(self.config.get("type", "rbd"))
+
         self.scan()
 
     @classmethod
     def init(cls, path: Path, log: BoundLogger, source: Source):
-        if (path / 'config').exists():
+        if (path / "config").exists():
             raise RepositoryNotEmpty(path)
 
         if not path.exists():
@@ -89,7 +109,7 @@ class Repository(object):
 
         config = {"schedule": {}, "source": source_config}
 
-        with open(path / 'config', 'w') as f:
+        with open(path / "config", "w") as f:
             yaml.dump(config, f)
 
         log.info(f"Initialized empty repository in {path}")
@@ -217,17 +237,6 @@ class Repository(object):
                 unknown_tags=", ".join(missing_tags),
             )
             raise RuntimeError("Unknown tags")
-
-    def warn_pending_changes(self, revs: Optional[List[Revision]] = None):
-        revs = revs if revs is not None else self.history
-        pending = [r for r in revs if r.pending_changes]
-        if pending:
-            self.log.warning(
-                "pending-changes",
-                _fmt_msg="Synchronize with remote server (backy push) or "
-                "risk loosing changes",
-                revisions=",".join(r.uuid for r in pending),
-            )
 
     def prevent_remote_rev(self, revs: Optional[List[Revision]] = None):
         revs = revs if revs is not None else self.history

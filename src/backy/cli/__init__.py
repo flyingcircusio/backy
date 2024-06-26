@@ -2,6 +2,7 @@ import argparse
 import errno
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, Literal, Optional
@@ -23,62 +24,47 @@ from backy import logging
 # XXX invert this dependency
 from backy.rbd.backup import RestoreBackend
 from backy.repository import Repository
+from backy.revision import Revision
 from backy.utils import format_datetime_local, generate_taskid
 
+# single repo commands
 
 
-    # single repo commands
+# (init)
+
+# rev-parse                Print full path or uuid of specified revisions
+
+# log [--filter] (status)              Show backup status. Show inventory and summary information
+
+# backup [--fg]             Perform a backup
+# restore             Restore (a given revision) to a given target
+
+# distrust            Distrust specified revisions
+# verify              Verify specified revisions
+# rm                  Forget specified revision
+# tag                 Modify tags on revision
+
+# gc [--expire] [--remote|--local]       (Expire revisions) and collect garbage from the repository.
+
+# pull?               update metadata from all known remotes that host backups
+#                     for the same backup source
+
+# check
 
 
+# # multi-repo / daemon-based commands
+
+# show-jobs           List status of all known jobs
+# show-daemon         Daemon status
+
+# pull
+
+# backup --all [--include=filter] [--exclude=filter] [--fg]
+
+# check --all
 
 
-    # (init)
-
-    # rev-parse                Print full path or uuid of specified revisions
-
-    # log [--filter] (status)              Show backup status. Show inventory and summary information
-
-    # backup [--fg]             Perform a backup
-    # restore             Restore (a given revision) to a given target
-
-    # distrust            Distrust specified revisions
-    # verify              Verify specified revisions
-    # rm                  Forget specified revision
-    # tag                 Modify tags on revision
-
-    # gc [--expire] [--remote|--local]       (Expire revisions) and collect garbage from the repository.
-
-    # pull?               update metadata from all known remotes that host backups
-    #                     for the same backup source
-
-    # check
-
-
-
-
-
-
-
-    # # multi-repo / daemon-based commands
-
-    # show jobs           List status of all known jobs
-    # show daemon         Daemon status
-
-    # pull
-
-    # backup --all [--include=filter] [--exclude=filter] [--fg]
-
-    # check --all
-
-
-
-
-
-
-
-
-
-
+# maybe add a common --repo/--job <regex> flag?
 
 
 class Command(object):
@@ -105,7 +91,15 @@ class Command(object):
         source = backy.source.factory_by_type(type)
         Repository.init(self.path, self.log, source=source)
 
-    def status(self, yaml_: bool, revision: str) -> None:
+    def rev_parse(self, revision: str, uuid: bool) -> None:
+        b = Repository(self.path, self.log)
+        for r in b.find_revisions(revision):
+            if uuid:
+                print(r.uuid)
+            else:
+                print(r.filename)
+
+    def log_(self, yaml_: bool, revision: str) -> None:
         revs = Repository(self.path, self.log).find_revisions(revision)
         if yaml_:
             print(yaml.safe_dump([r.to_dict() for r in revs]))
@@ -168,57 +162,72 @@ class Command(object):
             )
 
     def backup(self, tags: str, force: bool) -> int:
-        b = RbdRepository(self.path, self.log)
+        b = Repository(self.path, self.log)
         b._clean()
-        try:
-            tags_ = set(t.strip() for t in tags.split(","))
-            success = b.backup(tags_, force)
-            return int(not success)
-        except IOError as e:
-            if e.errno not in [errno.EDEADLK, errno.EAGAIN]:
-                raise
-            self.log.warning("backup-already-running")
-            return 1
-        finally:
-            b._clean()
+        tags_ = set(t.strip() for t in tags.split(","))
+        if not force:
+            b.validate_tags(tags_)
+        r = Revision.create(b, tags_, self.log)
+        r.materialize()
+        proc = subprocess.run(
+            [
+                b.type.value,
+                "-t",
+                self.taskid,
+                "-b",
+                str(self.path),
+                "backup",
+                r.uuid,
+            ],
+        )
+        b.scan()
+        b._clean()
+        return proc.returncode
 
     def restore(
         self, revision: str, target: str, restore_backend: RestoreBackend
     ) -> None:
-        b = RbdRepository(self.path, self.log)
-        b.restore(revision, target, restore_backend)
-
-    def find(self, revision: str, uuid: bool) -> None:
-        b = RbdRepository(self.path, self.log)
-        for r in b.find_revisions(revision):
-            if uuid:
-                print(r.uuid)
-            else:
-                print(r.filename)
-
-    def forget(self, revision: str) -> None:
-        b = RbdRepository(self.path, self.log)
-        b.forget(revision)
-        b.warn_pending_changes()
-
-    def scheduler(self, config: Path) -> None:
-        backy.daemon.main(config, self.log)
-
-    def purge(self) -> None:
-        b = RbdRepository(self.path, self.log)
-        b.purge()
-
-    def upgrade(self) -> None:
-        b = RbdRepository(self.path, self.log)
-        b.upgrade()
+        b = Repository(self.path, self.log)
+        r = b.find(revision)
+        proc = subprocess.run(
+            [
+                b.type.value,
+                "-t",
+                self.taskid,
+                "-b",
+                str(self.path),
+                "restore",
+                "--backend",
+                restore_backend.value,
+                r.uuid,
+                target,
+            ]
+        )
+        return proc.returncode
 
     def distrust(self, revision: str) -> None:
-        b = RbdRepository(self.path, self.log)
+        b = Repository(self.path, self.log)
         b.distrust(revision)
 
     def verify(self, revision: str) -> None:
-        b = RbdRepository(self.path, self.log)
-        b.verify(revision)
+        b = Repository(self.path, self.log)
+        r = b.find(revision)
+        proc = subprocess.run(
+            [
+                b.type.value,
+                "-t",
+                self.taskid,
+                "-b",
+                str(self.path),
+                "verify",
+                r.uuid,
+            ]
+        )
+        return proc.returncode
+
+    def rm(self, revision: str) -> None:
+        b = Repository(self.path, self.log)
+        b.forget(revision)
 
     def tags(
         self,
@@ -243,14 +252,31 @@ class Command(object):
             autoremove=autoremove,
             force=force,
         )
-        b.warn_pending_changes()
         return int(not success)
 
-    def expire(self) -> None:
+    def gc(self, expire: bool) -> None:
         # XXX needs to update from remote API peers first (pull)
-        b = backy.repository.Repository(self.path, self.log)
-        b.expire()
-        b.warn_pending_changes()
+        b = Repository(self.path, self.log)
+        if expire:
+            b.expire()
+        proc = subprocess.run(
+            [
+                b.type.value,
+                "-t",
+                self.taskid,
+                "-b",
+                str(self.path),
+                "gc",
+            ]
+        )
+        # if remote:
+        # push
+
+    def pull(self):
+        pass
+
+    def check(self):
+        pass
 
     def jobs(self, filter_re=""):
         """List status of all known jobs. Optionally filter by regex."""
@@ -409,7 +435,7 @@ def main():
     )
     p.set_defaults(func="init")
 
-    p = subparsers.add_parser("jobs", help="List status of all known jobs")
+    p = subparsers.add_parser("show-jobs", help="List status of all known jobs")
     p.add_argument(
         "filter_re",
         default="",
@@ -417,19 +443,10 @@ def main():
         nargs="?",
         help="Optional job filter regex",
     )
-    p.set_defaults(func="jobs")
+    p.set_defaults(func="show-jobs")
 
-    p = subparsers.add_parser("status", help="Show job status overview")
-    p.set_defaults(func="status")
-
-    p = subparsers.add_parser("run", help="Trigger immediate run for one job")
-    p.add_argument("job", metavar="<job>", help="Name of the job to run")
-    p.set_defaults(func="run")
-
-    p = subparsers.add_parser(
-        "runall", help="Trigger immediate run for all jobs"
-    )
-    p.set_defaults(func="runall")
+    p = subparsers.add_parser("show-daemon", help="Show job status overview")
+    p.set_defaults(func="show-daemon")
 
     p = subparsers.add_parser(
         "check",
@@ -474,13 +491,18 @@ def main():
     p.set_defaults(func="restore")
 
     p = subparsers.add_parser(
-        "purge",
+        "gc",
         help="Purge the backup store (i.e. chunked) from unused data",
     )
-    p.set_defaults(func="purge")
+    p.add_argument(
+        "--expire",
+        action="store_true",
+        help="Expire tags according to schedule",
+    )
+    p.set_defaults(func="gc")
 
     p = subparsers.add_parser(
-        "find",
+        "rev-parse",
         help="Print full path or uuid of specified revisions",
     )
     p.add_argument(
@@ -495,10 +517,10 @@ def main():
         default="latest",
         help="use revision SPEC to find (default: %(default)s)",
     )
-    p.set_defaults(func="find")
+    p.set_defaults(func="rev_parse")
 
     p = subparsers.add_parser(
-        "status",
+        "log",
         help="Show backup status. Show inventory and summary information",
     )
     p.add_argument("--yaml", dest="yaml_", action="store_true")
@@ -509,7 +531,7 @@ def main():
         default="all",
         help="use revision SPEC as filter (default: %(default)s)",
     )
-    p.set_defaults(func="status")
+    p.set_defaults(func="log_")
 
     # DISTRUST
     p = subparsers.add_parser(
@@ -587,11 +609,6 @@ def main():
     )
     p.set_defaults(func="tags")
 
-    p = subparsers.add_parser(
-        "expire",
-        help="Expire tags according to schedule",
-    )
-    p.set_defaults(func="expire")
     args = parser.parse_args()
 
     if not hasattr(args, "func"):

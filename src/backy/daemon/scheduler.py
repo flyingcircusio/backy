@@ -291,13 +291,9 @@ class Job(object):
                         self.repository._clean()
                         await self.run_backup(next_tags)
                         self.repository.scan()
-                        await self.repository.run_with_backup_lock(
-                            self.pull_metadata, self.daemon.peers, self.taskid
-                        )
+                        await self.pull_metadata()
                         await self.run_expiry()
-                        await self.repository.run_with_backup_lock(
-                            self.push_metadata, self.daemon.peers, self.taskid
-                        )
+                        await self.push_metadata()
                         await self.run_gc()
                         await self.run_callback()
             except asyncio.CancelledError:
@@ -466,7 +462,10 @@ class Job(object):
             self._task = None
             self.update_status("")
 
-    async def push_metadata(self, peers, taskid: str) -> int:
+    async def push_metadata(self) -> int:
+        return await self.repository.run_with_backup_lock(self._push_metadata)
+
+    async def _push_metadata(self) -> int:
         grouped = defaultdict(list)
         for r in self.repository.clean_history:
             if r.pending_changes:
@@ -474,17 +473,21 @@ class Job(object):
         self.log.info(
             "push-start", changes=sum(len(L) for L in grouped.values())
         )
-        async with ClientManager(peers, taskid, self.log) as apis:
+        async with ClientManager(
+            self.daemon.peers, self.taskid, self.log
+        ) as apis:
             errors = await asyncio.gather(
                 *[
-                    self._push_metadata(apis[server], grouped[server])
+                    self._push_metadata_single(apis[server], grouped[server])
                     for server in apis
                 ]
             )
         self.log.info("push-end", errors=sum(errors))
         return sum(errors)
 
-    async def _push_metadata(self, api: Client, revs: List[Revision]) -> bool:
+    async def _push_metadata_single(
+        self, api: Client, revs: List[Revision]
+    ) -> bool:
         purge_required = False
         error = False
         for r in revs:
@@ -531,10 +534,13 @@ class Job(object):
                 error = True
         return error
 
-    async def pull_metadata(self, peers: dict, taskid: str) -> int:
+    async def pull_metadata(self) -> int:
+        return await self.repository.run_with_backup_lock(self._pull_metadata)
+
+    async def _pull_metadata(self) -> int:
         async def remove_dead_peer():
             for r in list(self.repository.history):
-                if r.server and r.server not in peers:
+                if r.server and r.server not in self.daemon.peers:
                     self.log.info(
                         "pull-removing-dead-peer",
                         rev_uuid=r.uuid,
@@ -544,15 +550,17 @@ class Job(object):
             return False
 
         self.log.info("pull-start")
-        async with ClientManager(peers, taskid, self.log) as apis:
+        async with ClientManager(
+            self.daemon.peers, self.taskid, self.log
+        ) as apis:
             errors = await asyncio.gather(
                 remove_dead_peer(),
-                *[self._pull_metadata(apis[server]) for server in apis],
+                *[self._pull_metadata_single(apis[server]) for server in apis],
             )
         self.log.info("pull-end", errors=sum(errors))
         return sum(errors)
 
-    async def _pull_metadata(self, api: Client) -> bool:
+    async def _pull_metadata_single(self, api: Client) -> bool:
         error = False
         log = self.log.bind(server=api.server_name)
         try:

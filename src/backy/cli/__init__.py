@@ -26,6 +26,61 @@ from backy.repository import Repository
 from backy.utils import format_datetime_local, generate_taskid
 
 
+
+    # single repo commands
+
+
+
+
+    # (init)
+
+    # rev-parse                Print full path or uuid of specified revisions
+
+    # log [--filter] (status)              Show backup status. Show inventory and summary information
+
+    # backup [--fg]             Perform a backup
+    # restore             Restore (a given revision) to a given target
+
+    # distrust            Distrust specified revisions
+    # verify              Verify specified revisions
+    # rm                  Forget specified revision
+    # tag                 Modify tags on revision
+
+    # gc [--expire] [--remote|--local]       (Expire revisions) and collect garbage from the repository.
+
+    # pull?               update metadata from all known remotes that host backups
+    #                     for the same backup source
+
+    # check
+
+
+
+
+
+
+
+    # # multi-repo / daemon-based commands
+
+    # show jobs           List status of all known jobs
+    # show daemon         Daemon status
+
+    # pull
+
+    # backup --all [--include=filter] [--exclude=filter] [--fg]
+
+    # check --all
+
+
+
+
+
+
+
+
+
+
+
+
 class Command(object):
     """Proxy between CLI calls and actual backup code."""
 

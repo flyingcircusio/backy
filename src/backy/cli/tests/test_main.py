@@ -11,7 +11,6 @@ from backy import utils
 from backy.revision import Revision
 from backy.tests import Ellipsis
 import backy.cli
-import backy.cli.client
 
 @pytest.fixture
 def argv():

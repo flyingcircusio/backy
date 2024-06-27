@@ -90,3 +90,9 @@ backy-file = "backy.file:main"
 [[tool.mypy.overrides]]
 module = "backy.*"
 check_untyped_defs = true
+
+[tool.zest-releaser]
+prereleaser.before = [ "release_helper.ignore_history_file" ]
+prereleaser.middle = [ "release_helper.update_poetry_version release_helper.scriv_collect" ]
+postreleaser.before = [ "release_helper.ignore_history_file" ]
+postreleaser.middle = [ "release_helper.update_poetry_version" ]

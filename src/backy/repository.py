@@ -4,13 +4,13 @@ import re
 from enum import Enum
 from math import ceil, floor
 from pathlib import Path
-from typing import IO, List, Literal, Optional, TypedDict
+from typing import IO, List, Literal, Optional, TypedDict, Any
 
 import tzlocal
 import yaml
 from structlog.stdlib import BoundLogger
 
-from backy.source import Source, factory_by_type
+import backy.source
 from backy.utils import (
     duplicates,
     list_get,
@@ -60,71 +60,42 @@ class Repository(object):
     """
 
     path: Path
-    config: dict
     schedule: Schedule
     history: list[Revision]
     log: BoundLogger
 
     _by_uuid: dict[str, Revision]
     _lock_fds: dict[str, IO]
-    sourcetype: type[Source]
+    sourcetype: type[backy.source.Source]
 
-    def __init__(self, path: Path, log: BoundLogger):
+    def __init__(
+        self,
+        path: Path,
+        source: backy.source.Source,
+        schedule: Schedule,
+        log: BoundLogger,
+    ):
+        self.schedule = schedule
+        self.source = source
+        self.source.bind(self, log)
         self.log = log.bind(subsystem="backup")
         self.path = path.resolve()
         self._lock_fds = {}
 
-        # Load config from file
-        try:
-            with self.path.joinpath("config").open(encoding="utf-8") as f:
-                self.config = yaml.safe_load(f)
-        except IOError:
-            self.log.error(
-                "could-not-read-config",
-                _fmt_msg="Could not read config file. Is the path correct?",
-                config_path=str(self.path / "config"),
-            )
-            raise
-
-        self.schedule = Schedule()
-        self.schedule.configure(self.config["schedule"])
-
-        self.sourcetype = factory_by_type(
-            self.config.get("sourcetype", "backy-rbd")
-        )
-
+    def connect(self):
+        self.path.mkdir(parents=True, exist_ok=True)
         self.scan()
 
-    @classmethod
-    def init(
-        cls,
-        path: Path,
-        source: type[Source],
-        sourceconf: dict,
-        log: BoundLogger,
-    ) -> "Repository":
-        if (path / "config").exists():
-            raise RepositoryNotEmpty(path)
+    @staticmethod
+    def from_config(config: dict[str, Any], log: BoundLogger) -> "Repository":
+        schedule = Schedule()
+        schedule.configure(config["schedule"])
 
-        if not path.exists():
-            path.mkdir(parents=True, exist_ok=True)
+        source = backy.source.factory_by_type(
+            config["source"]["type"]
+        ).from_config(config["source"])
 
-        with open(path / "config", "w") as f:
-            yaml.dump(
-                {
-                    "schedule": {},
-                    "sourcetype": source.subcommand,
-                    "source": sourceconf,
-                },
-                f,
-            )
-
-        log.info(f"repo-initialized", path=path)
-
-        return cls(path, log)
-
-    def get_source(self) -> Source:
-        return self.sourcetype(self, self.config["source"], self.log)
+        return Repository(config['path'], source, schedule, log)
 
     @property
     def problem_reports(self) -> list[str]:

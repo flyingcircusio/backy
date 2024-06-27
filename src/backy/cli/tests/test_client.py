@@ -6,9 +6,7 @@ from aiohttp import ClientResponseError, hdrs
 from aiohttp.web_exceptions import HTTPUnauthorized
 
 from backy import utils
-from backy.cli.client import CLIClient
 from backy.daemon.api import BackyAPI, Client
-from backy.daemon.tests.test_daemon import daemon
 from backy.rbd.quarantine import QuarantineReport
 from backy.revision import Revision
 from backy.tests import Ellipsis

@@ -18,12 +18,14 @@ from ..repository import Repository
 
 class FileSource(Source):
     path: Path  # the source we are backing up
+    type_ = "file"
 
-    def __init__(
-        self, repository: Repository, config: dict[str, Any], log: BoundLogger
-    ):
-        super().__init__(repository, log)
-        self.path = Path(config["path"])
+    def __init__(self, path: Path):
+        self.path = path
+
+    @classmethod
+    def from_config(cls, config: dict[str, Any]):
+        return cls(path=Path(config['path']))
 
     @property
     def subcommand(self) -> str:

@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractmethod
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any
 
@@ -6,6 +6,7 @@ from structlog.stdlib import BoundLogger
 
 if TYPE_CHECKING:
     from backy.repository import Repository
+    from backy.revision import Revision
 
 SOURCE_PLUGINS = entry_points(group="backy.sources")
 
@@ -47,15 +48,25 @@ class Source(ABC):
 
     """
 
+    type_: str
+
     repository: "Repository"
     log: BoundLogger
 
-    @abstractmethod
-    def __init__(self, repository: "Repository", log: BoundLogger):
+    def bind(self, repository: "Repository", log: BoundLogger):
         self.repository = repository
         self.log = log
 
-    @property
+    @classmethod
     @abstractmethod
-    def subcommand(self) -> str:
+    def from_config(cls, config: dict[str, Any]) -> "Source":
+        ...
+
+
+    @abstractmethod
+    def backup(self, revision: "Revision") -> "Source":
+        ...
+
+    @abstractmethod
+    def restore(self, revision: "Revision", *args, **kw) -> "Source":
         ...

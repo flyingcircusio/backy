@@ -10,7 +10,7 @@ import backy.repository
 from backy import utils
 from backy.revision import Revision
 from backy.tests import Ellipsis
-
+import backy.cli
 
 @pytest.fixture
 def argv():
@@ -23,7 +23,7 @@ def argv():
 
 def test_display_usage(capsys, argv):
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.cli.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert (
@@ -41,7 +41,7 @@ upgrade,scheduler,distrust,verify,forget,tags,expire,push,pull}
 def test_display_client_usage(capsys, argv):
     argv.append("client")
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.cli.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert (
@@ -57,7 +57,7 @@ usage: pytest client [-h] [-c CONFIG] [-p PEER] [--url URL] [--token TOKEN]
 def test_display_help(capsys, argv):
     argv.append("--help")
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.cli.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert (
@@ -82,7 +82,7 @@ positional arguments:
 def test_display_client_help(capsys, argv):
     argv.extend(["client", "--help"])
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.cli.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert (
@@ -105,7 +105,7 @@ def test_verbose_logging(capsys, argv):
     # for -v is covered.
     argv.extend(["-v"])
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.cli.main()
     assert exit.value.code == 0
 
 
@@ -120,17 +120,17 @@ async def async_print_args(*args, **kw):
 
 
 def test_call_status(capsys, backup, argv, monkeypatch):
-    monkeypatch.setattr(backy.main.Command, "status", print_args)
+    monkeypatch.setattr(backy.cli.Command, "status", print_args)
     argv.extend(["-v", "-b", str(backup.path), "status"])
     utils.log_data = ""
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.cli.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert (
         Ellipsis(
             """\
-(<backy.main.Command object at 0x...>,)
+(<backy.cli.Command object at 0x...>,)
 {'revision': 'all', 'yaml_': False}
 """
         )
@@ -179,7 +179,7 @@ source:
     argv.extend(["-v", "backup", "manual:test"])
     utils.log_data = ""
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.cli.main()
     out, err = capsys.readouterr()
     assert (
         Ellipsis(
@@ -205,17 +205,17 @@ source:
 
 
 def test_call_find(capsys, backup, argv, monkeypatch):
-    monkeypatch.setattr(backy.main.Command, "find", print_args)
+    monkeypatch.setattr(backy.cli.Command, "find", print_args)
     argv.extend(["-v", "-b", str(backup.path), "find", "-r", "1"])
     utils.log_data = ""
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.cli.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert (
         Ellipsis(
             """\
-(<backy.main.Command object at ...>,)
+(<backy.cli.Command object at ...>,)
 {'revision': '1', 'uuid': False}
 """
         )
@@ -269,7 +269,7 @@ jobs: {{}}
     argv.extend(["-v", "client", "-c", conf, action, *args.values()])
     utils.log_data = ""
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.cli.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert (
@@ -297,7 +297,7 @@ jobs: {{}}
 
 
 def test_call_scheduler(capsys, backup, argv, monkeypatch, tmp_path):
-    monkeypatch.setattr(backy.main.Command, "scheduler", print_args)
+    monkeypatch.setattr(backy.cli.Command, "scheduler", print_args)
     argv.extend(
         [
             "-v",
@@ -310,13 +310,13 @@ def test_call_scheduler(capsys, backup, argv, monkeypatch, tmp_path):
     )
     utils.log_data = ""
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.cli.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert (
         Ellipsis(
             """\
-(<backy.main.Command object at ...>,)
+(<backy.cli.Command object at ...>,)
 {'config': PosixPath('/etc/backy.conf')}
 """
         )
@@ -337,18 +337,18 @@ def test_call_scheduler(capsys, backup, argv, monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("action", ["set", "add", "remove"])
 def test_call_tags(capsys, backup, argv, monkeypatch, action):
-    monkeypatch.setattr(backy.main.Command, "tags", print_args)
+    monkeypatch.setattr(backy.cli.Command, "tags", print_args)
     argv.extend(
         ["-v", "-b", str(backup.path), "tags", action, "-r", "last", "manual:a"]
     )
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.cli.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert (
         Ellipsis(
             f"""\
-(<backy.main.Command object at ...>,)
+(<backy.cli.Command object at ...>,)
 {{'action': '{action}',
  'autoremove': False,
  'expect': None,
@@ -375,16 +375,16 @@ def test_call_tags(capsys, backup, argv, monkeypatch, action):
 
 
 def test_call_expire(capsys, backup, argv, monkeypatch):
-    monkeypatch.setattr(backy.main.Command, "expire", print_args)
+    monkeypatch.setattr(backy.cli.Command, "expire", print_args)
     argv.extend(["-v", "-b", str(backup.path), "expire"])
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.cli.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert (
         Ellipsis(
             """\
-(<backy.main.Command object at ...>,)
+(<backy.cli.Command object at ...>,)
 {}
 """
         )
@@ -406,7 +406,7 @@ def test_call_expire(capsys, backup, argv, monkeypatch):
 
 @pytest.mark.parametrize("action", ["pull", "push"])
 def test_call_pull_push(capsys, backup, argv, monkeypatch, tmp_path, action):
-    monkeypatch.setattr(backy.main.Command, action, print_args)
+    monkeypatch.setattr(backy.cli.Command, action, print_args)
     conf = tmp_path / "conf"
     with open(conf, "w") as c:
         c.write(
@@ -427,13 +427,13 @@ jobs: {{}}
     argv.extend(["-v", "-b", str(backup.path), action, "-c", str(conf)])
     utils.log_data = ""
     with pytest.raises(SystemExit) as exit:
-        backy.main.main()
+        backy.cli.main()
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert (
         Ellipsis(
             f"""\
-(<backy.main.Command object at ...>,)
+(<backy.cli.Command object at ...>,)
 {{'config': {repr(conf)}}}
 """
         )
@@ -458,7 +458,7 @@ def test_call_unexpected_exception(
     def do_raise(*args, **kw):
         raise RuntimeError("test")
 
-    monkeypatch.setattr(backy.main.Command, "status", do_raise)
+    monkeypatch.setattr(backy.cli.Command, "status", do_raise)
     import os
 
     monkeypatch.setattr(os, "_exit", lambda x: None)
@@ -468,7 +468,7 @@ def test_call_unexpected_exception(
     )
     utils.log_data = ""
     with pytest.raises(SystemExit):
-        backy.main.main()
+        backy.cli.main()
     out, err = capsys.readouterr()
     assert "" == out
     assert (
@@ -478,9 +478,9 @@ def test_call_unexpected_exception(
 ... D command/parsed                      func='status' func_args={'yaml_': False, 'revision': 'all'}
 ... E command/failed                      exception_class='builtins.RuntimeError' exception_msg='test'
 exception>\tTraceback (most recent call last):
-exception>\t  File ".../src/backy/main.py", line ..., in main
+exception>\t  File ".../src/backy/cli/__init__.py", line ..., in main
 exception>\t    ret = func(**func_args)
-exception>\t  File ".../src/backy/tests/test_main.py", line ..., in do_raise
+exception>\t  File ".../src/backy/cli/tests/test_main.py", line ..., in do_raise
 exception>\t    raise RuntimeError("test")
 exception>\tRuntimeError: test
 """
@@ -492,7 +492,7 @@ exception>\tRuntimeError: test
 def test_commands_wrapper_status(
     backup, tmp_path, capsys, clock, tz_berlin, log
 ):
-    commands = backy.main.Command(tmp_path, "AAAA", log)
+    commands = backy.cli.Command(tmp_path, "AAAA", log)
 
     revision1 = Revision.create(backup, {"daily"}, log, uuid="1")
     revision1.materialize()
@@ -535,7 +535,7 @@ def test_commands_wrapper_status(
 def test_commands_wrapper_status_yaml(
     backup, tmp_path, capsys, clock, tz_berlin, log
 ):
-    commands = backy.main.Command(tmp_path, "AAAA", log)
+    commands = backy.cli.Command(tmp_path, "AAAA", log)
 
     revision = Revision.create(backup, set(), log, uuid="1")
     revision.stats["duration"] = 3.5

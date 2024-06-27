@@ -49,19 +49,17 @@ class Source(ABC):
     """
 
     type_: str
+    subcommand: str
 
     repository: "Repository"
-    log: BoundLogger
 
-    def bind(self, repository: "Repository", log: BoundLogger):
+    def bind(self, repository: "Repository") -> None:
         self.repository = repository
-        self.log = log
 
     @classmethod
     @abstractmethod
-    def from_config(cls, config: dict[str, Any]) -> "Source":
+    def from_config(cls, config: dict[str, Any], log: BoundLogger) -> "Source":
         ...
-
 
     @abstractmethod
     def backup(self, revision: "Revision") -> "Source":

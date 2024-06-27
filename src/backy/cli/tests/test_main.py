@@ -6,11 +6,12 @@ from functools import partialmethod
 
 import pytest
 
+import backy.cli
 import backy.repository
 from backy import utils
 from backy.revision import Revision
 from backy.tests import Ellipsis
-import backy.cli
+
 
 @pytest.fixture
 def argv():

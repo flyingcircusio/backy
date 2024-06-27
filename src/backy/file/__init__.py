@@ -19,17 +19,16 @@ from ..repository import Repository
 class FileSource(Source):
     path: Path  # the source we are backing up
     type_ = "file"
+    subcommand = "backy-file"
 
     def __init__(self, path: Path):
         self.path = path
 
     @classmethod
-    def from_config(cls, config: dict[str, Any]):
-        return cls(path=Path(config['path']))
-
-    @property
-    def subcommand(self) -> str:
-        return "backy-file"
+    def from_config(
+        cls, config: dict[str, Any], log: BoundLogger
+    ) -> "FileSource":
+        return cls(path=Path(config["path"]))
 
     @staticmethod
     def to_config(path: Path) -> dict[str, Any]:

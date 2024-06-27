@@ -14,11 +14,10 @@ from ..ceph.source import CephRBD
 class FlyingCircusRootDisk(CephRBD):
     snapshot_timeout = 90
 
-    def __init__(self, config, repository: RbdSource, log: BoundLogger):
-        self.config = config
+    def __init__(self, config, log: BoundLogger):
+        super(FlyingCircusRootDisk, self).__init__(config, log)
         self.vm = config["vm"]
         self.consul_acl_token = config.get("consul_acl_token")
-        super(FlyingCircusRootDisk, self).__init__(config, repository, log)
         self.log = self.log.bind(vm=self.vm, subsystem="fc-disk")
 
     def create_snapshot(self, name: str) -> None:

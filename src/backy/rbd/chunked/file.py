@@ -6,8 +6,6 @@ import time
 from collections import defaultdict
 from typing import TYPE_CHECKING, Optional, Tuple
 
-import backy.rbd.chunked
-
 from .chunk import Chunk, Hash
 
 if TYPE_CHECKING:

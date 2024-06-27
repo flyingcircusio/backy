@@ -1,6 +1,7 @@
 from typing import cast
 
 import yaml
+
 from backy.file import FileSource
 from backy.repository import Repository
 from backy.revision import Revision

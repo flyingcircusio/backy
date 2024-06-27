@@ -1,18 +1,17 @@
 import time
+from typing import Optional
 
 from structlog.stdlib import BoundLogger
 
 import backy.utils
 from backy.revision import Revision
 
-from ... import RbdSource
-from ...chunked import ChunkedFileBackend
-from ...quarantine import QuarantineReport
-from .. import BackySource, BackySourceContext, BackySourceFactory
+from ...chunked.file import File
+from ...quarantine import QuarantineReport, QuarantineStore
 from .rbd import RBDClient
 
 
-class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
+class CephRBD:
     """The Ceph RBD source.
 
     Manages snapshots corresponding to revisions and provides a verification
@@ -25,15 +24,13 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
     log: BoundLogger
     rbd: RBDClient
     revision: Revision
-    repository: RbdSource
 
-    def __init__(self, config: dict, repository: RbdSource, log: BoundLogger):
+    def __init__(self, config: dict, log: BoundLogger):
         self.pool = config["pool"]
         self.image = config["image"]
         self.always_full = config.get("full-always", False)
         self.log = log.bind(subsystem="ceph")
         self.rbd = RBDClient(self.log)
-        self.repository = repository
 
     def ready(self) -> bool:
         """Check whether the source can be backed up.
@@ -70,18 +67,16 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
     def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
         self._delete_old_snapshots()
 
-    def backup(self, target: ChunkedFileBackend) -> None:
+    def get_parent(self) -> Optional[Revision]:
         if self.always_full:
             self.log.info("backup-always-full")
-            self.full(target)
-            return
+            return None
         revision = self.revision
         while True:
             parent = revision.get_parent()
             if not parent:
                 self.log.info("backup-no-valid-parent")
-                self.full(target)
-                return
+                return None
             if not self.rbd.exists(self._image_name + "@backy-" + parent.uuid):
                 self.log.info(
                     "ignoring-rev-without-snapshot",
@@ -90,15 +85,14 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
                 revision = parent
                 continue
             # Ok, it's trusted and we have a snapshot. Let's do a diff.
-            break
-        self.diff(target, parent)
+            return parent
 
-    def diff(self, target: ChunkedFileBackend, parent: Revision) -> None:
+    def diff(self, target: "RbdSource", parent: Revision) -> None:
         self.log.info("diff")
         snap_from = "backy-" + parent.uuid
         snap_to = "backy-" + self.revision.uuid
         s = self.rbd.export_diff(self._image_name + "@" + snap_to, snap_from)
-        with s as source, target.open("r+b", parent) as target_:
+        with s as source, target.open(self.revision, parent) as target_:
             bytes = source.integrate(target_, snap_from, snap_to)
         self.log.info("diff-integration-finished")
 
@@ -109,13 +103,13 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
 
         self.revision.stats["chunk_stats"] = chunk_stats
 
-    def full(self, target: ChunkedFileBackend) -> None:
+    def full(self, target: File) -> None:
         self.log.info("full")
         s = self.rbd.export(
             "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
         )
         copied = 0
-        with s as source, target.open("r+b") as target_:
+        with s as source, target as target_:
             while True:
                 buf = source.read(4 * backy.utils.MiB)
                 if not buf:
@@ -129,18 +123,18 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
 
         self.revision.stats["chunk_stats"] = chunk_stats
 
-    def verify(self, target: ChunkedFileBackend) -> bool:
+    def verify(self, target: File, quarantine: QuarantineStore) -> bool:
         s = self.rbd.image_reader(
             "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
         )
         self.revision.stats["ceph-verification"] = "partial"
 
-        with s as source, target.open("rb") as target_:
+        with s as source, target as target_:
             self.log.info("verify")
             return backy.utils.files_are_roughly_equal(
                 source,
                 target_,
-                report=lambda s, t, o: self.repository.quarantine.add_report(
+                report=lambda s, t, o: quarantine.add_report(
                     QuarantineReport(s, t, o)
                 ),
             )

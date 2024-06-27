@@ -95,14 +95,10 @@ class Revision(object):
         return r
 
     @property
-    def filename(self) -> Path:
-        """Full pathname of the image file."""
-        return self.repository.path / self.uuid
-
-    @property
     def info_filename(self) -> Path:
         """Full pathname of the metadata file."""
-        return self.filename.with_suffix(self.filename.suffix + ".rev")
+        p = self.repository.path / self.uuid
+        return p.with_suffix(p.suffix + ".rev")
 
     def materialize(self) -> None:
         self.write_info()
@@ -150,24 +146,19 @@ class Revision(object):
             self.tags = set()
             self.write_info()
         else:
-            for filename in self.filename.parent.glob(self.filename.name + "*"):
-                if filename.exists():
-                    self.log.debug("remove-start", filename=filename)
-                    filename.unlink()
-                    self.log.debug("remove-end", filename=filename)
+            if self.info_filename.exists():
+                self.log.debug("remove-start", filename=self.info_filename)
+                self.info_filename.unlink()
+                self.log.debug("remove-end", filename=self.info_filename)
 
             if self in self.repository.history:
                 self.repository.history.remove(self)
                 del self.repository._by_uuid[self.uuid]
 
     def writable(self) -> None:
-        if self.filename.exists():
-            self.filename.chmod(0o640)
         self.info_filename.chmod(0o640)
 
     def readonly(self) -> None:
-        if self.filename.exists():
-            self.filename.chmod(0o440)
         self.info_filename.chmod(0o440)
 
     def get_parent(self, ignore_trust=False) -> Optional["Revision"]:

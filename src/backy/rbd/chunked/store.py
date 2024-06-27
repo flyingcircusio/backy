@@ -22,13 +22,11 @@ class Store(object):
     force_writes = False
 
     path: Path
-    seen_forced: set[Hash]
     seen: set[Hash]
     log: BoundLogger
 
     def __init__(self, path: Path, log: BoundLogger):
         self.path = path
-        self.seen_forced = set()
         self.log = log.bind(subsystem="chunked-store")
         for x in range(256):
             subdir = self.path / f"{x:02x}"

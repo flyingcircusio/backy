@@ -4,7 +4,7 @@ import re
 from enum import Enum
 from math import ceil, floor
 from pathlib import Path
-from typing import IO, List, Literal, Optional, TypedDict, Any
+from typing import IO, Any, List, Literal, Optional, TypedDict
 
 import tzlocal
 import yaml
@@ -77,7 +77,6 @@ class Repository(object):
     ):
         self.schedule = schedule
         self.source = source
-        self.source.bind(self, log)
         self.log = log.bind(subsystem="backup")
         self.path = path.resolve()
         self._lock_fds = {}
@@ -85,6 +84,7 @@ class Repository(object):
     def connect(self):
         self.path.mkdir(parents=True, exist_ok=True)
         self.scan()
+        self.source.bind(self)
 
     @staticmethod
     def from_config(config: dict[str, Any], log: BoundLogger) -> "Repository":
@@ -93,9 +93,9 @@ class Repository(object):
 
         source = backy.source.factory_by_type(
             config["source"]["type"]
-        ).from_config(config["source"])
+        ).from_config(config["source"], log)
 
-        return Repository(config['path'], source, schedule, log)
+        return Repository(config["path"], source, schedule, log)
 
     @property
     def problem_reports(self) -> list[str]:

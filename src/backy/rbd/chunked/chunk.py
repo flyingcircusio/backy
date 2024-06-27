@@ -132,11 +132,8 @@ class Chunk(object):
         # use a faster path to get the data.
         self.hash = hash(self.data.getvalue())
         target = self.store.chunk_path(self.hash)
-        needs_forced_write = (
-            self.store.force_writes and self.hash not in self.store.seen_forced
-        )
         if self.hash not in self.store.seen:
-            if needs_forced_write or not target.exists():
+            if self.store.force_writes or not target.exists():
                 # Create the tempfile in the right directory to increase locality
                 # of our change - avoid renaming between multiple directories to
                 # reduce traffic on the directory nodes.
@@ -149,7 +146,6 @@ class Chunk(object):
                 # metadata flushes and then changing metadata again.
                 os.chmod(tmpfile_name, 0o440)
                 os.rename(tmpfile_name, target)
-                self.store.seen_forced.add(self.hash)
             self.store.seen.add(self.hash)
         self.clean = True
         return self.hash

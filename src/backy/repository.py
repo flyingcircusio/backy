@@ -61,7 +61,19 @@ class RepositoryType(Enum):
 
 
 class Repository(object):
-    """A repository of backup revisions of some object."""
+    """A repository stores and manages backups for a single source.
+
+    The repository handles metadata information around backups, manages the
+    schedule and tags and can expire revisions.
+
+    A single backup for something (an RBD disk image, an S3 pool of
+    buckets, ...) is called a revision and thus we use "backup" synomymously
+    with "revision".
+
+    The actual implementation of making and restoring backups as well as
+    storing the data is provided by the `source` implementations.
+
+    """
 
     path: Path
     config: dict
@@ -71,7 +83,7 @@ class Repository(object):
 
     _by_uuid: dict[str, Revision]
     _lock_fds: dict[str, IO]
-    type: RepositoryType
+    type_: RepositoryType
 
     def __init__(self, path: Path, log: BoundLogger):
         self.log = log.bind(subsystem="backup")
@@ -98,7 +110,7 @@ class Repository(object):
         self.scan()
 
     @classmethod
-    def init(cls, path: Path, log: BoundLogger, source: Source):
+    def init(cls, path: Path, log: BoundLogger, source: type[Source]) -> "Repository":
         if (path / "config").exists():
             raise RepositoryNotEmpty(path)
 
@@ -112,7 +124,9 @@ class Repository(object):
         with open(path / "config", "w") as f:
             yaml.dump(config, f)
 
-        log.info(f"Initialized empty repository in {path}")
+        log.info(f"repo-initialized", path=path)
+
+        return cls(path, log)
 
     @property
     def problem_reports(self) -> list[str]:

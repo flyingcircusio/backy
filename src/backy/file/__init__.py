@@ -1,12 +1,14 @@
 import argparse
 import errno
-import os
+import shutil
 import sys
 from pathlib import Path
 
 import structlog
 from structlog.stdlib import BoundLogger
 
+import backy.repository
+from backy.revision import Revision
 from backy.source import Source
 from backy.utils import generate_taskid
 
@@ -16,10 +18,51 @@ from .. import logging
 class FileSource(Source):
     type_ = "file"
 
+    path: Path  # the source we are backing up
+
+    def __init__(
+        self,
+        path: Path,
+        repository: backy.repository.Repository,
+        log: BoundLogger,
+    ):
+        self.path = path
+        self.repository = repository
+        self.log = log
+
+    def _path_for_revision(self, revision: Revision) -> Path:
+        return self.repository.path / revision.uuid
+
+    def backup(self, revision: Revision):
+        backup = self._path_for_revision(revision)
+        assert not backup.exists()
+        shutil.copy(self.path, backup)
+
+    def restore(self, revision: Revision, target: Path):
+        shutil.copy(self._path_for_revision(revision), target)
+
+    def gc(self):
+        files = set(self.repository.path.glob("*"))
+        expected_files = set(
+            (self.repository.path / r.uuid)
+            for r in self.repository.get_history()
+        )
+        for file in files - expected_files:
+            file.unlink()
+
+    def verify(self):
+        for revision in self.repository.get_history():
+            assert (self.path / revision.uuid).exists()
+
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Backup and restore for block devices.",
+        description="""Backup and restore for individual files.
+
+This is mostly a dummy implementation to assist testing and development:
+it is only able to back up from a single file and store versions of it
+in a very simplistic fashion.
+""",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="verbose output"
@@ -73,7 +116,7 @@ def main():
     # GC
     p = subparsers.add_parser(
         "gc",
-        help="Purge the backup store from unused data",
+        help="Remove unused data from the repository.",
     )
     p.set_defaults(func="gc")
 
@@ -86,8 +129,6 @@ def main():
     p.set_defaults(func="verify")
 
     args = parser.parse_args()
-
-    os.chdir(args.C)
 
     if not hasattr(args, "func"):
         parser.print_usage()
@@ -103,7 +144,7 @@ def main():
     log.debug("invoked", args=" ".join(sys.argv))
 
     try:
-        b = RbdRepository(args.backupdir, log)
+        b = FileSource(args.backupdir, log)
         # XXX scheduler?
         b._clean()
         ret = 0

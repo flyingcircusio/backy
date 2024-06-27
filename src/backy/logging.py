@@ -118,7 +118,9 @@ class MultiOptimisticLogger:
 
 
 def prefix(prefix, line):
-    return "{}>\t".format(prefix) + line.replace("\n", "\n{}>\t".format(prefix))
+    return "{}>\t".format(prefix) + line.replace(
+        "\n", "\n{}>\t".format(prefix)
+    )
 
 
 class ConsoleFileRenderer:
@@ -143,7 +145,9 @@ class ConsoleFileRenderer:
         self.min_level = self.LEVELS.index(min_level.lower())
         if colorama is None:
             print(
-                _MISSING.format(who=self.__class__.__name__, package="colorama")
+                _MISSING.format(
+                    who=self.__class__.__name__, package="colorama"
+                )
             )
         if COLORIZED_TTY_OUTPUT:
             colorama.init()
@@ -212,7 +216,10 @@ class ConsoleFileRenderer:
         level = event_dict.pop("level", None)
         if level is not None:
             write(
-                self._level_to_color[level] + level[0].upper() + RESET_ALL + " "
+                self._level_to_color[level]
+                + level[0].upper()
+                + RESET_ALL
+                + " "
             )
 
         job_name = event_dict.pop("job_name", "-")
@@ -232,10 +239,14 @@ class ConsoleFileRenderer:
             + RESET_ALL
             + " "
         )
-        if len(subsystem + event) > self._pad_event and hasattr(
-            utils, "log_data"
-        ):
-            raise RuntimeWarning("logline to long: " + subsystem + event)
+
+        test_mode = hasattr(utils, "log_data")
+        if test_mode and len(subsystem + event) > self._pad_event:
+            raise RuntimeWarning(
+                "subsystem and/or event names are too long: "
+                + subsystem
+                + event
+            )
 
         logger_name = event_dict.pop("logger", None)
         if logger_name is not None:

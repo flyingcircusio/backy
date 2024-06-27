@@ -11,6 +11,7 @@ from backy import utils
 from backy.revision import Revision
 from backy.tests import Ellipsis
 import backy.cli
+import backy.cli.client
 
 @pytest.fixture
 def argv():
@@ -248,7 +249,7 @@ def test_call_find(capsys, backup, argv, monkeypatch):
 def test_call_client(
     capsys, backup, argv, monkeypatch, log, tmp_path, action, args
 ):
-    monkeypatch.setattr(backy.client.CLIClient, action, async_print_args)
+    monkeypatch.setattr(backy.cli.client.CLIClient, action, async_print_args)
     conf = str(tmp_path / "conf")
     with open(conf, "w") as c:
         c.write(
@@ -275,7 +276,7 @@ jobs: {{}}
     assert (
         Ellipsis(
             f"""\
-(<backy.client.CLIClient object at ...>,)
+(<backy.cli.client.CLIClient object at ...>,)
 {args}
 """
         )

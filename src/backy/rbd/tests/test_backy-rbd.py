@@ -4,7 +4,7 @@ import subprocess
 import pytest
 
 from backy.ext_deps import BACKY_RBD_CMD, BASH
-from backy.rbd import RbdRepository
+from backy.rbd import RbdSource
 from backy.rbd.conftest import create_rev
 from backy.revision import Revision
 from backy.tests import Ellipsis
@@ -39,7 +39,7 @@ def test_smoketest_internal(tmp_path, log):
                 % source1
             ).encode("utf-8")
         )
-    repository = RbdRepository(backup_dir, log)
+    repository = RbdSource(backup_dir, log)
 
     # Backup first state
     rev1 = create_rev(repository, {"manual:test"})

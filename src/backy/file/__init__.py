@@ -3,32 +3,35 @@ import errno
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 import structlog
 from structlog.stdlib import BoundLogger
 
-import backy.repository
 from backy.revision import Revision
 from backy.source import Source
 from backy.utils import generate_taskid
 
 from .. import logging
+from ..repository import Repository
 
 
 class FileSource(Source):
-    type_ = "file"
-
     path: Path  # the source we are backing up
 
     def __init__(
-        self,
-        path: Path,
-        repository: backy.repository.Repository,
-        log: BoundLogger,
+        self, repository: Repository, config: dict[str, Any], log: BoundLogger
     ):
-        self.path = path
-        self.repository = repository
-        self.log = log
+        super().__init__(repository, log)
+        self.path = Path(config["path"])
+
+    @property
+    def subcommand(self) -> str:
+        return "backy-file"
+
+    @staticmethod
+    def to_config(path: Path) -> dict[str, Any]:
+        return {"path": str(path)}
 
     def _path_for_revision(self, revision: Revision) -> Path:
         return self.repository.path / revision.uuid
@@ -52,7 +55,7 @@ class FileSource(Source):
 
     def verify(self):
         for revision in self.repository.get_history():
-            assert (self.path / revision.uuid).exists()
+            assert self._path_for_revision(revision).exists()
 
 
 def main():

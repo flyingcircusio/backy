@@ -1,17 +1,20 @@
+from abc import ABC, abstractmethod, abstractproperty
 from importlib.metadata import entry_points
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from structlog.stdlib import BoundLogger
+
+if TYPE_CHECKING:
+    from backy.repository import Repository
 
 SOURCE_PLUGINS = entry_points(group="backy.sources")
 
 
-def factory_by_type(type_):
+def factory_by_type(type_) -> type["Source"]:
     return SOURCE_PLUGINS[type_].load()
 
 
-class Source:
+class Source(ABC):
     """A source provides specific implementations for making and restoring
     backups.
 
@@ -44,9 +47,15 @@ class Source:
 
     """
 
-    type_: str
-    config: dict[str, Any]
+    repository: "Repository"
+    log: BoundLogger
 
-    @classmethod
-    def init(cls, repository: Path, log: BoundLogger) -> dict[str, Any]:
-        return {"type": cls.type_}
+    @abstractmethod
+    def __init__(self, repository: "Repository", log: BoundLogger):
+        self.repository = repository
+        self.log = log
+
+    @property
+    @abstractmethod
+    def subcommand(self) -> str:
+        ...

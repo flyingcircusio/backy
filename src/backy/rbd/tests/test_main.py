@@ -98,7 +98,7 @@ source:
         )
 
     monkeypatch.setattr(
-        backy.rbd.RbdRepository,
+        backy.rbd.RbdSource,
         "backup",
         partialmethod(print_args, return_value=success),
     )
@@ -136,7 +136,7 @@ def test_call_unexpected_exception(
     def do_raise(*args, **kw):
         raise RuntimeError("test")
 
-    monkeypatch.setattr(backy.rbd.RbdRepository, "gc", do_raise)
+    monkeypatch.setattr(backy.rbd.RbdSource, "gc", do_raise)
     import os
 
     monkeypatch.setattr(os, "_exit", lambda x: None)

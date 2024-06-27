@@ -1,7 +1,7 @@
 from structlog.stdlib import BoundLogger
 
 import backy.rbd.chunked
-from backy.rbd import RbdRepository
+from backy.rbd import RbdSource
 from backy.rbd.quarantine import QuarantineReport
 from backy.rbd.sources import (
     BackySource,
@@ -16,12 +16,10 @@ class File(BackySource, BackySourceFactory, BackySourceContext):
     filename: str
     cow: bool
     revision: Revision
-    repository: RbdRepository
+    repository: RbdSource
     log: BoundLogger
 
-    def __init__(
-        self, config: dict, repository: RbdRepository, log: BoundLogger
-    ):
+    def __init__(self, config: dict, repository: RbdSource, log: BoundLogger):
         self.repository = repository
         self.filename = config["filename"]
         self.cow = config.get("cow", True)

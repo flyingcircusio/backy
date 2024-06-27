@@ -8,7 +8,7 @@ import structlog
 from backy.utils import generate_taskid
 
 from .. import logging
-from .backup import RbdRepository, RestoreBackend
+from .rbdsource import RbdSource, RestoreBackend
 
 
 def main():
@@ -98,7 +98,7 @@ def main():
     log.debug("invoked", args=" ".join(sys.argv))
 
     try:
-        b = RbdRepository(args.backupdir, log)
+        b = RbdSource(args.backupdir, log)
         ret = 0
         match args.func:
             case "backup":

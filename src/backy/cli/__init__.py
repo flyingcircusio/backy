@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import errno
 import os
 import re
@@ -20,9 +21,11 @@ from structlog.stdlib import BoundLogger
 import backy.daemon
 import backy.source
 from backy import logging
+from backy.daemon import BackyDaemon
+from backy.daemon.api import Client
 
 # XXX invert this dependency
-from backy.rbd.backup import RestoreBackend
+from backy.rbd.rbdsource import RestoreBackend
 from backy.repository import Repository
 from backy.revision import Revision
 from backy.utils import format_datetime_local, generate_taskid
@@ -71,11 +74,13 @@ class Command(object):
     """Proxy between CLI calls and actual backup code."""
 
     path: Path
+    config: Path
     taskid: str
     log: BoundLogger
 
-    def __init__(self, path: Path, taskid, log: BoundLogger):
+    def __init__(self, path: Path, config: Path, taskid, log: BoundLogger):
         self.path = path.resolve()
+        self.config = config
         self.taskid = taskid
         self.log = log
 
@@ -86,6 +91,13 @@ class Command(object):
             ret = 0
         self.log.debug("return-code", code=ret)
         return ret
+
+    def create_api_client(self):
+        d = BackyDaemon(self.config, self.log)
+        d._read_config()
+        return Client.from_conf(
+            "<server>", d.api_cli_default, self.taskid, self.log
+        )
 
     def init(self, type):
         source = backy.source.factory_by_type(type)
@@ -186,7 +198,7 @@ class Command(object):
 
     def restore(
         self, revision: str, target: str, restore_backend: RestoreBackend
-    ) -> None:
+    ) -> int:
         b = Repository(self.path, self.log)
         r = b.find(revision)
         proc = subprocess.run(
@@ -209,7 +221,7 @@ class Command(object):
         b = Repository(self.path, self.log)
         b.distrust(revision)
 
-    def verify(self, revision: str) -> None:
+    def verify(self, revision: str) -> int:
         b = Repository(self.path, self.log)
         r = b.find(revision)
         proc = subprocess.run(
@@ -278,8 +290,9 @@ class Command(object):
     def check(self):
         pass
 
-    def jobs(self, filter_re=""):
+    def show_jobs(self, filter_re="") -> int:
         """List status of all known jobs. Optionally filter by regex."""
+        api = self.create_api_client()
 
         tz = format_datetime_local(None)[1]
 
@@ -295,7 +308,7 @@ class Command(object):
             "Next Tags",
         )
 
-        jobs = self.api.fetch_status(filter_re)
+        jobs = asyncio.run(api.fetch_status(filter_re))
         jobs.sort(key=lambda j: j["job"])
         for job in jobs:
             overdue = (
@@ -322,7 +335,7 @@ class Command(object):
                 next_time,
                 job["next_tags"],
             )
-        backups = self.api.list_backups()
+        backups = asyncio.run(api.list_backups())
         if filter_re:
             backups = list(filter(re.compile(filter_re).search, backups))
         for b in backups:
@@ -331,12 +344,13 @@ class Command(object):
         rprint(t)
         print("{} jobs shown".format(len(jobs) + len(backups)))
 
-    def status(self):
+    def show_daemon(self):
         """Show job status overview"""
+        api = self.create_api_client()
         t = Table("Status", "#")
         state_summary: Dict[str, int] = {}
-        jobs = self.api.get_jobs()
-        jobs += [{"status": "Dead"} for _ in self.api.list_backups()]
+        jobs = asyncio.run(api.get_jobs())
+        jobs += [{"status": "Dead"} for _ in asyncio.run(api.list_backups())]
         for job in jobs:
             state_summary.setdefault(job["status"], 0)
             state_summary[job["status"]] += 1
@@ -443,10 +457,10 @@ def main():
         nargs="?",
         help="Optional job filter regex",
     )
-    p.set_defaults(func="show-jobs")
+    p.set_defaults(func="show_jobs")
 
     p = subparsers.add_parser("show-daemon", help="Show job status overview")
-    p.set_defaults(func="show-daemon")
+    p.set_defaults(func="show_daemon")
 
     p = subparsers.add_parser(
         "check",
@@ -623,7 +637,7 @@ def main():
     log = structlog.stdlib.get_logger(subsystem="command")
     log.debug("invoked", args=" ".join(sys.argv))
 
-    command = Command(args.C, task_id, log)
+    command = Command(args.C, args.config, task_id, log)
     func = args.func
 
     # Pass over to function

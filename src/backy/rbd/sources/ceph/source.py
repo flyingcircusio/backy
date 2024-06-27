@@ -5,7 +5,7 @@ from structlog.stdlib import BoundLogger
 import backy.utils
 from backy.revision import Revision
 
-from ... import RbdRepository
+from ... import RbdSource
 from ...chunked import ChunkedFileBackend
 from ...quarantine import QuarantineReport
 from .. import BackySource, BackySourceContext, BackySourceFactory
@@ -25,11 +25,9 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
     log: BoundLogger
     rbd: RBDClient
     revision: Revision
-    repository: RbdRepository
+    repository: RbdSource
 
-    def __init__(
-        self, config: dict, repository: RbdRepository, log: BoundLogger
-    ):
+    def __init__(self, config: dict, repository: RbdSource, log: BoundLogger):
         self.pool = config["pool"]
         self.image = config["image"]
         self.always_full = config.get("full-always", False)

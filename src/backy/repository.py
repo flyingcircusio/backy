@@ -10,7 +10,7 @@ import tzlocal
 import yaml
 from structlog.stdlib import BoundLogger
 
-from backy.source import Source
+from backy.source import Source, factory_by_type
 from backy.utils import (
     duplicates,
     list_get,
@@ -20,7 +20,6 @@ from backy.utils import (
     unique,
 )
 
-from .ext_deps import BACKY_RBD_CMD, BACKY_S3_CMD
 from .revision import Revision, Trust, filter_schedule_tags
 from .schedule import Schedule
 
@@ -43,21 +42,6 @@ class StatusDict(TypedDict):
     problem_reports: List[str]
     unsynced_revs: int
     local_revs: int
-
-
-class RepositoryType(Enum):
-    rbd = BACKY_RBD_CMD
-    s3 = BACKY_S3_CMD
-
-    @classmethod
-    def from_str(cls, str: str) -> "RepositoryType":
-        match str:
-            case "rbd":
-                return cls.rbd
-            case "s3":
-                return cls.s3
-            case _:
-                raise ValueError("invalid str for RepositoryType: " + str)
 
 
 class Repository(object):
@@ -83,7 +67,7 @@ class Repository(object):
 
     _by_uuid: dict[str, Revision]
     _lock_fds: dict[str, IO]
-    type_: RepositoryType
+    sourcetype: type[Source]
 
     def __init__(self, path: Path, log: BoundLogger):
         self.log = log.bind(subsystem="backup")
@@ -105,28 +89,42 @@ class Repository(object):
         self.schedule = Schedule()
         self.schedule.configure(self.config["schedule"])
 
-        self.type = RepositoryType.from_str(self.config.get("type", "rbd"))
+        self.sourcetype = factory_by_type(
+            self.config.get("sourcetype", "backy-rbd")
+        )
 
         self.scan()
 
     @classmethod
-    def init(cls, path: Path, log: BoundLogger, source: type[Source]) -> "Repository":
+    def init(
+        cls,
+        path: Path,
+        source: type[Source],
+        sourceconf: dict,
+        log: BoundLogger,
+    ) -> "Repository":
         if (path / "config").exists():
             raise RepositoryNotEmpty(path)
 
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True)
 
-        source_config = source.init(path, log)
-
-        config = {"schedule": {}, "source": source_config}
-
         with open(path / "config", "w") as f:
-            yaml.dump(config, f)
+            yaml.dump(
+                {
+                    "schedule": {},
+                    "sourcetype": source.subcommand,
+                    "source": sourceconf,
+                },
+                f,
+            )
 
         log.info(f"repo-initialized", path=path)
 
         return cls(path, log)
+
+    def get_source(self) -> Source:
+        return self.sourcetype(self, self.config["source"], self.log)
 
     @property
     def problem_reports(self) -> list[str]:

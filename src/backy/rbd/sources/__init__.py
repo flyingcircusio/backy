@@ -6,7 +6,7 @@ from structlog.stdlib import BoundLogger
 import backy.revision
 
 if TYPE_CHECKING:
-    from backy.rbd import RbdRepository
+    from backy.rbd import RbdSource
     from backy.rbd.chunked import ChunkedFileBackend
 
 
@@ -32,7 +32,7 @@ class BackySourceContext(ABC):
 class BackySourceFactory(ABC):
     @abstractmethod
     def __init__(
-        self, config: dict, repository: "RbdRepository", log: BoundLogger
+        self, config: dict, repository: "RbdSource", log: BoundLogger
     ) -> None:
         ...
 

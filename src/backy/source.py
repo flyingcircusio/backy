@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from importlib.metadata import entry_points
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from structlog.stdlib import BoundLogger
 
@@ -15,7 +15,10 @@ def factory_by_type(type_) -> type["Source"]:
     return SOURCE_PLUGINS[type_].load()
 
 
-class Source(ABC):
+RestoreArgsType = TypeVar("RestoreArgsType")
+
+
+class Source(Generic[RestoreArgsType]):
     """A source provides specific implementations for making and restoring
     backups.
 
@@ -66,5 +69,5 @@ class Source(ABC):
         ...
 
     @abstractmethod
-    def restore(self, revision: "Revision", *args, **kw) -> "Source":
+    def restore(self, revision: "Revision", args: RestoreArgsType):
         ...

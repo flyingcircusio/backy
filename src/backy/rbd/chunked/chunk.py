@@ -2,33 +2,23 @@ import binascii
 import io
 import os
 import tempfile
-from typing import TYPE_CHECKING, Optional, Tuple, TypeAlias
+from typing import TYPE_CHECKING, Optional, Tuple
 
 import lzo
 import mmh3
 
-import backy.rbd.chunked
 from backy.utils import posix_fadvise
 
-if TYPE_CHECKING:
-    from backy.rbd.chunked import Store
+from . import BackendException, Hash, InconsistentHash
 
-Hash: TypeAlias = str
+if TYPE_CHECKING:
+    from .store import Store
+
 
 chunk_stats = {
     "write_full": 0,
     "write_partial": 0,
 }
-
-
-class BackendException(IOError):
-    pass
-
-
-class InconsistentHash(BackendException):
-    def __init__(self, expected, actual):
-        self.expected = expected
-        self.actual = actual
 
 
 class Chunk(object):
@@ -134,9 +124,9 @@ class Chunk(object):
         target = self.store.chunk_path(self.hash)
         if self.hash not in self.store.seen:
             if self.store.force_writes or not target.exists():
-                # Create the tempfile in the right directory to increase locality
-                # of our change - avoid renaming between multiple directories to
-                # reduce traffic on the directory nodes.
+                # Create the tempfile in the right directory to increase
+                # locality of our change - avoid renaming between multiple
+                # directories to reduce traffic on the directory nodes.
                 fd, tmpfile_name = tempfile.mkstemp(dir=target.parent)
                 posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)  # type: ignore
                 with os.fdopen(fd, mode="wb") as f:

@@ -23,6 +23,19 @@ from backy.utils import (
 from .revision import Revision, Trust, filter_schedule_tags
 from .schedule import Schedule
 
+# Locking strategy:
+#
+# - You can only run one backup of a machine at a time, as the backup will
+#   interact with this machines' list of snapshots and will get confused
+#   if run in parallel.
+# - You can restore while a backup is running.
+# - You can only purge while nothing else is happening.
+# - Trying to get a shared lock (specifically purge) will block and wait
+#   whereas trying to get an exclusive lock (running backups, purging) will
+#   immediately give up.
+# - Locking is not re-entrant. It's forbidden and protected to call another
+#   locking main function.
+
 
 class RepositoryNotEmpty(RuntimeError):
     pass

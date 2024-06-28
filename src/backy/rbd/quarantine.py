@@ -89,7 +89,9 @@ class QuarantineStore:
 
         with SafeFile(path, encoding="utf-8") as f:
             f.open_new("wb")
-            yaml.dump(report.to_dict(), f, sort_keys=False, Dumper=CustomDumper)
+            yaml.dump(
+                report.to_dict(), f, sort_keys=False, Dumper=CustomDumper
+            )
 
     def _store_chunk(self, chunk: bytes, hash: str) -> None:
         self.log.debug("store-chunk", hash=hash)

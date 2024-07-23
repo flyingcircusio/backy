@@ -13,7 +13,6 @@ import yaml
 from backy import utils
 from backy.daemon import BackyDaemon
 from backy.daemon.scheduler import Job
-from backy.rbd.chunked import ChunkedFileBackend
 from backy.revision import Revision
 from backy.tests import Ellipsis
 
@@ -146,7 +145,7 @@ async def test_sighup(daemon, log, monkeypatch):
     assert signal_task not in all_tasks
 
 
-async def test_run_backup(daemon, log):
+async def test_run_backup(daemon, rbdrepository, log):
     job = daemon.jobs["test01"]
 
     await job.run_backup({"manual:asdf"})
@@ -154,8 +153,7 @@ async def test_run_backup(daemon, log):
     assert len(job.repository.history) == 1
     revision = job.repository.history[0]
     assert revision.tags == {"manual:asdf"}
-    backend = ChunkedFileBackend(revision, log)
-    with backend.open("r") as f:
+    with rbdrepository.open(revision) as f:
         assert f.read() == b"I am your father, Luke!"
 
     # Run again. This also covers the code path that works if
@@ -165,8 +163,7 @@ async def test_run_backup(daemon, log):
     assert len(job.repository.history) == 2
     revision = job.repository.history[1]
     assert revision.tags == {"manual:asdf"}
-    backend = ChunkedFileBackend(revision, log)
-    with backend.open("r") as f:
+    with rbdrepository.open(revision) as f:
         assert f.read() == b"I am your father, Luke!"
 
 

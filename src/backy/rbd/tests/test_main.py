@@ -9,6 +9,10 @@ import pytest
 import backy.rbd
 from backy import utils
 from backy.rbd import main
+from backy.repository import Repository
+from backy.revision import Revision
+from backy.schedule import Schedule
+from backy.source import Source
 from backy.tests import Ellipsis
 
 
@@ -19,6 +23,34 @@ def argv():
     sys.argv = new
     yield new
     sys.argv = original
+
+
+@pytest.fixture
+def repository_on_disk(tmp_path, log):
+    with open(tmp_path / "config", "w", encoding="utf-8") as f:
+        f.write(
+            f"""
+---
+path: "{tmp_path}"
+schedule:
+    daily:
+        interval: 1d
+        keep: 7
+type: rbd
+"""
+        )
+    with open(tmp_path / "source.config", "w", encoding="utf-8") as f:
+        f.write(
+            """
+---
+type: rbd
+pool: a
+image: b
+"""
+        )
+    repo = Repository(tmp_path, Source, Schedule(), log)
+    repo.connect()
+    return repo
 
 
 def test_display_usage(capsys, argv):
@@ -69,49 +101,90 @@ def test_verbose_logging(capsys, argv):
 
 
 def print_args(*args, return_value=None, **kw):
-    print(args)
+    print(", ".join(map(repr, args)))
     pprint.pprint(kw)
     return return_value
 
 
-@pytest.mark.parametrize("success", [False, True])
-def test_call_backup(success, tmp_path, capsys, argv, monkeypatch):
-    os.makedirs(tmp_path / "backy")
-    os.chdir(tmp_path / "backy")
+@pytest.mark.parametrize(
+    ["fun", "args", "rv", "rc", "params"],
+    [
+        (
+            "backup",
+            ["asdf"],
+            0,
+            1,
+            ["<backy.revision.Revision object at 0x...>"],
+        ),
+        (
+            "backup",
+            ["asdf"],
+            1,
+            0,
+            ["<backy.revision.Revision object at 0x...>"],
+        ),
+        (
+            "restore",
+            ["asdf", "out.img"],
+            None,
+            0,
+            [
+                "<backy.revision.Revision object at 0x...>",
+                "RestoreArgs(target='out.img', backend=<RestoreBackend.AUTO: 'auto'>)",
+            ],
+        ),
+        (
+            "restore",
+            ["asdf", "--backend", "python", "out.img"],
+            None,
+            0,
+            [
+                "<backy.revision.Revision object at 0x...>",
+                "RestoreArgs(target='out.img', backend=<RestoreBackend.PYTHON: 'python'>)",
+            ],
+        ),
+        ("gc", [], None, 0, []),
+        (
+            "verify",
+            ["asdf"],
+            None,
+            0,
+            ["<backy.revision.Revision object at 0x...>"],
+        ),
+    ],
+)
+def test_call_fun(
+    fun,
+    args,
+    rv,
+    rc,
+    params,
+    repository_on_disk,
+    tmp_path,
+    capsys,
+    argv,
+    monkeypatch,
+    log,
+):
+    os.chdir(tmp_path)
 
-    with open(tmp_path / "backy" / "config", "wb") as f:
-        f.write(
-            """
----
-schedule:
-    daily:
-        interval: 1d
-        keep: 7
-source:
-    type: file
-    filename: {}
-""".format(
-                __file__
-            ).encode(
-                "utf-8"
-            )
-        )
+    Revision(repository_on_disk, log, uuid="asdf").materialize()
 
     monkeypatch.setattr(
-        backy.rbd.RbdSource,
-        "backup",
-        partialmethod(print_args, return_value=success),
+        backy.rbd.source.RBDSource,
+        fun,
+        partialmethod(print_args, return_value=rv),
     )
-    argv.extend(["-v", "backup", "asdf"])
+    argv.extend(["-v", fun, *args])
     utils.log_data = ""
     with pytest.raises(SystemExit) as exit:
         main()
     out, err = capsys.readouterr()
     assert (
         Ellipsis(
-            """\
-(<backy.rbd.backup.RbdRepository object at 0x...>, 'asdf')
-{}
+            f"""\
+{", ".join(["<backy.rbd.source.RBDSource object at 0x...>", *params])}
+{{}}
 """
         )
         == out
@@ -119,29 +192,30 @@ source:
     assert (
         Ellipsis(
             f"""\
-... D -                    command/invoked                     args='... -v backup asdf'
-... D -                    quarantine/scan                     entries=0
-... D -                    command/return-code                 code={int(not success)}
+... D -                    command/invoked                     args='... -v {" ".join([fun, *args])}'
+... D -                    repo/scan-reports                   entries=0
+... I -                    chunked-store/to-v2                 \n\
+... I -                    chunked-store/to-v2-finished        \n\
+... D -                    command/return-code                 code={rc}
 """
         )
         == utils.log_data
     )
-    assert exit.value.code == int(not success)
+    assert exit.value.code == rc
 
 
-# TODO: test call restore, verify, gc
 def test_call_unexpected_exception(
-    capsys, rbdrepository, argv, monkeypatch, log, tmp_path
+    capsys, repository_on_disk, argv, monkeypatch, log, tmp_path
 ):
     def do_raise(*args, **kw):
         raise RuntimeError("test")
 
-    monkeypatch.setattr(backy.rbd.RbdSource, "gc", do_raise)
+    monkeypatch.setattr(backy.rbd.RBDSource, "gc", do_raise)
     import os
 
     monkeypatch.setattr(os, "_exit", lambda x: None)
 
-    argv.extend(["-b", str(rbdrepository.path), "gc"])
+    argv.extend(["-b", str(repository_on_disk.path), "gc"])
     utils.log_data = ""
     with pytest.raises(SystemExit):
         main()
@@ -152,11 +226,13 @@ def test_call_unexpected_exception(
         Ellipsis(
             """\
 ... D -                    command/invoked                     args='... -b ... gc'
-... D -                    quarantine/scan                     entries=0
+... D -                    repo/scan-reports                   entries=0
+... I -                    chunked-store/to-v2                 \n\
+... I -                    chunked-store/to-v2-finished        \n\
 ... E -                    command/failed                      exception_class='builtins.RuntimeError' exception_msg='test'
 exception>\tTraceback (most recent call last):
 exception>\t  File ".../src/backy/rbd/__init__.py", line ..., in main
-exception>\t    b.gc()
+exception>\t    source.gc()
 exception>\t  File ".../src/backy/rbd/tests/test_main.py", line ..., in do_raise
 exception>\t    raise RuntimeError("test")
 exception>\tRuntimeError: test

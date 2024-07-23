@@ -34,10 +34,9 @@ class File(object):
 
     name: str
     store: "Store"
+    stats: dict
     closed: bool
-    overlay: bool
     size: int
-    mode: str
 
     _position: int
     _access_stats: dict[int, Tuple[int, float]]  # (count, last)
@@ -48,29 +47,17 @@ class File(object):
         self,
         name: str | os.PathLike,
         store: "Store",
-        mode: str = "rw",
-        overlay: bool = False,
+        stats: Optional[dict] = None,
     ):
         self.name = str(name)
         self.store = store
+        self.stats = stats if stats is not None else dict()
         self.closed = False
         # This indicates that writes should be temporary and no modify
         # the metadata when closing.
-        self.overlay = overlay
         self._position = 0
 
         self._access_stats = defaultdict(lambda: (0, 0))
-
-        self.mode = mode
-
-        if "+" in self.mode:
-            self.mode += "w"
-        if "a" in self.mode:
-            self.mode += "w"
-        self.mode = "".join(set(self.mode))
-
-        if not os.path.exists(name) and "w" not in self.mode:
-            raise FileNotFoundError("File not found: {}".format(self.name))
 
         if not os.path.exists(name):
             self._mapping = {}
@@ -89,9 +76,6 @@ class File(object):
                 meta = json.load(f)
                 self._mapping = {int(k): v for k, v in meta["mapping"].items()}
                 self.size = meta["size"]
-
-        if "a" in self.mode:
-            self._position = self.size
 
         # Chunks that we are working on.
         self._chunks = {}
@@ -120,27 +104,25 @@ class File(object):
         self._chunks = dict(keep_chunks)
 
     def flush(self) -> None:
-        assert "w" in self.mode and not self.closed
+        assert not self.closed
 
         self._flush_chunks(0)
 
-        if not self.overlay:
-            with open(self.name, "w") as f:
-                json.dump({"mapping": self._mapping, "size": self.size}, f)
-                f.flush()
-                os.fsync(f)
+        with open(self.name, "w") as f:
+            json.dump({"mapping": self._mapping, "size": self.size}, f)
+            f.flush()
+            os.fsync(f)
 
     def close(self) -> None:
         assert not self.closed
-        if "w" in self.mode:
-            self.flush()
+        self.flush()
         self.closed = True
 
     def isatty(self) -> bool:
         return False
 
     def readable(self) -> bool:
-        return "r" in self.mode and not self.closed
+        return not self.closed
 
     # def readline(size=-1)
     # def readlines(hint=-1)
@@ -163,9 +145,7 @@ class File(object):
         elif whence == io.SEEK_CUR:
             position = position + offset
         else:
-            raise ValueError(
-                "`whence` does not support mode {}".format(whence)
-            )
+            raise ValueError("`whence` does not support mode {}".format(whence))
 
         if position < 0:
             raise ValueError("Can not seek before the beginning of a file.")
@@ -192,7 +172,7 @@ class File(object):
         return position
 
     def truncate(self, size: Optional[int] = None) -> None:
-        assert "w" in self.mode and not self.closed
+        assert not self.closed
         if size is None:
             size = self._position
         # Update content hash
@@ -206,7 +186,7 @@ class File(object):
         self.flush()
 
     def read(self, size: int = -1) -> bytes:
-        assert "r" in self.mode and not self.closed
+        assert not self.closed
         result = io.BytesIO()
         max_size = self.size - self._position
         if size == -1:
@@ -225,10 +205,12 @@ class File(object):
         return result.getvalue()
 
     def writable(self) -> bool:
-        return "w" in self.mode and not self.closed
+        return not self.closed
 
     def write(self, data: bytes) -> None:
-        assert "w" in self.mode and not self.closed
+        assert not self.closed
+        self.stats.setdefault("bytes_written", 0)
+        self.stats["bytes_written"] += len(data)
         while data:
             chunk, _, offset = self._current_chunk()
             written, data = chunk.write(offset, data)
@@ -242,7 +224,9 @@ class File(object):
         if chunk_id not in self._chunks:
             self._flush_chunks()
             self._chunks[chunk_id] = Chunk(
-                self.store, self._mapping.get(chunk_id)
+                self.store,
+                self._mapping.get(chunk_id),
+                self.stats.setdefault("chunk_stats", dict()),
             )
         count = self._access_stats[chunk_id][0]
         self._access_stats[chunk_id] = (count + 1, time.time())

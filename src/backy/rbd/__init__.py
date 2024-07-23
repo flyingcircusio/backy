@@ -8,7 +8,8 @@ import structlog
 from backy.utils import generate_taskid
 
 from .. import logging
-from .rbdsource import RbdSource, RestoreBackend
+from ..repository import Repository
+from .source import RBDSource, RestoreArgs, RestoreBackend
 
 
 def main():
@@ -97,19 +98,29 @@ def main():
     log = structlog.stdlib.get_logger(subsystem="command")
     log.debug("invoked", args=" ".join(sys.argv))
 
+    # TODO add init here?
+
     try:
-        b = RbdSource(args.backupdir, log)
+        repo = Repository.load(args.backupdir, log)
+        repo.connect()
+        source = RBDSource.from_repo(repo)
+
         ret = 0
         match args.func:
             case "backup":
-                success = b.backup(args.revision)
+                success = source.backup(repo.find_by_uuid(args.revision))
                 ret = int(not success)
             case "restore":
-                b.restore(args.revision, args.target, args.restore_backend)
+                source.restore(
+                    repo.find_by_uuid(args.revision),
+                    RestoreArgs(
+                        target=args.target, backend=args.restore_backend
+                    ),
+                )
             case "gc":
-                b.gc()
+                source.gc()
             case "verify":
-                b.verify(args.revision)
+                source.verify(repo.find_by_uuid(args.revision))
             case _:
                 raise ValueError("invalid function: " + args.fun)
         log.debug("return-code", code=ret)

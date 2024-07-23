@@ -22,6 +22,8 @@ import humanize
 import structlog
 import tzlocal
 
+import backy
+
 from .ext_deps import CP
 
 _T = TypeVar("_T")
@@ -387,8 +389,7 @@ def files_are_roughly_equal(
     samplesize=0.01,
     blocksize=CHUNK_SIZE,
     timeout=5 * 60,
-    report: Callable[[bytes, bytes, int], None] = lambda a, b, c: None,
-) -> bool:
+) -> Optional["backy.report.ChunkMismatchReport"]:
     a.seek(0, os.SEEK_END)
     size = a.tell()
     blocks = size // blocksize
@@ -412,22 +413,24 @@ def files_are_roughly_equal(
         duration = now() - started
         if duration > max_duration:
             log.info("files-roughly-equal-stopped", duration=duration)
-            return True
+            return None
 
         a.seek(block * blocksize)
         b.seek(block * blocksize)
         chunk_a = a.read(blocksize)
         chunk_b = b.read(blocksize)
         if chunk_a != chunk_b:
+            report = backy.report.ChunkMismatchReport(
+                chunk_a, chunk_b, block * blocksize
+            )
             log.error(
                 "files-not-roughly-equal",
-                hash_a=hashlib.md5(chunk_a).hexdigest(),
-                hash_b=hashlib.md5(chunk_b).hexdigest(),
-                pos=block * blocksize,
+                hash_a=report.source_hash,
+                hash_b=report.target_hash,
+                pos=report.offset,
             )
-            report(chunk_a, chunk_b, block * blocksize)
-            return False
-    return True
+            return report
+    return None
 
 
 def now():

@@ -1,7 +1,5 @@
 import argparse
 import asyncio
-import errno
-import os
 import re
 import subprocess
 import sys
@@ -23,11 +21,12 @@ import backy.source
 from backy import logging
 from backy.daemon import BackyDaemon
 from backy.daemon.api import Client
+from backy.rbd import RestoreBackend
 
 # XXX invert this dependency
-from backy.rbd.rbdsource import RestoreBackend
 from backy.repository import Repository
 from backy.revision import Revision
+from backy.schedule import Schedule
 from backy.utils import format_datetime_local, generate_taskid
 
 # single repo commands
@@ -39,11 +38,11 @@ from backy.utils import format_datetime_local, generate_taskid
 
 # log [--filter] (status)              Show backup status. Show inventory and summary information
 
-# backup [--fg]             Perform a backup
-# restore             Restore (a given revision) to a given target
+# backup [--fg] (remote)            Perform a backup
+# restore (remote)            Restore (a given revision) to a given target
 
 # distrust            Distrust specified revisions
-# verify              Verify specified revisions
+# verify (remote)             Verify specified revisions
 # rm                  Forget specified revision
 # tag                 Modify tags on revision
 
@@ -100,16 +99,21 @@ class Command(object):
         )
 
     def init(self, type):
-        source = backy.source.factory_by_type(type)
-        Repository.init(self.path, self.log, source=source)
+        sourcefactory = backy.source.factory_by_type(type)
+        source = sourcefactory(*sourcefactory.argparse())
+        # TODO: check if repo already exists
+        repo = Repository(self.path / "config", source, Schedule(), self.log)
+        repo.connect()
+        repo.store()
 
     def rev_parse(self, revision: str, uuid: bool) -> None:
-        b = Repository(self.path, self.log)
+        b = Repository.load(self.path, self.log)
+        b.connect()
         for r in b.find_revisions(revision):
             if uuid:
                 print(r.uuid)
             else:
-                print(r.filename)
+                print(r.info_filename)
 
     def log_(self, yaml_: bool, revision: str) -> None:
         revs = Repository(self.path, self.log).find_revisions(revision)

@@ -244,3 +244,6 @@ def test_rplus_and_append_positions(tmp_path, log):
 
     with File(tmp_path / "asdf", store) as f:
         assert f.read() == b"bsdfcsdf"
+
+
+# TODO test bytes_written and chunk_stats

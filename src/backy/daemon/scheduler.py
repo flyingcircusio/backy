@@ -463,7 +463,8 @@ class Job(object):
             self.update_status("")
 
     async def push_metadata(self) -> int:
-        return await self.repository.run_with_backup_lock(self._push_metadata)
+        with self.repository.locked(target=".backup", mode="exclusive"):
+            return await self._push_metadata()
 
     async def _push_metadata(self) -> int:
         grouped = defaultdict(list)
@@ -535,7 +536,8 @@ class Job(object):
         return error
 
     async def pull_metadata(self) -> int:
-        return await self.repository.run_with_backup_lock(self._pull_metadata)
+        with self.repository.locked(target=".backup", mode="exclusive"):
+            return await self._pull_metadata()
 
     async def _pull_metadata(self) -> int:
         async def remove_dead_peer():

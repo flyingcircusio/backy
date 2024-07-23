@@ -7,7 +7,7 @@ from aiohttp.web_exceptions import HTTPUnauthorized
 
 from backy import utils
 from backy.daemon.api import BackyAPI, Client
-from backy.rbd.quarantine import QuarantineReport
+from backy.report import ChunkMismatchReport
 from backy.revision import Revision
 from backy.tests import Ellipsis
 
@@ -321,7 +321,7 @@ async def test_cli_check_manual_tags(daemon, cli_client, log):
 
 async def test_cli_check_quarantine(daemon, cli_client, log):
     job = daemon.jobs["test01"]
-    job.repository.quarantine.add_report(QuarantineReport(b"a", b"b", 0))
+    job.repository.quarantine.add_report(ChunkMismatchReport(b"a", b"b", 0))
 
     utils.log_data = ""
     try:

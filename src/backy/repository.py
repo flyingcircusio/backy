@@ -1,7 +1,7 @@
+import contextlib
 import datetime
 import fcntl
 import re
-from enum import Enum
 from math import ceil, floor
 from pathlib import Path
 from typing import IO, Any, List, Literal, Optional, TypedDict
@@ -10,6 +10,7 @@ import tzlocal
 import yaml
 from structlog.stdlib import BoundLogger
 
+import backy
 import backy.source
 from backy.utils import (
     duplicates,
@@ -20,25 +21,10 @@ from backy.utils import (
     unique,
 )
 
+from .report import ProblemReport
 from .revision import Revision, Trust, filter_schedule_tags
 from .schedule import Schedule
-
-# Locking strategy:
-#
-# - You can only run one backup of a machine at a time, as the backup will
-#   interact with this machines' list of snapshots and will get confused
-#   if run in parallel.
-# - You can restore while a backup is running.
-# - You can only purge while nothing else is happening.
-# - Trying to get a shared lock (specifically purge) will block and wait
-#   whereas trying to get an exclusive lock (running backups, purging) will
-#   immediately give up.
-# - Locking is not re-entrant. It's forbidden and protected to call another
-#   locking main function.
-
-
-class RepositoryNotEmpty(RuntimeError):
-    pass
+from .source import Source
 
 
 class StatusDict(TypedDict):
@@ -73,99 +59,170 @@ class Repository(object):
     """
 
     path: Path
+    report_path: Path
+    sourcetype: type[backy.source.Source]
     schedule: Schedule
-    history: list[Revision]
+    history: List[Revision]
+    report_ids: List[str]
     log: BoundLogger
 
     _by_uuid: dict[str, Revision]
     _lock_fds: dict[str, IO]
-    sourcetype: type[backy.source.Source]
 
     def __init__(
         self,
         path: Path,
-        source: backy.source.Source,
+        sourcetype: type[backy.source.Source],
         schedule: Schedule,
         log: BoundLogger,
     ):
-        self.schedule = schedule
-        self.source = source
-        self.log = log.bind(subsystem="backup")
         self.path = path.resolve()
+        self.report_path = self.path / "quarantine"
+        self.schedule = schedule
+        self.sourcetype = sourcetype
+        self.log = log.bind(subsystem="repo")
         self._lock_fds = {}
 
     def connect(self):
         self.path.mkdir(parents=True, exist_ok=True)
         self.scan()
-        self.source.bind(self)
+        self.scan_reports()
+
+    def get_source(self):
+        return self.sourcetype.from_repo(self)
 
     @staticmethod
     def from_config(config: dict[str, Any], log: BoundLogger) -> "Repository":
         schedule = Schedule()
         schedule.configure(config["schedule"])
+        try:
+            sourcetype = backy.source.factory_by_type(config["type"])
+        except KeyError:
+            log.error(
+                "unknown-source-type",
+                _fmt_msg="Unknown source type '{type}'. You will be limited to metadata only operations...",
+                type=config["type"],
+            )
+            sourcetype = Source[None]
 
-        source = backy.source.factory_by_type(
-            config["source"]["type"]
-        ).from_config(config["source"], log)
+        return Repository(Path(config["path"]), sourcetype, schedule, log)
 
-        return Repository(config["path"], source, schedule, log)
+    @classmethod
+    def load(cls, path: Path, log: BoundLogger) -> "Repository":
+        try:
+            with path.joinpath("config").open(encoding="utf-8") as f:
+                config = yaml.safe_load(f)
+                return cls.from_config(config, log)
+        except IOError:
+            log.error(
+                "could-not-read-config",
+                _fmt_msg="Could not read config file. Is the path correct?",
+                config_path=str(path / "config"),
+            )
+            raise
 
-    @property
-    def problem_reports(self) -> list[str]:
-        return []
+    def store(self) -> None:
+        with self.path.joinpath("config").open(encoding="utf-8") as f:
+            yaml.safe_dump(self.to_dict(), f)
 
-    # I placed this on the class because this is usually used in conjunction
-    # with the class and improves cohesiveness and readability IMHO.
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schedule": self.schedule.to_dict(),
+            "type": self.sourcetype.type_,
+            "path": str(self.path),
+        }
+
+    def add_report(self, report: ProblemReport) -> None:
+        self.log.info("add-report", uuid=report.uuid)
+        report.store(self.report_path, self.log)
+        self.report_ids.append(report.uuid)
+
+    def scan_reports(self) -> None:
+        self.report_ids = [g.name for g in self.report_path.glob("*.report")]
+        self.log.debug("scan-reports", entries=len(self.report_ids))
+
+    # Locking strategy:
+    #
+    # - You can only run one backup of a machine at a time, as the backup will
+    #   interact with this machines' list of snapshots and will get confused
+    #   if run in parallel.
+    # - You can restore while a backup is running.
+    # - You can only purge while nothing else is happening.
+    # - Trying to get a shared lock (specifically purge) will block and wait
+    #   whereas trying to get an exclusive lock (running backups, purging) will
+    #   immediately give up.
+    # - Locking is not re-entrant. It's forbidden and protected to call another
+    #   locking main function.
+
     @staticmethod
-    def locked(target=None, mode=None):
-        if mode == "shared":
-            mode = fcntl.LOCK_SH
-        elif mode == "exclusive":
-            mode = fcntl.LOCK_EX | fcntl.LOCK_NB
-        else:
-            raise ValueError("Unknown lock mode '{}'".format(mode))
-
+    def locked(
+        target: str,
+        mode: Literal["shared", "exclusive"],
+        repo_attr: Optional[str] = None,
+    ):
         def wrap(f):
             def locked_function(self, *args, skip_lock=False, **kw):
                 if skip_lock:
                     return f(self, *args, **kw)
-                if target in self._lock_fds:
-                    raise RuntimeError("Bug: Locking is not re-entrant.")
-                target_path = self.path / target
-                if not target_path.exists():
-                    target_path.touch()
-                self._lock_fds[target] = target_path.open()
-                try:
-                    fcntl.flock(self._lock_fds[target], mode)
-                except BlockingIOError:
-                    self.log.warning(
-                        "lock-no-exclusive",
-                        _fmt_msg="Failed to get exclusive lock for '{function}'.",
-                        function=f.__name__,
-                    )
-                    raise
+                if repo_attr:
+                    repo = getattr(self, repo_attr)
                 else:
-                    try:
-                        return f(self, *args, **kw)
-                    finally:
-                        fcntl.flock(self._lock_fds[target], fcntl.LOCK_UN)
-                finally:
-                    self._lock_fds[target].close()
-                    del self._lock_fds[target]
+                    repo = self
+                with repo.lock(target, mode, f.__name__):
+                    return f(self, *args, **kw)
 
             locked_function.__name__ = "locked({}, {})".format(
-                f.__name__, target
+                f.__qualname__, target
             )
             return locked_function
 
         return wrap
 
+    @contextlib.contextmanager
+    def lock(
+        self,
+        target: str,
+        mode: Literal["shared", "exclusive"],
+        logname="<context_manager>",
+    ):
+        if mode == "shared":
+            mode_ = fcntl.LOCK_SH
+        elif mode == "exclusive":
+            mode_ = fcntl.LOCK_EX | fcntl.LOCK_NB
+        else:
+            raise ValueError("Unknown lock mode '{}'".format(mode))
+
+        if (
+            target in self._lock_fds
+        ):  # FIXME: should this be a class var? dict(path->lock)
+            raise RuntimeError("Bug: Locking is not re-entrant.")
+        target_path = self.path / target
+        if not target_path.exists():
+            target_path.touch()
+        self._lock_fds[target] = target_path.open()
+        try:
+            fcntl.flock(self._lock_fds[target], mode_)
+        except BlockingIOError:
+            self.log.warning(
+                "lock-failed",
+                _fmt_msg="Failed to get '{mode}' lock on '{target}' for '{function}'.",
+                mode=mode,
+                target=target,
+                function=logname,
+            )
+            raise
+        else:
+            try:
+                yield
+            finally:
+                fcntl.flock(self._lock_fds[target], fcntl.LOCK_UN)
+        finally:
+            self._lock_fds[target].close()
+            del self._lock_fds[target]
+
     @property
     def name(self) -> str:
         return self.path.name
-
-    def to_dict(self):
-        return self.config
 
     def scan(self) -> None:
         self.history = []
@@ -248,10 +305,6 @@ class Repository(object):
                 revisions=",".join(r.uuid for r in remote),
             )
             raise RuntimeError("Remote revs disallowed")
-
-    @locked(target=".backup", mode="exclusive")
-    def run_with_backup_lock(self, fun, *args, **kw):
-        return fun(*args, **kw)
 
     #################
     # Making backups

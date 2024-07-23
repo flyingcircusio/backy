@@ -15,12 +15,6 @@ if TYPE_CHECKING:
     from .store import Store
 
 
-chunk_stats = {
-    "write_full": 0,
-    "write_partial": 0,
-}
-
-
 class Chunk(object):
     """A chunk in a file that represents a part of it.
 
@@ -35,16 +29,16 @@ class Chunk(object):
     store: "Store"
     clean: bool
     data: Optional[io.BytesIO]
+    stats: dict
 
     def __init__(
-        self,
-        store: "Store",
-        hash: Optional[Hash],
+        self, store: "Store", hash: Optional[Hash], stats: Optional[dict] = None
     ):
         self.hash = hash
         self.store = store
         self.clean = True
         self.data = None
+        self.stats = stats if stats is not None else dict()
 
     def _read_existing(self) -> None:
         if self.data:
@@ -100,13 +94,15 @@ class Chunk(object):
         if offset == 0 and len(data) == self.CHUNK_SIZE:
             # Special case: overwrite the entire chunk.
             self._init_data(data)
-            chunk_stats["write_full"] += 1
+            self.stats.setdefault("write_full", 0)
+            self.stats["write_full"] += 1
         else:
             self._read_existing()
             assert self.data
             self.data.seek(offset)
             self.data.write(data)
-            chunk_stats["write_partial"] += 1
+            self.stats.setdefault("write_partial", 0)
+            self.stats["write_partial"] += 1
         self.clean = False
 
         return len(data), remaining_data

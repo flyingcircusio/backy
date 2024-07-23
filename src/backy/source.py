@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
+import yaml
 from structlog.stdlib import BoundLogger
 
 if TYPE_CHECKING:
@@ -51,17 +52,37 @@ class Source(Generic[RestoreArgsType]):
 
     """
 
-    type_: str
+    type_: str = "<stub>"
     subcommand: str
 
-    repository: "Repository"
+    @classmethod
+    def from_repo(cls, repository: "Repository"):
+        assert (
+            repository.sourcetype == cls
+        ), f"this repo requires a {repository.sourcetype.type_} source and not a {cls.type_} source"
+        path = repository.path.joinpath(f"source.config")
+        try:
+            with path.open(encoding="utf-8") as f:
+                config = yaml.safe_load(f)
+        except IOError:
+            repository.log.error(
+                "could-not-read-source-config",
+                _fmt_msg="Could not read source config file. Is the path correct?",
+                config_path=str(path),
+            )
+            raise
 
-    def bind(self, repository: "Repository") -> None:
-        self.repository = repository
+        return cls.from_config(repository, config, repository.log)
 
     @classmethod
     @abstractmethod
-    def from_config(cls, config: dict[str, Any], log: BoundLogger) -> "Source":
+    def from_config(
+        cls, repository: "Repository", config: dict[str, Any], log: BoundLogger
+    ) -> "Source":
+        ...
+
+    @abstractmethod
+    def to_config(self) -> dict[str, Any]:
         ...
 
     @abstractmethod

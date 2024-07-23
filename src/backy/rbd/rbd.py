@@ -12,8 +12,11 @@ from backy.utils import CHUNK_SIZE, punch_hole
 
 
 def detect_whole_object_support():
-    result = run(
-        ["rbd", "help", "export-diff"], stdout=PIPE, stderr=PIPE, check=True
+    result = subprocess.run(
+        ["rbd", "help", "export-diff"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
     )
     return "--whole-object" in result.stdout.decode("ascii")
 
@@ -297,13 +300,8 @@ class RBDDiffV1(object):
                 return
             yield record
 
-    def integrate(self, target, snapshot_from, snapshot_to, clean=True):
-        """Integrate this diff into the given target.
-
-        If clean is set (default: True) then remove the delta after a
-        successful integration.
-
-        """
+    def integrate(self, target, snapshot_from, snapshot_to):
+        """Integrate this diff into the given target."""
         bytes = 0
 
         for record in self.read_metadata():

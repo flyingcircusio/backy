@@ -96,8 +96,6 @@ def test_chunk_fails_wrong_content(tmp_path, log):
     with open(p, "wb") as existing:
         existing.write(lzo.compress(b"bsdf"))
 
-    f = File(tmp_path / "asdf", store)
-
     chunk = Chunk(store, chunk_hash)
     with pytest.raises(InconsistentHash):
         chunk.read(0)

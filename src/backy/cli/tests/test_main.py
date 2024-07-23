@@ -154,9 +154,9 @@ def test_call_backup(success, tmp_path, capsys, argv, monkeypatch):
     os.makedirs(tmp_path / "backy")
     os.chdir(tmp_path / "backy")
 
-    with open(tmp_path / "backy" / "config", "wb") as f:
+    with open(tmp_path / "backy" / "config", "w", encoding="utf-8") as f:
         f.write(
-            """
+            f"""
 ---
 schedule:
     daily:
@@ -164,12 +164,8 @@ schedule:
         keep: 7
 source:
     type: file
-    filename: {}
-""".format(
-                __file__
-            ).encode(
-                "utf-8"
-            )
+    filename: {__file__}
+"""
         )
 
     monkeypatch.setattr(

@@ -4,8 +4,25 @@ import subprocess
 
 import pytest
 
-import backy.rbd.sources.ceph
-from backy.rbd.sources.ceph.rbd import RBDClient
+import backy.rbd.rbd
+from backy.rbd.source import RBDClient, RBDSource
+from backy.repository import Repository
+from backy.revision import Revision
+from backy.schedule import Schedule
+
+
+@pytest.fixture
+def repository(tmp_path, log):
+    repo = Repository(tmp_path, RBDSource, Schedule(), log)
+    repo.connect()
+    return repo
+
+
+def create_rev(repository, tags) -> Revision:
+    r = Revision.create(repository, tags, repository.log)
+    r.materialize()
+    repository.scan()
+    return repository.find_by_uuid(r.uuid)
 
 
 class CephCLIBase:
@@ -66,7 +83,7 @@ class CephCLIBase:
                 arg = "version"
             return arg
 
-        cmdline = map(prep_cmdline, cmdline)
+        cmdline = list(map(prep_cmdline, cmdline))
         args = self.parser.parse_args(cmdline)
         func = getattr(self, args.func)
         args = dict(args._get_kwargs())
@@ -81,7 +98,7 @@ class CephCLIBase:
 
     # implementation restriction: `rbd unmap` takes imagespecs, snapspecs, or devices
     # as args, AFAIK we only use devices as args in backy for now
-    def unmap(self, device, read_only):
+    def unmap(self, device):
         ...
 
     def showmapped(self, format):
@@ -245,7 +262,7 @@ class CephNautilusCLI(CephCLIBase):
 @pytest.fixture(params=[CephJewelCLI, CephLuminousCLI, CephNautilusCLI])
 def rbdclient(request, tmp_path, monkeypatch, log):
     monkeypatch.setattr(
-        backy.rbd.sources.ceph, "CEPH_RBD_SUPPORTS_WHOLE_OBJECT_DIFF", True
+        backy.rbd.rbd, "CEPH_RBD_SUPPORTS_WHOLE_OBJECT_DIFF", True
     )
 
     client = RBDClient(log)

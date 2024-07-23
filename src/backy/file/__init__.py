@@ -17,22 +17,25 @@ from ..repository import Repository
 
 
 class FileSource(Source):
-    path: Path  # the source we are backing up
     type_ = "file"
     subcommand = "backy-file"
 
-    def __init__(self, path: Path):
+    repository: Repository
+    path: Path  # the source we are backing up
+
+    def __init__(self, repository: Repository, path: Path):
+        self.repository = repository
         self.path = path
 
     @classmethod
     def from_config(
-        cls, config: dict[str, Any], log: BoundLogger
+        cls, repository: Repository, config: dict[str, Any], log: BoundLogger
     ) -> "FileSource":
-        return cls(path=Path(config["path"]))
+        assert cls.type_ == config["type"]
+        return cls(repository, Path(config["path"]))
 
-    @staticmethod
-    def to_config(path: Path) -> dict[str, Any]:
-        return {"path": str(path)}
+    def to_config(self) -> dict[str, Any]:
+        return {"type": self.type_, "path": str(self.path)}
 
     def _path_for_revision(self, revision: Revision) -> Path:
         return self.repository.path / revision.uuid
@@ -148,7 +151,8 @@ in a very simplistic fashion.
     log.debug("invoked", args=" ".join(sys.argv))
 
     try:
-        b = FileSource(args.backupdir, log)
+        b = FileSource()
+        Repository.f
         # XXX scheduler?
         b._clean()
         ret = 0

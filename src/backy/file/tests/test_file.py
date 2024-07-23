@@ -1,5 +1,3 @@
-from typing import cast
-
 import yaml
 
 from backy.file import FileSource
@@ -11,14 +9,12 @@ from backy.schedule import Schedule
 def test_bootstrap_from_api(tmp_path, log):
     original = tmp_path / "original.txt"
 
-    source = FileSource(original)
-
     schedule = Schedule()
+    repository = Repository(tmp_path / "repository", FileSource, schedule, log)
+    repository.connect()
+    source = FileSource(repository, original)
 
-    repo_path = tmp_path / "repository"
-    repository = Repository(repo_path, source, schedule, log)
-
-    exercise_fresh_repo(repository)
+    exercise_fresh_repo(source)
 
 
 def test_bootstrap_from_config(tmp_path, log):
@@ -26,28 +22,29 @@ def test_bootstrap_from_config(tmp_path, log):
 
     repo_path = tmp_path / "repository"
 
-    config = {
+    repo_conf = {
         "path": repo_path,
         "schedule": {},
-        "source": {"type": "file", "path": str(original)},
+        "type": "file",
     }
+    source_conf = {"type": "file", "path": str(original)}
 
-    repository = Repository.from_config(config, log)
-
-    exercise_fresh_repo(repository)
-
-
-def exercise_fresh_repo(repository: Repository):
-    source = cast(FileSource, repository.source)
-
-    original = source.path
-
+    repository = Repository.from_config(repo_conf, log)
     repository.connect()
+    source = FileSource.from_config(repository, source_conf, log)
+
+    exercise_fresh_repo(source)
+
+
+def exercise_fresh_repo(source: FileSource):
+    original = source.path
 
     with open(original, "w") as f:
         f.write("This is the original file.")
 
-    revision = Revision.create(repository, {"test"}, repository.log)
+    revision = Revision.create(
+        source.repository, {"test"}, source.repository.log
+    )
     source.backup(revision)
 
     with open(original, "w") as f:

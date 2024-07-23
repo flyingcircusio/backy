@@ -3,9 +3,10 @@ import os
 import subprocess
 import time
 import uuid
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import IO, Any, Optional, Set
+from typing import IO, Any, Literal, Optional, Set, cast
 
 import consulate
 from structlog.stdlib import BoundLogger
@@ -13,6 +14,7 @@ from structlog.stdlib import BoundLogger
 import backy
 import backy.utils
 from backy.ext_deps import BACKY_EXTRACT
+from backy.report import ChunkMismatchReport
 from backy.repository import Repository
 from backy.revision import Revision, Trust
 from backy.source import Source
@@ -27,8 +29,11 @@ from backy.utils import (
 )
 
 from .chunked import BackendException, Chunk, File, Hash, Store
-from .quarantine import QuarantineReport, QuarantineStore
 from .rbd import RBDClient
+
+
+def locked(target: str, mode: Literal["shared", "exclusive"]):
+    return Repository.locked(target, mode, repo_attr="repository")
 
 
 class RestoreBackend(Enum):
@@ -40,34 +45,35 @@ class RestoreBackend(Enum):
         return self.value
 
 
+@dataclass(frozen=True)
 class RestoreArgs:
     target: str
-    backend: RestoreBackend
+    backend: RestoreBackend = RestoreBackend.AUTO
 
 
-class RbdSource(Source[RestoreArgs]):
+class RBDSource(Source[RestoreArgs]):
     type_ = "rbd"
     subcommand = "backy-rbd"
 
-    source: "FlyingCircusRootDisk"
+    repository: Repository
+    ceph_rbd: "CephRBD"
     store: Store
-    quarantine: QuarantineStore
     log: BoundLogger
 
-    def __init__(self, rbdsource: "FlyingCircusRootDisk", log: BoundLogger):
-        self.source = rbdsource
+    def __init__(
+        self, repository: Repository, ceph_rbd: "CephRBD", log: BoundLogger
+    ):
         self.log = log.bind(subsystem="rbdsource")
+        self.repository = repository
+        self.ceph_rbd = ceph_rbd
+        self.store = Store(repository.path / "chunks", self.log)
 
     @classmethod
-    def from_config(cls, config: dict[str, Any], log: BoundLogger) -> "Source":
-        assert config.get("backend", "chunked") == "chunked"
-        return cls(FlyingCircusRootDisk(config, log), log)
-
-    def bind(self, repository: "Repository") -> None:
-        super().bind(repository)
-        # TODO: move quarantine to repo
-        self.quarantine = QuarantineStore(repository.path, self.log)
-        self.store = Store(repository.path / "chunks", self.log)
+    def from_config(
+        cls, repository: Repository, config: dict[str, Any], log: BoundLogger
+    ) -> "Source":
+        assert cls.type_ == config["type"]
+        return cls(repository, CephRBD.from_config(config, log), log)
 
     def _path_for_revision(self, revision: Revision) -> Path:
         return self.repository.path / revision.uuid
@@ -81,7 +87,9 @@ class RbdSource(Source[RestoreArgs]):
             ) as new, self._path_for_revision(parent).open("rb") as old:
                 # This is ok, this is just metadata, not the actual data.
                 new.write(old.read())
-        file = File(self._path_for_revision(revision), self.store)
+        file = File(
+            self._path_for_revision(revision), self.store, revision.stats
+        )
 
         if file.writable() and self.repository.contains_distrusted:
             # "Force write"-mode if any revision is distrusted.
@@ -93,47 +101,50 @@ class RbdSource(Source[RestoreArgs]):
     #################
     # Making backups
 
-    @Repository.locked(target=".backup", mode="exclusive")
-    @Repository.locked(target=".purge", mode="shared")
+    @locked(target=".backup", mode="exclusive")
+    @locked(target=".purge", mode="shared")
     def backup(self, revision: Revision) -> bool:
         self.repository.path.joinpath("last").unlink(missing_ok=True)
         self.repository.path.joinpath("last.rev").unlink(missing_ok=True)
 
         start = time.time()
 
-        if not self.source.ready():
+        if not self.ceph_rbd.ready():
             raise RuntimeError(
                 "Source is not ready (does it exist? can you access it?)"
             )
 
-        with self.source(revision) as source:
-            try:
+        try:
+            with self.ceph_rbd(revision) as source:
                 parent_rev = source.get_parent()
-                file = self.open(revision, parent_rev)
-                if parent_rev:
-                    source.full(file)
-                else:
-                    source.diff(file, parent_rev)
-                file = self.open(revision)
-                verified = source.verify(file, self.quarantine)
-            except BackendException:
-                self.log.exception("backend-error-distrust-all")
-                verified = False
-                self.repository.distrust("local", skip_lock=True)
-            if not verified:
-                self.log.error(
-                    "verification-failed",
-                    revision_uuid=revision.uuid,
-                )
-                revision.remove()
-            else:
-                self.log.info("verification-ok", revision_uuid=revision.uuid)
-                revision.stats["duration"] = time.time() - start
-                revision.write_info()
-                revision.readonly()
-            # Switched from a fine-grained syncing mechanism to "everything
-            # once" when we're done. This is as safe but much faster.
-            os.sync()
+                with self.open(revision, parent_rev) as file:
+                    if parent_rev:
+                        source.diff(file, parent_rev)
+                    else:
+                        source.full(file)
+                with self.open(revision) as file:
+                    report = source.verify(file)
+                    if report:
+                        self.repository.add_report(report)
+                    verified = not report
+        except BackendException:
+            self.log.exception("ceph-error-distrust-all")
+            verified = False
+            self.repository.distrust("local", skip_lock=True)
+        if not verified:
+            self.log.error(
+                "verification-failed",
+                revision_uuid=revision.uuid,
+            )
+            revision.remove()
+        else:
+            self.log.info("verification-ok", revision_uuid=revision.uuid)
+            revision.stats["duration"] = time.time() - start
+            revision.write_info()
+            revision.readonly()
+        # Switched from a fine-grained syncing mechanism to "everything
+        # once" when we're done. This is as safe but much faster.
+        os.sync()
 
         # If there are distrusted revisions, then perform at least one
         # verification after a backup - for good measure and to keep things
@@ -150,7 +161,7 @@ class RbdSource(Source[RestoreArgs]):
                 break
         return verified
 
-    @Repository.locked(target=".purge", mode="shared")
+    @locked(target=".purge", mode="shared")
     @report_status
     def verify(self, revision: Revision):
         log = self.log.bind(revision_uuid=revision.uuid)
@@ -214,10 +225,12 @@ class RbdSource(Source[RestoreArgs]):
         yield END
         yield None
 
-    @Repository.locked(target=".purge", mode="exclusive")
+    @locked(target=".purge", mode="exclusive")
     def gc(self) -> None:
         self.log.debug("purge")
         used_chunks: Set[Hash] = set()
+        # TODO: also remove mapping file
+        # TODO: purge quarantine store
         for revision in self.repository.local_history:
             used_chunks.update(self.open(revision)._mapping.values())
         self.store.purge(used_chunks)
@@ -231,7 +244,8 @@ class RbdSource(Source[RestoreArgs]):
     # restore_stdout and locking isn't re-entrant.
     def restore(self, revision: Revision, args: RestoreArgs) -> None:
         s = self.open(revision)
-        if args.backend == RestoreBackend.AUTO:
+        restore_backend = args.backend
+        if restore_backend == RestoreBackend.AUTO:
             if self.backy_extract_supported(s):
                 restore_backend = RestoreBackend.RUST
             else:
@@ -283,7 +297,7 @@ class RbdSource(Source[RestoreArgs]):
                 "Maybe try `--backend python`?"
             )
 
-    @Repository.locked(target=".purge", mode="shared")
+    @locked(target=".purge", mode="shared")
     def restore_file(self, source: IO, target_name: str) -> None:
         """Bulk-copy from open revision `source` to target file."""
         self.log.debug("restore-file", source=source.name, target=target_name)
@@ -295,7 +309,7 @@ class RbdSource(Source[RestoreArgs]):
                 pass
             copy(source, target)
 
-    @Repository.locked(target=".purge", mode="shared")
+    @locked(target=".purge", mode="shared")
     def restore_stdout(self, source: IO) -> None:
         """Emit restore data to stdout (for pipe processing)."""
         self.log.debug("restore-stdout", source=source.name)
@@ -321,19 +335,41 @@ class CephRBD:
     pool: str
     image: str
     always_full: bool
-    log: BoundLogger
+    vm: Optional[str]
+    consul_acl_token: Optional[str]
     rbd: RBDClient
     revision: Revision
+    log: BoundLogger
+
     snapshot_timeout = 90
 
-    def __init__(self, config: dict, log: BoundLogger):
-        self.pool = config["pool"]
-        self.image = config["image"]
-        self.always_full = config.get("full-always", False)
+    def __init__(
+        self,
+        pool: str,
+        image: str,
+        log: BoundLogger,
+        vm: Optional[str] = None,
+        consul_acl_token: Optional[str] = None,
+        always_full: bool = False,
+    ):
+        self.pool = pool
+        self.image = image
+        self.always_full = always_full
+        self.vm = vm
+        self.consul_acl_token = consul_acl_token
         self.log = log.bind(subsystem="ceph")
         self.rbd = RBDClient(self.log)
-        self.vm = config["vm"]
-        self.consul_acl_token = config.get("consul_acl_token")
+
+    @classmethod
+    def from_config(cls, config: dict, log: BoundLogger) -> "CephRBD":
+        return cls(
+            config["pool"],
+            config["image"],
+            log,
+            config.get("vm"),
+            config.get("consul_acl_token"),
+            config.get("full-always", False),
+        )
 
     def ready(self) -> bool:
         """Check whether the source can be backed up.
@@ -357,124 +393,11 @@ class CephRBD:
         self.create_snapshot(snapname)
         return self
 
-    def create_snapshot(self, snapname: str) -> None:
-        """An overridable method to allow different ways of creating the
-        snapshot.
-        """
-        self.rbd.snap_create(self._image_name + "@" + snapname)
-
-    @property
-    def _image_name(self) -> str:
-        return "{}/{}".format(self.pool, self.image)
-
-    def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
-        self._delete_old_snapshots()
-
-    def get_parent(self) -> Optional[Revision]:
-        if self.always_full:
-            self.log.info("backup-always-full")
-            return None
-        revision = self.revision
-        while True:
-            parent = revision.get_parent()
-            if not parent:
-                self.log.info("backup-no-valid-parent")
-                return None
-            if not self.rbd.exists(self._image_name + "@backy-" + parent.uuid):
-                self.log.info(
-                    "ignoring-rev-without-snapshot",
-                    revision_uuid=parent.uuid,
-                )
-                revision = parent
-                continue
-            # Ok, it's trusted and we have a snapshot. Let's do a diff.
-            return parent
-
-    def diff(self, target: "RbdSource", parent: Revision) -> None:
-        self.log.info("diff")
-        snap_from = "backy-" + parent.uuid
-        snap_to = "backy-" + self.revision.uuid
-        s = self.rbd.export_diff(self._image_name + "@" + snap_to, snap_from)
-        with s as source, target.open(self.revision, parent) as target_:
-            bytes = source.integrate(target_, snap_from, snap_to)
-        self.log.info("diff-integration-finished")
-
-        self.revision.stats["bytes_written"] = bytes
-
-        # TMP Gather statistics to see where to optimize
-        from backy.rbd.chunked.chunk import chunk_stats
-
-        self.revision.stats["chunk_stats"] = chunk_stats
-
-    def full(self, target: File) -> None:
-        self.log.info("full")
-        s = self.rbd.export(
-            "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
-        )
-        copied = 0
-        with s as source, target as target_:
-            while True:
-                buf = source.read(4 * backy.utils.MiB)
-                if not buf:
-                    break
-                target_.write(buf)
-                copied += len(buf)
-        self.revision.stats["bytes_written"] = copied
-
-        # TMP Gather statistics to see if we actually are aligned.
-        from backy.rbd.chunked.chunk import chunk_stats
-
-        self.revision.stats["chunk_stats"] = chunk_stats
-
-    def verify(self, target: File, quarantine: QuarantineStore) -> bool:
-        s = self.rbd.image_reader(
-            "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
-        )
-        self.revision.stats["ceph-verification"] = "partial"
-
-        with s as source, target as target_:
-            self.log.info("verify")
-            return backy.utils.files_are_roughly_equal(
-                source,
-                target_,
-                report=lambda s, t, o: quarantine.add_report(
-                    QuarantineReport(s, t, o)
-                ),
-            )
-
-    def _delete_old_snapshots(self) -> None:
-        # Clean up all snapshots except the one for the most recent valid
-        # revision.
-        # Previously we used to remove all snapshots but the one for this
-        # revision - which is wrong: broken new revisions would always cause
-        # full backups instead of new deltas based on the most recent valid
-        # one.
-        # XXX this will break if multiple servers are active
-        if not self.always_full and self.revision.repository.local_history:
-            keep_snapshot_revision = self.revision.repository.local_history[
-                -1
-            ].uuid
-        else:
-            keep_snapshot_revision = None
-        for snapshot in self.rbd.snap_ls(self._image_name):
-            if not snapshot["name"].startswith("backy-"):
-                # Do not touch non-backy snapshots
-                continue
-            uuid = snapshot["name"].replace("backy-", "")
-            if uuid != keep_snapshot_revision:
-                time.sleep(3)  # avoid race condition while unmapping
-                self.log.info(
-                    "delete-old-snapshot", snapshot_name=snapshot["name"]
-                )
-                try:
-                    self.rbd.snap_rm(self._image_name + "@" + snapshot["name"])
-                except Exception:
-                    self.log.exception(
-                        "delete-old-snapshot-failed",
-                        snapshot_name=snapshot["name"],
-                    )
-
     def create_snapshot(self, name: str) -> None:
+        if not self.consul_acl_token or not self.vm:
+            self.rbd.snap_create(self._image_name + "@" + name)
+            return
+
         consul = consulate.Consul(token=self.consul_acl_token)
         snapshot_key = "snapshot/{}".format(str(uuid.uuid4()))
         self.log.info(
@@ -497,7 +420,7 @@ class CephRBD:
         except TimeOutError:
             # The VM might have been shut down. Try doing a regular Ceph
             # snapshot locally.
-            super(FlyingCircusRootDisk, self).create_snapshot(name)
+            self.rbd.snap_create(self._image_name + "@" + name)
         except KeyboardInterrupt:
             raise
         finally:
@@ -532,3 +455,90 @@ class CephRBD:
                         snapshot_key=key,
                     )
                     del consul.kv[key]
+
+    @property
+    def _image_name(self) -> str:
+        return "{}/{}".format(self.pool, self.image)
+
+    def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
+        self._delete_old_snapshots()
+
+    def get_parent(self) -> Optional[Revision]:
+        if self.always_full:
+            self.log.info("backup-always-full")
+            return None
+        revision = self.revision
+        while True:
+            parent = revision.get_parent()
+            if not parent:
+                self.log.info("backup-no-valid-parent")
+                return None
+            if not self.rbd.exists(self._image_name + "@backy-" + parent.uuid):
+                self.log.info(
+                    "ignoring-rev-without-snapshot",
+                    revision_uuid=parent.uuid,
+                )
+                revision = parent
+                continue
+            # Ok, it's trusted and we have a snapshot. Let's do a diff.
+            return parent
+
+    def diff(self, target: File, parent: Revision) -> None:
+        self.log.info("diff")
+        snap_from = "backy-" + parent.uuid
+        snap_to = "backy-" + self.revision.uuid
+        s = self.rbd.export_diff(self._image_name + "@" + snap_to, snap_from)
+        with s as source:
+            source.integrate(target, snap_from, snap_to)
+        self.log.info("diff-integration-finished")
+
+    def full(self, target: File) -> None:
+        self.log.info("full")
+        s = self.rbd.export(
+            "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
+        )
+        with s as source:
+            while buf := source.read(4 * backy.utils.MiB):
+                target.write(buf)
+
+    def verify(self, target: File) -> Optional[ChunkMismatchReport]:
+        s = self.rbd.image_reader(
+            "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
+        )
+        self.revision.stats["ceph-verification"] = "partial"
+
+        with s as source:
+            self.log.info("verify")
+            return backy.utils.files_are_roughly_equal(source, cast(IO, target))
+
+    def _delete_old_snapshots(self) -> None:
+        # Clean up all snapshots except the one for the most recent valid
+        # revision.
+        # Previously we used to remove all snapshots but the one for this
+        # revision - which is wrong: broken new revisions would always cause
+        # full backups instead of new deltas based on the most recent valid
+        # one.
+        # XXX this will break if multiple servers are active
+        if not self.always_full and self.revision.repository.local_history:
+            keep_snapshot_revision = self.revision.repository.local_history[
+                -1
+            ].uuid
+        else:
+            keep_snapshot_revision = None
+        for snapshot in self.rbd.snap_ls(self._image_name):
+            if not snapshot["name"].startswith("backy-"):
+                # Do not touch non-backy snapshots
+                continue
+            uuid = snapshot["name"].replace("backy-", "")
+            if uuid != keep_snapshot_revision:
+                time.sleep(3)  # avoid race condition while unmapping
+                self.log.info(
+                    "delete-old-snapshot", snapshot_name=snapshot["name"]
+                )
+                try:
+                    self.rbd.snap_rm(self._image_name + "@" + snapshot["name"])
+                except Exception:
+                    self.log.exception(
+                        "delete-old-snapshot-failed",
+                        snapshot_name=snapshot["name"],
+                    )

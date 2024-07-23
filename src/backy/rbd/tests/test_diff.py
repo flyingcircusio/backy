@@ -1,11 +1,10 @@
 import io
-import os
-import os.path
 import struct
+from pathlib import Path
 
 import pytest
 
-from backy.rbd.sources.ceph.diff import (
+from backy.rbd.rbd import (
     Data,
     FromSnap,
     RBDDiffV1,
@@ -254,11 +253,10 @@ def test_read_detects_wrong_record_type(tmp_path):
 
 
 def test_read_empty_diff(tmp_path):
-    diff = RBDDiffV1(open(os.path.dirname(__file__) + "/nodata.rbddiff", "rb"))
+    diff = RBDDiffV1(open(Path(__file__).parent / "nodata.rbddiff", "rb"))
     target = open(str(tmp_path / "foo"), "wb")
     diff.integrate(
         target,
         "backy-ed968696-5ab0-4fe0-af1c-14cadab44661",
         "backy-f0e7292e-4ad8-4f2e-86d6-f40dca2aa802",
-        clean=False,
     )

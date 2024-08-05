@@ -1,4 +1,3 @@
-import json
 import os
 import subprocess
 from pathlib import Path
@@ -7,10 +6,10 @@ from unittest import mock
 
 import pytest
 
+from backy.conftest import create_rev
 from backy.ext_deps import BACKY_RBD_CMD, BASH
-from backy.rbd import RBDSource, RestoreArgs
-from backy.rbd.source import CephRBD
-from backy.rbd.tests.conftest import create_rev
+from backy.rbd import CephRBD, RBDRestoreArgs, RBDSource
+from backy.source import CmdLineSource
 from backy.tests import Ellipsis
 from backy.utils import CHUNK_SIZE
 
@@ -50,16 +49,16 @@ def rbdsource(repository, log):
 
 
 def test_configure_rbd_source_no_consul(repository, tmp_path, log):
-    with open(tmp_path / "source.config", "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "type": "rbd",
-                "pool": "test",
-                "image": "test04.root",
-            },
-            f,
-        )
-    source = repository.get_source()
+    config = {
+        "path": str(tmp_path),
+        "schedule": {},
+        "source": {
+            "type": "rbd",
+            "pool": "test",
+            "image": "test04.root",
+        },
+    }
+    source = CmdLineSource.from_config(config, log).create_source()
     assert isinstance(source, RBDSource)
     ceph_rbd = source.ceph_rbd
     assert isinstance(ceph_rbd, CephRBD)
@@ -71,19 +70,19 @@ def test_configure_rbd_source_no_consul(repository, tmp_path, log):
 
 
 def test_configure_rbd_source_consul(repository, tmp_path, log):
-    with open(tmp_path / "source.config", "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "type": "rbd",
-                "pool": "test",
-                "image": "test04.root",
-                "full-always": True,
-                "vm": "test04",
-                "consul_acl_token": "token",
-            },
-            f,
-        )
-    source = repository.get_source()
+    config = {
+        "path": str(tmp_path),
+        "schedule": {},
+        "source": {
+            "type": "rbd",
+            "pool": "test",
+            "image": "test04.root",
+            "full-always": True,
+            "vm": "test04",
+            "consul_acl_token": "token",
+        },
+    }
+    source = CmdLineSource.from_config(config, log).create_source()
     assert isinstance(source, RBDSource)
     ceph_rbd = source.ceph_rbd
     assert isinstance(ceph_rbd, CephRBD)
@@ -100,7 +99,7 @@ def test_restore_target(rbdsource, repository, tmp_path, log):
     target = tmp_path / "restore.img"
     r = create_rev(repository, {"daily"})
     rbdsource.backup(r)
-    rbdsource.restore(r, RestoreArgs(str(target)))
+    rbdsource.restore(r, RBDRestoreArgs(str(target)))
     with open(target, "rb") as t:
         assert data == t.read()
 
@@ -110,7 +109,7 @@ def test_restore_stdout(rbdsource, repository, capfd, log):
     rbdsource.ceph_rbd.data = data
     r = create_rev(repository, {"daily"})
     rbdsource.backup(r)
-    rbdsource.restore(r, RestoreArgs("-"))
+    rbdsource.restore(r, RBDRestoreArgs("-"))
     assert not Path("-").exists()
     out, err = capfd.readouterr()
     assert data.decode("utf-8") == out
@@ -124,7 +123,7 @@ def test_restore_backy_extract(rbdsource, repository, monkeypatch, log):
     rbdsource.ceph_rbd.data = data
     r = create_rev(repository, {"daily"})
     rbdsource.backup(r)
-    rbdsource.restore(r, RestoreArgs("restore.img"))
+    rbdsource.restore(r, RBDRestoreArgs("restore.img"))
     check_output.assert_called()
     rbdsource.restore_backy_extract.assert_called_once_with(r, "restore.img")
 
@@ -149,7 +148,7 @@ def test_backup_corrupted(rbdsource, repository, log):
 def test_gc(rbdsource, repository, log):
     r = create_rev(repository, set())
     # Write 1 version to the file
-    with rbdsource.open(r) as f:
+    with rbdsource.open(r, "wb") as f:
         f.write(b"asdf")
     remote = create_rev(repository, set())  # remote revision without local data
     remote.server = "remote"
@@ -178,7 +177,7 @@ def test_smoketest_internal(rbdsource, repository, tmp_path, log):
     rbdsource.backup(rev1)
 
     # Restore first state from the newest revision
-    restore_args = RestoreArgs(str(tmp_path / "image1.restore"))
+    restore_args = RBDRestoreArgs(str(tmp_path / "image1.restore"))
     rbdsource.restore(rev1, restore_args)
     with pytest.raises(IOError):
         open(repository.history[-1].info_filename, "wb")

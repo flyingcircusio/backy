@@ -10,7 +10,19 @@ import tzlocal
 
 import backy.logging
 import backy.schedule
+import backy.source
 from backy import utils
+from backy.file import FileSource
+from backy.repository import Repository
+from backy.revision import Revision
+from backy.schedule import Schedule
+
+
+def create_rev(repository, tags) -> Revision:
+    r = Revision.create(repository, tags, repository.log)
+    r.materialize()
+    repository.scan()
+    return repository.find_by_uuid(r.uuid)
 
 
 @pytest.fixture
@@ -35,15 +47,6 @@ def pytest_assertrepr_compare(op, left, right):
 
     report = left.compare(right)
     return report.diff
-
-
-@pytest.fixture(autouse=True)
-def log(monkeypatch):
-    def noop_init_logging(*args, **kwargs):
-        pass
-
-    monkeypatch.setattr(backy.logging, "init_logging", noop_init_logging)
-    return structlog.stdlib.get_logger()
 
 
 @pytest.fixture(autouse=True)
@@ -74,9 +77,25 @@ def seed_random(monkeypatch):
 
 @pytest.fixture
 def schedule():
-    schedule = backy.schedule.Schedule()
+    schedule = Schedule()
     schedule.configure({"daily": {"interval": "1d", "keep": 5}})
     return schedule
+
+
+@pytest.fixture
+def repository(tmp_path, schedule, log):
+    repo = Repository(tmp_path, schedule, log)
+    repo.connect()
+    return repo
+
+
+@pytest.fixture(autouse=True)
+def log(monkeypatch):
+    def noop_init_logging(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(backy.logging, "init_logging", noop_init_logging)
+    return structlog.stdlib.get_logger()
 
 
 @pytest.fixture(scope="session")
@@ -94,3 +113,15 @@ def setup_structlog():
 @pytest.fixture(autouse=True)
 def reset_structlog(setup_structlog):
     utils.log_data = ""
+
+
+@pytest.fixture(autouse=True)
+def no_subcommand(monkeypatch):
+    def sync_invoke(self, *args):
+        return FileSource.main(*args)
+
+    async def async_invoke(self, *args):
+        return FileSource.main(*args)
+
+    monkeypatch.setattr(backy.source.CmdLineSource, "invoke", sync_invoke)
+    monkeypatch.setattr(backy.source.AsyncCmdLineSource, "invoke", async_invoke)

@@ -28,9 +28,10 @@ class Store(object):
     def __init__(self, path: Path, log: BoundLogger):
         self.path = path
         self.log = log.bind(subsystem="chunked-store")
+        self.path.mkdir(exist_ok=True)
         for x in range(256):
             subdir = self.path / f"{x:02x}"
-            subdir.mkdir(parents=True, exist_ok=True)
+            subdir.mkdir(exist_ok=True)
         if not self.path.joinpath("store").exists():
             self.convert_to_v2()
 

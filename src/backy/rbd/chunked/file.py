@@ -37,6 +37,7 @@ class File(object):
     stats: dict
     closed: bool
     size: int
+    mode: str
 
     _position: int
     _access_stats: dict[int, Tuple[int, float]]  # (count, last)
@@ -47,6 +48,7 @@ class File(object):
         self,
         name: str | os.PathLike,
         store: "Store",
+        mode: str = "rw",
         stats: Optional[dict] = None,
     ):
         self.name = str(name)
@@ -58,6 +60,17 @@ class File(object):
         self._position = 0
 
         self._access_stats = defaultdict(lambda: (0, 0))
+
+        self.mode = mode
+
+        if "+" in self.mode:
+            self.mode += "w"
+        if "a" in self.mode:
+            self.mode += "w"
+        self.mode = "".join(set(self.mode))
+
+        if not os.path.exists(name) and "w" not in self.mode:
+            raise FileNotFoundError("File not found: {}".format(self.name))
 
         if not os.path.exists(name):
             self._mapping = {}
@@ -76,6 +89,9 @@ class File(object):
                 meta = json.load(f)
                 self._mapping = {int(k): v for k, v in meta["mapping"].items()}
                 self.size = meta["size"]
+
+        if "a" in self.mode:
+            self._position = self.size
 
         # Chunks that we are working on.
         self._chunks = {}
@@ -104,7 +120,7 @@ class File(object):
         self._chunks = dict(keep_chunks)
 
     def flush(self) -> None:
-        assert not self.closed
+        assert "w" in self.mode and not self.closed
 
         self._flush_chunks(0)
 
@@ -115,14 +131,15 @@ class File(object):
 
     def close(self) -> None:
         assert not self.closed
-        self.flush()
+        if "w" in self.mode:
+            self.flush()
         self.closed = True
 
     def isatty(self) -> bool:
         return False
 
     def readable(self) -> bool:
-        return not self.closed
+        return "r" in self.mode and not self.closed
 
     # def readline(size=-1)
     # def readlines(hint=-1)
@@ -172,7 +189,7 @@ class File(object):
         return position
 
     def truncate(self, size: Optional[int] = None) -> None:
-        assert not self.closed
+        assert "w" in self.mode and not self.closed
         if size is None:
             size = self._position
         # Update content hash
@@ -186,7 +203,7 @@ class File(object):
         self.flush()
 
     def read(self, size: int = -1) -> bytes:
-        assert not self.closed
+        assert "r" in self.mode and not self.closed
         result = io.BytesIO()
         max_size = self.size - self._position
         if size == -1:
@@ -205,10 +222,10 @@ class File(object):
         return result.getvalue()
 
     def writable(self) -> bool:
-        return not self.closed
+        return "w" in self.mode and not self.closed
 
     def write(self, data: bytes) -> None:
-        assert not self.closed
+        assert "w" in self.mode and not self.closed
         self.stats.setdefault("bytes_written", 0)
         self.stats["bytes_written"] += len(data)
         while data:

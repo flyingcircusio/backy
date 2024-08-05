@@ -144,6 +144,7 @@ class BackyDaemon(object):
             try:
                 self.dead_repositories[b.name] = Repository(
                     self.base_dir / b.name,
+                    Schedule(),
                     self.log.bind(job_name=b.name),
                 )
                 self.log.info("found-backup", job_name=b.name)
@@ -370,7 +371,7 @@ class BackyDaemon(object):
                         else None
                     ),
                     manual_tags=", ".join(manual_tags),
-                    problem_reports=job.repository.problem_reports,
+                    problem_reports=len(job.repository.report_ids),
                     unsynced_revs=unsynced_revs,
                     local_revs=len(
                         job.repository.get_history(clean=True, local=True)

@@ -4,8 +4,8 @@ from unittest import mock
 import pytest
 
 from backy.ext_deps import RBD
+from backy.rbd import RBDClient
 from backy.rbd.rbd import RBDDiffV1
-from backy.rbd.source import RBDClient
 
 
 @mock.patch("subprocess.check_output")

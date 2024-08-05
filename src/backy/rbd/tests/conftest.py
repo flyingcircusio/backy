@@ -5,24 +5,7 @@ import subprocess
 import pytest
 
 import backy.rbd.rbd
-from backy.rbd.source import RBDClient, RBDSource
-from backy.repository import Repository
-from backy.revision import Revision
-from backy.schedule import Schedule
-
-
-@pytest.fixture
-def repository(tmp_path, log):
-    repo = Repository(tmp_path, RBDSource, Schedule(), log)
-    repo.connect()
-    return repo
-
-
-def create_rev(repository, tags) -> Revision:
-    r = Revision.create(repository, tags, repository.log)
-    r.materialize()
-    repository.scan()
-    return repository.find_by_uuid(r.uuid)
+from backy.rbd import RBDClient
 
 
 class CephCLIBase:

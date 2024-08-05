@@ -13,6 +13,7 @@ import yaml
 from backy import utils
 from backy.daemon import BackyDaemon
 from backy.daemon.scheduler import Job
+from backy.file import FileSource
 from backy.revision import Revision
 from backy.tests import Ellipsis
 
@@ -145,7 +146,7 @@ async def test_sighup(daemon, log, monkeypatch):
     assert signal_task not in all_tasks
 
 
-async def test_run_backup(daemon, rbdrepository, log):
+async def test_run_backup(daemon, log):
     job = daemon.jobs["test01"]
 
     await job.run_backup({"manual:asdf"})
@@ -153,7 +154,8 @@ async def test_run_backup(daemon, rbdrepository, log):
     assert len(job.repository.history) == 1
     revision = job.repository.history[0]
     assert revision.tags == {"manual:asdf"}
-    with rbdrepository.open(revision) as f:
+    source = job.source.create_source(FileSource)
+    with source._path_for_revision(revision).open("rb") as f:
         assert f.read() == b"I am your father, Luke!"
 
     # Run again. This also covers the code path that works if
@@ -163,7 +165,7 @@ async def test_run_backup(daemon, rbdrepository, log):
     assert len(job.repository.history) == 2
     revision = job.repository.history[1]
     assert revision.tags == {"manual:asdf"}
-    with rbdrepository.open(revision) as f:
+    with source._path_for_revision(revision).open("rb") as f:
         assert f.read() == b"I am your father, Luke!"
 
 
@@ -171,6 +173,7 @@ async def test_run_callback(daemon, log):
     job = daemon.jobs["test01"]
 
     await job.run_backup({"manual:asdf"})
+    job.repository.scan()
     await job.run_callback()
 
     with open("test01.callback_stdin", "r") as f:
@@ -364,40 +367,40 @@ async def test_task_generator_backoff(
         Ellipsis(
             """\
 ... D test01[...]         job/loop-started                    \n\
-... D test01[...]         quarantine/scan                     entries=0
+... D test01[...]         repo/scan-reports                   entries=0
 ... I test01[...]         job/waiting                         next_tags='daily' next_time='2015-09-02 07:32:51'
 ... E test01[...]         job/exception                       exception_class='builtins.Exception' exception_msg=''
 exception>\tTraceback (most recent call last):
-exception>\t  File "/.../src/backy/scheduler.py", line ..., in run_forever
+exception>\t  File "/.../src/backy/daemon/scheduler.py", line ..., in run_forever
 exception>\t    await self.run_backup(next_tags)
-exception>\t  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
+exception>\t  File "/.../src/backy/daemon/tests/test_daemon.py", line ..., in failing_coroutine
 exception>\t    raise Exception()
 exception>\tException
 ... W test01[...]         job/backoff                         backoff=120
-... D test01[...]         quarantine/scan                     entries=0
+... D test01[...]         repo/scan-reports                   entries=0
 ... I test01[...]         job/waiting                         next_tags='daily' next_time='2015-09-01 09:08:47'
 ... E test01[...]         job/exception                       exception_class='builtins.Exception' exception_msg=''
 exception>\tTraceback (most recent call last):
-exception>\t  File "/.../src/backy/scheduler.py", line ..., in run_forever
+exception>\t  File "/.../src/backy/daemon/scheduler.py", line ..., in run_forever
 exception>\t    await self.run_backup(next_tags)
-exception>\t  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
+exception>\t  File "/.../src/backy/daemon/tests/test_daemon.py", line ..., in failing_coroutine
 exception>\t    raise Exception()
 exception>\tException
 ... W test01[...]         job/backoff                         backoff=240
-... D test01[...]         quarantine/scan                     entries=0
+... D test01[...]         repo/scan-reports                   entries=0
 ... I test01[...]         job/waiting                         next_tags='daily' next_time='2015-09-01 09:10:47'
 ... E test01[...]         job/exception                       exception_class='builtins.Exception' exception_msg=''
 exception>\tTraceback (most recent call last):
-exception>\t  File "/.../src/backy/scheduler.py", line ..., in run_forever
+exception>\t  File "/.../src/backy/daemon/scheduler.py", line ..., in run_forever
 exception>\t    await self.run_backup(next_tags)
-exception>\t  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_coroutine
+exception>\t  File "/.../src/backy/daemon/tests/test_daemon.py", line ..., in failing_coroutine
 exception>\t    raise Exception()
 exception>\tException
 ... W test01[...]         job/backoff                         backoff=480
-... D test01[...]         quarantine/scan                     entries=0
+... D test01[...]         repo/scan-reports                   entries=0
 ... I test01[...]         job/waiting                         next_tags='daily' next_time='2015-09-01 09:14:47'
 ... I test01[...]         job/stop                            \n\
-... D test01[...]         quarantine/scan                     entries=0
+... D test01[...]         repo/scan-reports                   entries=0
 ... I test01[...]         job/waiting                         next_tags='daily' next_time='2015-09-02 07:32:51'
 """
         )

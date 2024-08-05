@@ -198,11 +198,11 @@ def test_ignore_duplicates(repository_with_revisions, tmp_path):
     assert 3 == len(a.history)
 
 
-def test_find(repository, tmp_path, log):
+def test_find(repository, log):
     rev = Revision.create(repository, set(), log, uuid="123-456")
     rev.materialize()
     repository.scan()
-    assert tmp_path / "123-456" == repository.find("0").filename
+    assert "123-456" == repository.find("0").uuid
 
 
 def test_find_should_raise_if_not_found(repository, log):

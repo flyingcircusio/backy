@@ -1,8 +1,6 @@
 import asyncio
 import datetime
-import filecmp
 import hashlib
-import os
 import random
 import subprocess
 from collections import defaultdict
@@ -16,17 +14,12 @@ from aiohttp.web_exceptions import HTTPForbidden, HTTPNotFound
 from structlog.stdlib import BoundLogger
 
 import backy.utils
-from backy.ext_deps import BACKY_CLI_CMD, BACKY_RBD_CMD
 from backy.repository import Repository
 from backy.revision import Revision
 from backy.schedule import Schedule
-from backy.utils import (
-    SafeFile,
-    format_datetime_local,
-    generate_taskid,
-    time_or_event,
-)
+from backy.utils import format_datetime_local, generate_taskid, time_or_event
 
+from ..source import AsyncCmdLineSource
 from .api import Client, ClientManager
 
 if TYPE_CHECKING:
@@ -34,15 +27,17 @@ if TYPE_CHECKING:
     from backy.repository import StatusDict
 
 
+def locked(target: str, mode: Literal["shared", "exclusive"]):
+    return Repository.locked(target, mode, repo_attr="repository")
+
+
 class Job(object):
     name: str
-    source: dict
-    schedule_name: str
+    source: AsyncCmdLineSource
     status: str = ""
     next_time: Optional[datetime.datetime] = None
     next_tags: Optional[set[str]] = None
     path: Path
-    repository: Repository
     logfile: Path
     last_config: Optional[dict] = None
     daemon: "BackyDaemon"
@@ -63,10 +58,12 @@ class Job(object):
         self.logfile = self.path / "backy.log"
 
     def configure(self, config: dict) -> None:
-        self.source = config["source"]
-        self.schedule_name = config["schedule"]
-        self.update_config()
-        self.repository = Repository(self.path, self.log)
+        repository = Repository(
+            self.path, self.daemon.schedules[config["schedule"]], self.log
+        )
+        repository.connect()
+        self.source = AsyncCmdLineSource(repository, config["source"], self.log)
+        self.source.store()
         self.last_config = config
 
     @property
@@ -103,28 +100,15 @@ class Job(object):
 
     @property
     def schedule(self) -> Schedule:
-        return self.daemon.schedules[self.schedule_name]
+        return self.repository.schedule
+
+    @property
+    def repository(self) -> Repository:
+        return self.source.repository
 
     def update_status(self, status: str) -> None:
         self.status = status
         self.log.debug("updating-status", status=self.status)
-
-    def update_config(self) -> None:
-        """Writes config file for 'backy backup' subprocess."""
-
-        # We do not want to create leading directories, only
-        # the backup directory itself. If the base directory
-        # does not exist then we likely don't have a correctly
-        # configured environment.
-        self.path.mkdir(exist_ok=True)
-        config = self.path / "config"
-        with SafeFile(config, encoding="utf-8") as f:
-            f.open_new("wb")
-            yaml.safe_dump(
-                {"source": self.source, "schedule": self.schedule.config}, f
-            )
-            if config.exists() and filecmp.cmp(config, f.name):
-                raise ValueError("not changed")
 
     def to_dict(self) -> dict:
         return {
@@ -234,9 +218,16 @@ class Job(object):
         self.log.debug("loop-started")
         while True:
             self.taskid = generate_taskid()
+            # TODO: use contextvars
             self.log = self.log.bind(job_name=self.name, sub_taskid=self.taskid)
 
-            self.repository = Repository(self.path, self.log)
+            self.source.log = self.source.log.bind(
+                job_name=self.name, sub_taskid=self.taskid
+            )
+            self.repository.log = self.repository.log.bind(
+                job_name=self.name, sub_taskid=self.taskid
+            )
+            self.repository.connect()
 
             next_time, next_tags = self.schedule.next(
                 backy.utils.now(), self.spread, self.repository
@@ -271,9 +262,7 @@ class Job(object):
                 if not run_immediately and await self._wait_for_leader(
                     next_time
                 ):
-                    await self.repository.run_with_backup_lock(
-                        self.pull_metadata, self.daemon.peers, self.taskid
-                    )
+                    await self.pull_metadata()
                     await self.run_callback()
                 else:
                     speed = "slow"
@@ -291,6 +280,7 @@ class Job(object):
                         self.repository._clean()
                         await self.run_backup(next_tags)
                         self.repository.scan()
+                        self.repository._clean()
                         await self.pull_metadata()
                         await self.run_expiry()
                         await self.push_metadata()
@@ -319,40 +309,12 @@ class Job(object):
 
     async def run_backup(self, tags: Set[str]) -> None:
         self.log.info("backup-started", tags=", ".join(tags))
+
         r = Revision.create(self.repository, tags, self.log)
         r.materialize()
-        proc = await asyncio.create_subprocess_exec(
-            BACKY_RBD_CMD,
-            "-t",
-            self.taskid,
-            "-b",
-            str(self.path),
-            "backup",
-            r.uuid,
-            close_fds=True,
-            start_new_session=True,  # Avoid signal propagation like Ctrl-C
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        try:
-            return_code = await proc.wait()
-            self.log.info(
-                "backup-finished",
-                return_code=return_code,
-                subprocess_pid=proc.pid,
-            )
-            if return_code:
-                raise RuntimeError(
-                    f"Backup failed with return code {return_code}"
-                )
-        except asyncio.CancelledError:
-            self.log.warning("backup-cancelled")
-            try:
-                proc.terminate()
-            except ProcessLookupError:
-                pass
-            raise
+        return_code = await self.source.backup(r)
+        if return_code:
+            raise RuntimeError(f"Backup failed with return code {return_code}")
 
     async def run_expiry(self) -> None:
         self.log.info("expiry-started")
@@ -361,33 +323,7 @@ class Job(object):
 
     async def run_gc(self) -> None:
         self.log.info("gc-started")
-        proc = await asyncio.create_subprocess_exec(
-            BACKY_RBD_CMD,
-            "-t",
-            self.taskid,
-            "-b",
-            str(self.path),
-            "gc",
-            # start_new_session=True,  # Avoid signal propagation like Ctrl-C.
-            # close_fds=True,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        try:
-            return_code = await proc.wait()
-            self.log.info(
-                "gc-finished",
-                return_code=return_code,
-                subprocess_pid=proc.pid,
-            )
-        except asyncio.CancelledError:
-            self.log.warning("gc-cancelled", subprocess_pid=proc.pid)
-            try:
-                proc.terminate()
-            except ProcessLookupError:
-                pass
-            raise
+        await self.source.gc()
 
     async def run_callback(self) -> None:
         if not self.daemon.backup_completed_callback:
@@ -395,51 +331,31 @@ class Job(object):
             return
 
         self.log.info("callback-started")
-        read, write = os.pipe()
-        # TODO
-        backy_proc = await asyncio.create_subprocess_exec(
-            BACKY_CLI_CMD,
-            "-b",
-            str(self.path),
-            "-l",
-            str(self.logfile),
-            "status",
-            "--yaml",
-            stdin=subprocess.DEVNULL,
-            stdout=write,
-            stderr=subprocess.DEVNULL,
-        )
-        os.close(write)
+        status = yaml.safe_dump(
+            [r.to_dict() for r in self.repository.history]
+        ).encode("utf-8")
+
         callback_proc = await asyncio.create_subprocess_exec(
             str(self.daemon.backup_completed_callback),
             self.name,
-            stdin=read,
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        os.close(read)
         try:
-            stdout, stderr = await callback_proc.communicate()
-            return_code1 = await backy_proc.wait()
+            stdout, stderr = await callback_proc.communicate(status)
             self.log.info(
                 "callback-finished",
-                return_code1=return_code1,
-                return_code2=callback_proc.returncode,
-                subprocess_pid1=backy_proc.pid,
-                subprocess_pid2=callback_proc.pid,
+                return_code=callback_proc.returncode,
+                subprocess_pid=callback_proc.pid,
                 stdout=stdout.decode() if stdout else None,
                 stderr=stderr.decode() if stderr else None,
             )
         except asyncio.CancelledError:
             self.log.warning(
                 "callback-cancelled",
-                subprocess_pid1=backy_proc.pid,
-                subprocess_pid2=callback_proc.pid,
+                subprocess_pid=callback_proc.pid,
             )
-            try:
-                backy_proc.terminate()
-            except ProcessLookupError:
-                pass
             try:
                 callback_proc.terminate()
             except ProcessLookupError:
@@ -462,11 +378,8 @@ class Job(object):
             self._task = None
             self.update_status("")
 
+    @locked(target=".backup", mode="exclusive")
     async def push_metadata(self) -> int:
-        with self.repository.locked(target=".backup", mode="exclusive"):
-            return await self._push_metadata()
-
-    async def _push_metadata(self) -> int:
         grouped = defaultdict(list)
         for r in self.repository.clean_history:
             if r.pending_changes:
@@ -535,11 +448,8 @@ class Job(object):
                 error = True
         return error
 
+    @locked(target=".backup", mode="exclusive")
     async def pull_metadata(self) -> int:
-        with self.repository.locked(target=".backup", mode="exclusive"):
-            return await self._pull_metadata()
-
-    async def _pull_metadata(self) -> int:
         async def remove_dead_peer():
             for r in list(self.repository.history):
                 if r.server and r.server not in self.daemon.peers:

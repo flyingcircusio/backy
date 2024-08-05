@@ -10,9 +10,8 @@ import consulate
 import pytest
 
 import backy.utils
-from backy.rbd import RBDSource
+from backy.rbd import CephRBD, RBDSource
 from backy.rbd.rbd import RBDDiffV1
-from backy.rbd.source import CephRBD
 from backy.revision import Revision
 
 BLOCK = backy.utils.PUNCH_SIZE
@@ -172,7 +171,7 @@ def test_diff_backup(ceph_rbd, rbdsource, repository, tmp_path, log):
     )
     revision.timestamp = backy.utils.now() + datetime.timedelta(seconds=1)
 
-    with rbdsource.open(parent) as f:
+    with rbdsource.open(parent, "wb") as f:
         f.write(b"asdf")
 
     repository.scan()
@@ -189,7 +188,7 @@ def test_diff_backup(ceph_rbd, rbdsource, repository, tmp_path, log):
         export.return_value.__enter__.return_value = RBDDiffV1(
             io.BytesIO(SAMPLE_RBDDIFF)
         )
-        with ceph_rbd(revision), rbdsource.open(revision) as f:
+        with ceph_rbd(revision), rbdsource.open(revision, "wb") as f:
             ceph_rbd.diff(f, revision.get_parent())
             repository.history.append(revision)
         export.assert_called_with(
@@ -213,7 +212,7 @@ def test_full_backup(ceph_rbd, rbdsource, repository, tmp_path, log):
 
     with mock.patch("backy.rbd.rbd.RBDClient.export") as export:
         export.return_value = io.BytesIO(b"Han likes Leia.")
-        with ceph_rbd(revision), rbdsource.open(revision) as f:
+        with ceph_rbd(revision), rbdsource.open(revision, "wb") as f:
             ceph_rbd.full(f)
         export.assert_called_with("test/foo@backy-a0")
 
@@ -231,7 +230,7 @@ def test_full_backup(ceph_rbd, rbdsource, repository, tmp_path, log):
 
     with mock.patch("backy.rbd.rbd.RBDClient.export") as export:
         export.return_value = io.BytesIO(b"Han loves Leia.")
-        with ceph_rbd(revision2), rbdsource.open(revision2) as f:
+        with ceph_rbd(revision2), rbdsource.open(revision2, "wb") as f:
             ceph_rbd.full(f)
 
     with rbdsource.open(revision2) as f:
@@ -264,7 +263,7 @@ def test_full_backup_integrates_changes(
     for content, rev in [(content0, rev0), (content1, rev1)]:
         with mock.patch("backy.rbd.rbd.RBDClient.export") as export:
             export.return_value = io.BytesIO(content)
-            with ceph_rbd(rev), rbdsource.open(rev) as target:
+            with ceph_rbd(rev), rbdsource.open(rev, "wb") as target:
                 ceph_rbd.full(target)
             export.assert_called_with("test/foo@backy-{}".format(rev.uuid))
 
@@ -284,7 +283,7 @@ def test_verify_fail(ceph_rbd, rbdsource, repository, tmp_path, log):
     with open(rbd_source, "w") as f:
         f.write("Han likes Leia.")
 
-    with rbdsource.open(revision) as f:
+    with rbdsource.open(revision, "wb") as f:
         f.write(b"foobar")
     # The chunked store has false data, so this needs to be detected.
     with ceph_rbd(revision), rbdsource.open(revision) as target:
@@ -304,7 +303,7 @@ def test_verify(ceph_rbd, rbdsource, repository, tmp_path, log):
         f.write(b"Han likes Leia.")
     ceph_rbd.rbd.unmap(rbd_source)
 
-    with rbdsource.open(revision) as f:
+    with rbdsource.open(revision, "wb") as f:
         f.write(b"Han likes Leia.")
         f.flush()
 

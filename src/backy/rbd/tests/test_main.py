@@ -1,32 +1,19 @@
-import datetime
 import os
 import pprint
-import sys
 from functools import partialmethod
 
 import pytest
 
 import backy.rbd
 from backy import utils
-from backy.rbd import main
-from backy.repository import Repository
+from backy.rbd import RBDSource
 from backy.revision import Revision
-from backy.schedule import Schedule
-from backy.source import Source
+from backy.source import CmdLineSource
 from backy.tests import Ellipsis
 
 
 @pytest.fixture
-def argv():
-    original = sys.argv
-    new = original[:1]
-    sys.argv = new
-    yield new
-    sys.argv = original
-
-
-@pytest.fixture
-def repository_on_disk(tmp_path, log):
+def source_on_disk(tmp_path, log):
     with open(tmp_path / "config", "w", encoding="utf-8") as f:
         f.write(
             f"""
@@ -36,31 +23,22 @@ schedule:
     daily:
         interval: 1d
         keep: 7
-type: rbd
+source:
+    type: rbd
+    pool: a
+    image: b
 """
         )
-    with open(tmp_path / "source.config", "w", encoding="utf-8") as f:
-        f.write(
-            """
----
-type: rbd
-pool: a
-image: b
-"""
-        )
-    repo = Repository(tmp_path, Source, Schedule(), log)
-    repo.connect()
-    return repo
+    return CmdLineSource.load(tmp_path, log).create_source()
 
 
-def test_display_usage(capsys, argv):
-    with pytest.raises(SystemExit) as exit:
-        main()
-    assert exit.value.code == 0
+def test_display_usage(capsys):
+    exit = RBDSource.main("backy-rbd")
+    assert exit == 0
     out, err = capsys.readouterr()
     assert (
         """\
-usage: pytest [-h] [-v] [-b BACKUPDIR] [-t TASKID]
+usage: pytest [-h] [-v] [-C WORKDIR] [-t TASKID]
               {backup,restore,gc,verify} ...
 """
         == out
@@ -68,19 +46,19 @@ usage: pytest [-h] [-v] [-b BACKUPDIR] [-t TASKID]
     assert err == ""
 
 
-def test_display_help(capsys, argv):
-    argv.append("--help")
+def test_display_help(capsys):
     with pytest.raises(SystemExit) as exit:
-        main()
+        RBDSource.main("backy-rbd", "--help")
     assert exit.value.code == 0
     out, err = capsys.readouterr()
     assert (
         Ellipsis(
             """\
-usage: pytest [-h] [-v] [-b BACKUPDIR] [-t TASKID]
+usage: pytest [-h] [-v] [-C WORKDIR] [-t TASKID]
               {backup,restore,gc,verify} ...
 
-Backup and restore for block devices.
+The rbd plugin for backy. You should not call this directly. Use the backy
+command instead.
 
 positional arguments:
 ...
@@ -91,13 +69,11 @@ positional arguments:
     assert err == ""
 
 
-def test_verbose_logging(capsys, argv):
+def test_verbose_logging(capsys):
     # This is just a smoke test to ensure the appropriate code path
     # for -v is covered.
-    argv.extend(["-v"])
-    with pytest.raises(SystemExit) as exit:
-        main()
-    assert exit.value.code == 0
+    exit = RBDSource.main("backy-rbd", "-v")
+    assert exit == 0
 
 
 def print_args(*args, return_value=None, **kw):
@@ -107,46 +83,41 @@ def print_args(*args, return_value=None, **kw):
 
 
 @pytest.mark.parametrize(
-    ["fun", "args", "rv", "rc", "params"],
+    ["args", "rv", "rc", "params"],
     [
         (
-            "backup",
-            ["asdf"],
+            ["backup", "asdf"],
             0,
             1,
             ["<backy.revision.Revision object at 0x...>"],
         ),
         (
-            "backup",
-            ["asdf"],
+            ["backup", "asdf"],
             1,
             0,
             ["<backy.revision.Revision object at 0x...>"],
         ),
         (
-            "restore",
-            ["asdf", "out.img"],
+            ["restore", "asdf", "out.img"],
             None,
             0,
             [
                 "<backy.revision.Revision object at 0x...>",
-                "RestoreArgs(target='out.img', backend=<RestoreBackend.AUTO: 'auto'>)",
+                "RBDRestoreArgs(target='out.img', backend=<RestoreBackend.AUTO: 'auto'>)",
             ],
         ),
         (
-            "restore",
-            ["asdf", "--backend", "python", "out.img"],
+            ["restore", "asdf", "--backend", "python", "out.img"],
             None,
             0,
             [
                 "<backy.revision.Revision object at 0x...>",
-                "RestoreArgs(target='out.img', backend=<RestoreBackend.PYTHON: 'python'>)",
+                "RBDRestoreArgs(target='out.img', backend=<RestoreBackend.PYTHON: 'python'>)",
             ],
         ),
-        ("gc", [], None, 0, []),
+        (["gc"], None, 0, []),
         (
-            "verify",
-            ["asdf"],
+            ["verify", "asdf"],
             None,
             0,
             ["<backy.revision.Revision object at 0x...>"],
@@ -154,36 +125,33 @@ def print_args(*args, return_value=None, **kw):
     ],
 )
 def test_call_fun(
-    fun,
     args,
     rv,
     rc,
     params,
-    repository_on_disk,
+    source_on_disk,
     tmp_path,
     capsys,
-    argv,
     monkeypatch,
     log,
 ):
     os.chdir(tmp_path)
 
-    Revision(repository_on_disk, log, uuid="asdf").materialize()
+    Revision(source_on_disk.repository, log, uuid="asdf").materialize()
 
     monkeypatch.setattr(
-        backy.rbd.source.RBDSource,
-        fun,
+        backy.rbd.RBDSource,
+        args[0],
         partialmethod(print_args, return_value=rv),
     )
-    argv.extend(["-v", fun, *args])
     utils.log_data = ""
-    with pytest.raises(SystemExit) as exit:
-        main()
+    exit = RBDSource.main("backy-rbd", "-v", *args)
+    assert exit == rc
     out, err = capsys.readouterr()
     assert (
         Ellipsis(
             f"""\
-{", ".join(["<backy.rbd.source.RBDSource object at 0x...>", *params])}
+{", ".join(["<backy.rbd.RBDSource object at 0x...>", *params])}
 {{}}
 """
         )
@@ -192,20 +160,17 @@ def test_call_fun(
     assert (
         Ellipsis(
             f"""\
-... D -                    command/invoked                     args='... -v {" ".join([fun, *args])}'
+... D -                    command/invoked                     args='backy-rbd -v {" ".join([ *args])}'
 ... D -                    repo/scan-reports                   entries=0
-... I -                    chunked-store/to-v2                 \n\
-... I -                    chunked-store/to-v2-finished        \n\
 ... D -                    command/return-code                 code={rc}
 """
         )
         == utils.log_data
     )
-    assert exit.value.code == rc
 
 
 def test_call_unexpected_exception(
-    capsys, repository_on_disk, argv, monkeypatch, log, tmp_path
+    capsys, source_on_disk, monkeypatch, log, tmp_path
 ):
     def do_raise(*args, **kw):
         raise RuntimeError("test")
@@ -215,23 +180,21 @@ def test_call_unexpected_exception(
 
     monkeypatch.setattr(os, "_exit", lambda x: None)
 
-    argv.extend(["-b", str(repository_on_disk.path), "gc"])
     utils.log_data = ""
-    with pytest.raises(SystemExit):
-        main()
+    exit = RBDSource.main(
+        "backy-rbd", "-C", str(source_on_disk.repository.path), "gc"
+    )
+    assert exit == 1
     out, err = capsys.readouterr()
-    print(utils.log_data)
     assert "" == out
     assert (
         Ellipsis(
             """\
-... D -                    command/invoked                     args='... -b ... gc'
+... D -                    command/invoked                     args='backy-rbd -C ... gc'
 ... D -                    repo/scan-reports                   entries=0
-... I -                    chunked-store/to-v2                 \n\
-... I -                    chunked-store/to-v2-finished        \n\
 ... E -                    command/failed                      exception_class='builtins.RuntimeError' exception_msg='test'
 exception>\tTraceback (most recent call last):
-exception>\t  File ".../src/backy/rbd/__init__.py", line ..., in main
+exception>\t  File ".../src/backy/source.py", line ..., in main
 exception>\t    source.gc()
 exception>\t  File ".../src/backy/rbd/tests/test_main.py", line ..., in do_raise
 exception>\t    raise RuntimeError("test")

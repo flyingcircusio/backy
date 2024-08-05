@@ -1,16 +1,15 @@
-import yaml
-
-from backy.file import FileSource
+from backy.file import FileRestoreArgs, FileSource
 from backy.repository import Repository
 from backy.revision import Revision
 from backy.schedule import Schedule
+from backy.source import CmdLineSource
 
 
 def test_bootstrap_from_api(tmp_path, log):
     original = tmp_path / "original.txt"
 
     schedule = Schedule()
-    repository = Repository(tmp_path / "repository", FileSource, schedule, log)
+    repository = Repository(tmp_path / "repository", schedule, log)
     repository.connect()
     source = FileSource(repository, original)
 
@@ -22,22 +21,19 @@ def test_bootstrap_from_config(tmp_path, log):
 
     repo_path = tmp_path / "repository"
 
-    repo_conf = {
+    conf = {
         "path": repo_path,
         "schedule": {},
-        "type": "file",
+        "source": {"type": "file", "filename": str(original)},
     }
-    source_conf = {"type": "file", "path": str(original)}
 
-    repository = Repository.from_config(repo_conf, log)
-    repository.connect()
-    source = FileSource.from_config(repository, source_conf, log)
+    source = CmdLineSource.from_config(conf, log).create_source(FileSource)
 
     exercise_fresh_repo(source)
 
 
 def exercise_fresh_repo(source: FileSource):
-    original = source.path
+    original = source.filename
 
     with open(original, "w") as f:
         f.write("This is the original file.")
@@ -52,6 +48,6 @@ def exercise_fresh_repo(source: FileSource):
 
     assert original.read_text() == "This is the wrong file."
 
-    source.restore(revision, original)
+    source.restore(revision, FileRestoreArgs(original))
 
     assert original.read_text() == "This is the original file."

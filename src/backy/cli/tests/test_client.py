@@ -6,6 +6,7 @@ from aiohttp import ClientResponseError, hdrs
 from aiohttp.web_exceptions import HTTPUnauthorized
 
 from backy import utils
+from backy.cli import Command
 from backy.daemon.api import BackyAPI, Client
 from backy.report import ChunkMismatchReport
 from backy.revision import Revision
@@ -67,7 +68,7 @@ async def api_client(api, aiohttp_client, log):
 
 @pytest.fixture
 async def cli_client(api_client, log):
-    return CLIClient(api_client, log)
+    return Command(api_client, log)
 
 
 async def test_cli_jobs(cli_client, capsys):

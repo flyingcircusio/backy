@@ -147,9 +147,9 @@ class Revision(object):
             self.write_info()
         else:
             if self.info_filename.exists():
-                self.log.debug("remove-start", filename=self.info_filename)
+                self.log.debug("remove-start", filename=str(self.info_filename))
                 self.info_filename.unlink()
-                self.log.debug("remove-end", filename=self.info_filename)
+                self.log.debug("remove-end", filename=str(self.info_filename))
 
             if self in self.repository.history:
                 self.repository.history.remove(self)

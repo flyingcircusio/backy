@@ -56,7 +56,6 @@ def test_filenames_based_on_uuid_and_backup_dir(log):
     backup = mock.Mock()
     backup.path = Path("/srv/backup/foo")
     r = Revision.create(backup, set(), log, uuid="asdf")
-    assert r.filename == Path("/srv/backup/foo/asdf")
     assert r.info_filename == Path("/srv/backup/foo/asdf.rev")
 
 
@@ -97,11 +96,5 @@ def test_delete_revision(repository, log):
     r = Revision.create(repository, set(), log, uuid="123-456")
     r.materialize()
     assert repository.path.joinpath("123-456.rev").exists()
-    repository.scan()
-    repository.path.joinpath("123-456").open("w")
-    assert repository.path.joinpath("123-456.rev").exists()
     r.remove()
-    # Ensure the revision data file exists - we do not implicitly create
-    # it any longer.
-    assert not repository.path.joinpath("123-456").exists()
     assert not repository.path.joinpath("123-456.rev").exists()

@@ -187,12 +187,12 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
     # This revision is more than keep and also outside the interval.
     # It gets its tag removed and disappears.
     r = add_revision(datetime(2014, 5, 4, 11, 0, tzinfo=UTC))
-    assert r.filename.with_suffix(".rev").exists()
+    assert r.info_filename.exists()
     removed = [x for x in schedule.expire(repository)]
     assert [r.uuid] == [x.uuid for x in removed]
     repository.scan()
     assert [{"daily"}] * 6 == [rev.tags for rev in repository.history]
-    assert not r.filename.with_suffix(".rev").exists()
+    assert not r.info_filename.exists()
 
     # If we have manual tags, then those do not expire. However, the
     # known and unknown tag disappear but then the file remains
@@ -200,14 +200,14 @@ def test_do_not_expire_if_less_than_keep_and_inside_keep_interval(
     r = add_revision(datetime(2014, 5, 4, 11, 0, tzinfo=UTC))
     r.tags = {"daily", "manual:test", "unknown"}
     r.write_info()
-    assert r.filename.with_suffix(".rev").exists()
+    assert r.info_filename.exists()
     expired = schedule.expire(repository)
     assert [] == [x.uuid for x in expired]
     repository.scan()
     assert [{"manual:test"}] + [{"daily"}] * 6 == [
         rev.tags for rev in repository.history
     ]
-    assert r.filename.with_suffix(".rev").exists()
+    assert r.info_filename.exists()
 
 
 def test_next_in_interval(clock):

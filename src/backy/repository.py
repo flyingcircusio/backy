@@ -7,11 +7,8 @@ from pathlib import Path
 from typing import IO, Any, List, Literal, Optional, TypedDict
 
 import tzlocal
-import yaml
 from structlog.stdlib import BoundLogger
 
-import backy
-import backy.source
 from backy.utils import (
     duplicates,
     list_get,
@@ -24,7 +21,6 @@ from backy.utils import (
 from .report import ProblemReport
 from .revision import Revision, Trust, filter_schedule_tags
 from .schedule import Schedule
-from .source import Source
 
 
 class StatusDict(TypedDict):
@@ -38,7 +34,7 @@ class StatusDict(TypedDict):
     next_time: Optional[datetime.datetime]
     next_tags: Optional[str]
     manual_tags: str
-    problem_reports: List[str]
+    problem_reports: int
     unsynced_revs: int
     local_revs: int
 
@@ -60,7 +56,6 @@ class Repository(object):
 
     path: Path
     report_path: Path
-    sourcetype: type[backy.source.Source]
     schedule: Schedule
     history: List[Revision]
     report_ids: List[str]
@@ -72,63 +67,24 @@ class Repository(object):
     def __init__(
         self,
         path: Path,
-        sourcetype: type[backy.source.Source],
         schedule: Schedule,
         log: BoundLogger,
     ):
         self.path = path.resolve()
         self.report_path = self.path / "quarantine"
         self.schedule = schedule
-        self.sourcetype = sourcetype
         self.log = log.bind(subsystem="repo")
         self._lock_fds = {}
 
     def connect(self):
-        self.path.mkdir(parents=True, exist_ok=True)
+        self.path.mkdir(exist_ok=True)
+        self.report_path.mkdir(exist_ok=True)
         self.scan()
         self.scan_reports()
-
-    def get_source(self):
-        return self.sourcetype.from_repo(self)
-
-    @staticmethod
-    def from_config(config: dict[str, Any], log: BoundLogger) -> "Repository":
-        schedule = Schedule()
-        schedule.configure(config["schedule"])
-        try:
-            sourcetype = backy.source.factory_by_type(config["type"])
-        except KeyError:
-            log.error(
-                "unknown-source-type",
-                _fmt_msg="Unknown source type '{type}'. You will be limited to metadata only operations...",
-                type=config["type"],
-            )
-            sourcetype = Source[None]
-
-        return Repository(Path(config["path"]), sourcetype, schedule, log)
-
-    @classmethod
-    def load(cls, path: Path, log: BoundLogger) -> "Repository":
-        try:
-            with path.joinpath("config").open(encoding="utf-8") as f:
-                config = yaml.safe_load(f)
-                return cls.from_config(config, log)
-        except IOError:
-            log.error(
-                "could-not-read-config",
-                _fmt_msg="Could not read config file. Is the path correct?",
-                config_path=str(path / "config"),
-            )
-            raise
-
-    def store(self) -> None:
-        with self.path.joinpath("config").open(encoding="utf-8") as f:
-            yaml.safe_dump(self.to_dict(), f)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "schedule": self.schedule.to_dict(),
-            "type": self.sourcetype.type_,
             "path": str(self.path),
         }
 

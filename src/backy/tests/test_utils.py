@@ -272,7 +272,7 @@ def test_roughly_compare_files_same(tmp_path):
         f.write(b"asdf" * 100)
 
     for x in range(20):
-        assert not files_are_roughly_equal(
+        assert files_are_roughly_equal(
             open("a", "rb"), open("b", "rb"), blocksize=10
         )
 
@@ -288,7 +288,7 @@ def test_roughly_compare_files_1_changed_block(tmp_path):
 
     detected = 0
     for x in range(20):
-        detected += not files_are_roughly_equal(
+        detected += files_are_roughly_equal(
             open("a", "rb"), open("b", "rb"), blocksize=10
         )
 
@@ -304,11 +304,9 @@ def test_roughly_compare_files_timeout(tmp_path):
 
     # The files are different but we don't notice as we run into a timeout.
     # That's fine.
-    assert not files_are_roughly_equal(
-        open("a", "rb"), open("b", "rb"), timeout=0
-    )
+    assert files_are_roughly_equal(open("a", "rb"), open("b", "rb"), timeout=0)
     # Without the timeout we do notice
-    assert files_are_roughly_equal(open("a", "rb"), open("b", "rb"))
+    assert not files_are_roughly_equal(open("a", "rb"), open("b", "rb"))
 
 
 def test_copy_overwrite_correctly_makes_sparse_file(tmp_path):

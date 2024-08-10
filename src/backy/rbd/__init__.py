@@ -4,11 +4,11 @@ import subprocess
 import sys
 import time
 import uuid
-from argparse import ArgumentParser, Namespace
+from argparse import _ActionsContainer
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import IO, Any, Iterable, Literal, Optional, Set, cast
+from typing import IO, Any, Callable, Iterable, Literal, Optional, Set, cast
 
 import consulate
 from structlog.stdlib import BoundLogger
@@ -19,7 +19,7 @@ from backy.ext_deps import BACKY_EXTRACT
 from backy.report import ChunkMismatchReport
 from backy.repository import Repository
 from backy.revision import Revision, Trust
-from backy.source import RestoreArgs, RestoreArgsType, Source
+from backy.source import RestoreArgs, Source
 from backy.utils import (
     CHUNK_SIZE,
     END,
@@ -56,11 +56,11 @@ class RBDRestoreArgs(RestoreArgs):
         return ["--backend", self.backend.value, self.target]
 
     @classmethod
-    def from_args(cls, args: Namespace) -> "RBDRestoreArgs":
-        return cls(args.target, args.restore_backend)
+    def from_args(cls, **kw: Any) -> "RBDRestoreArgs":
+        return cls(kw["target"], kw["restore_backend"])
 
     @classmethod
-    def setup_argparse(cls, restore_parser: ArgumentParser) -> None:
+    def setup_argparse(cls, restore_parser: _ActionsContainer) -> None:
         restore_parser.add_argument(
             "--backend",
             type=RestoreBackend,
@@ -149,14 +149,15 @@ class RBDSource(Source[RBDRestoreArgs]):
                     else:
                         source.full(file)
                 with self.open(revision) as file:
-                    report = source.verify(file)
-                    if report:
-                        self.repository.add_report(report)
-                    verified = not report
+                    verified = source.verify(
+                        file, report=self.repository.add_report
+                    )
         except BackendException:
             self.log.exception("ceph-error-distrust-all")
             verified = False
-            self.repository.distrust("local", skip_lock=True)
+            self.repository.distrust(
+                self.repository.find_revisions("local"), skip_lock=True
+            )
         if not verified:
             self.log.error(
                 "verification-failed",
@@ -527,7 +528,11 @@ class CephRBD:
             while buf := source.read(4 * backy.utils.MiB):
                 target.write(buf)
 
-    def verify(self, target: File) -> Optional[ChunkMismatchReport]:
+    def verify(
+        self,
+        target: File,
+        report: Callable[[ChunkMismatchReport], None] = lambda _: None,
+    ) -> bool:
         s = self.rbd.image_reader(
             "{}/{}@backy-{}".format(self.pool, self.image, self.revision.uuid)
         )
@@ -535,7 +540,11 @@ class CephRBD:
 
         with s as source:
             self.log.info("verify")
-            return backy.utils.files_are_roughly_equal(source, cast(IO, target))
+            return backy.utils.files_are_roughly_equal(
+                source,
+                cast(IO, target),
+                report=lambda s, t, o: report(ChunkMismatchReport(s, t, o)),
+            )
 
     def _delete_old_snapshots(self) -> None:
         # Clean up all snapshots except the one for the most recent valid

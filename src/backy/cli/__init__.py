@@ -1,15 +1,15 @@
 import argparse
 import asyncio
+import inspect
 import re
-import subprocess
 import sys
+from functools import cached_property
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import humanize
 import structlog
 import tzlocal
-import yaml
 from aiohttp import ClientResponseError
 from aiohttp.web_exceptions import HTTPNotFound
 from rich import print as rprint
@@ -21,50 +21,44 @@ import backy.source
 from backy import logging
 from backy.daemon import BackyDaemon
 from backy.daemon.api import Client
-from backy.rbd import RestoreBackend
-
-# XXX invert this dependency
 from backy.repository import Repository
-from backy.revision import Revision
+from backy.revision import Revision, filter_manual_tags
 from backy.schedule import Schedule
-from backy.utils import format_datetime_local, generate_taskid
+from backy.source import SOURCE_PLUGINS, CmdLineSource
+from backy.utils import BackyJSONEncoder, format_datetime_local, generate_taskid
 
 # single repo commands
 
 
 # (init)
 
-# rev-parse                Print full path or uuid of specified revisions
+# rev-parse (job?, rev)               Print full path or uuid of specified revisions
 
-# log [--filter] (status)              Show backup status. Show inventory and summary information
+# log [--filter] (status) (rev)             Show backup status. Show inventory and summary information
 
-# backup [--fg] (remote)            Perform a backup
-# restore (remote)            Restore (a given revision) to a given target
+# backup [--bg] (job)           Perform a backup
+# restore                      Restore (a given revision) to a given target
 
-# distrust            Distrust specified revisions
-# verify (remote)             Verify specified revisions
-# rm                  Forget specified revision
-# tag                 Modify tags on revision
+# distrust (job, rev)            Distrust specified revisions
+# verify (job, rev)             Verify specified revisions
+# rm  (job, rev)                Forget specified revision
+# tag  (job, rev)               Modify tags on revision
 
-# gc [--expire] [--remote|--local]       (Expire revisions) and collect garbage from the repository.
+# gc [--expire] [--remote|--local] (job)      (Expire revisions) and collect garbage from the repository.
 
-# pull?               update metadata from all known remotes that host backups
+# pull? (job)              update metadata from all known remotes that host backups
 #                     for the same backup source
 
-# check
+
+# reports list/show/delete
 
 
 # # multi-repo / daemon-based commands
 
-# show-jobs           List status of all known jobs
+# check (job)
+# show-jobs (job def: all)          List status of all known jobs (integrated with log?)
 # show-daemon         Daemon status
-
-# pull
-
-# backup --all [--include=filter] [--exclude=filter] [--fg]
-
-# check --all
-
+# reload
 
 # maybe add a common --repo/--job <regex> flag?
 
@@ -74,51 +68,114 @@ class Command(object):
 
     path: Path
     config: Path
-    taskid: str
+    dry_run: bool
+    jobs: Optional[str]
     log: BoundLogger
 
-    def __init__(self, path: Path, config: Path, taskid, log: BoundLogger):
+    def __init__(
+        self,
+        path: Path,
+        config: Path,
+        dry_run: bool,
+        jobs: Optional[str],
+        log: BoundLogger,
+    ):
         self.path = path.resolve()
         self.config = config
-        self.taskid = taskid
-        self.log = log
+        self.dry_run = dry_run
+        self.jobs = jobs
+        self.log = log.bind(subsystem="command")
 
-    def __call__(self, cmdname: str, args: dict[str, Any]):
-        func = getattr(self, cmdname)
-        ret = func(**args)
-        if not isinstance(ret, int):
+    async def __call__(self, cmdname: str, kwargs: dict[str, Any]):
+        self.log.debug("call", func=cmdname, func_args=kwargs)
+        try:
+            func = getattr(self, cmdname)
+            params = inspect.signature(func).parameters
             ret = 0
-        self.log.debug("return-code", code=ret)
-        return ret
+            if "repo" in params and params["repo"].annotation == Repository:
+                for repo in await self.get_repos():
+                    r = func(repo=repo, **kwargs)
+                    if asyncio.iscoroutine(r):
+                        r = await r
+                    if not isinstance(r, int):
+                        r = 0
+                    ret = max(ret, r)
+            elif (
+                "repos" in params
+                and params["repos"].annotation == List[Repository]
+            ):
+                ret = func(repos=await self.get_repos(), **kwargs)
+                if asyncio.iscoroutine(ret):
+                    ret = await ret
+                if not isinstance(ret, int):
+                    ret = 0
+            else:
+                assert (
+                    self.jobs is None
+                ), "This subcommand does not support --jobs/-a"
+                ret = func(**kwargs)
+                if asyncio.iscoroutine(ret):
+                    ret = await ret
+                if not isinstance(ret, int):
+                    ret = 0
+            self.log.debug("return-code", code=ret)
+            return ret
+        except Exception:
+            self.log.exception("failed")
+            return 1
 
-    def create_api_client(self):
+    @cached_property
+    def source(self) -> CmdLineSource:
+        return CmdLineSource.load(self.path, self.log)
+
+    @cached_property
+    def api(self):
         d = BackyDaemon(self.config, self.log)
         d._read_config()
-        return Client.from_conf(
-            "<server>", d.api_cli_default, self.taskid, self.log
-        )
+        taskid = self.log._context.get("taskid", generate_taskid())
+        return Client.from_conf("<server>", d.api_cli_default, taskid, self.log)
 
-    def init(self, type):
-        sourcefactory = backy.source.factory_by_type(type)
-        source = sourcefactory(*sourcefactory.argparse())
-        # TODO: check if repo already exists
-        repo = Repository(self.path / "config", source, Schedule(), self.log)
-        repo.connect()
-        repo.store()
+    async def get_repos(self) -> List[Repository]:
+        if self.jobs is None:
+            return [self.source.repository]
+        else:
+            jobs = await self.api.get_jobs()
+            assert len(jobs) > 0, "daemon has no configured job"
+            reg = re.compile(self.jobs)
+            res = [
+                Repository(
+                    Path(job["path"]),
+                    Schedule.from_dict(job["schedule"]),
+                    self.log,
+                )
+                for job in jobs
+                if reg.search(job["name"])
+            ]
+            assert len(res) > 0, "--jobs filter did not match"
+            for r in res:
+                r.connect()
+            return res
 
-    def rev_parse(self, revision: str, uuid: bool) -> None:
-        b = Repository.load(self.path, self.log)
-        b.connect()
-        for r in b.find_revisions(revision):
+    #
+    # def init(self, type):
+    #     sourcefactory = backy.source.factory_by_type(type)
+    #     source = sourcefactory(*sourcefactory.argparse())
+    #     # TODO: check if repo already exists
+    #     repo = Repository(self.path / "config", source, Schedule(), self.log)
+    #     repo.connect()
+    #     repo.store()
+
+    def rev_parse(self, repo: Repository, revision: str, uuid: bool) -> None:
+        for rev in repo.find_revisions(revision):
             if uuid:
-                print(r.uuid)
+                print(rev.uuid)
             else:
-                print(r.info_filename)
+                print(rev.info_filename)
 
-    def log_(self, yaml_: bool, revision: str) -> None:
-        revs = Repository(self.path, self.log).find_revisions(revision)
-        if yaml_:
-            print(yaml.safe_dump([r.to_dict() for r in revs]))
+    def log_(self, repo: Repository, json_: bool, revision: str) -> None:
+        revs = repo.find_revisions(revision)
+        if json_:
+            print(BackyJSONEncoder().encode([r.to_dict() for r in revs]))
             return
         total_bytes = 0
 
@@ -170,84 +227,69 @@ class Command(object):
                 len(revs), humanize.naturalsize(total_bytes, binary=True)
             )
         )
-        pending_changes = sum(1 for r in revs if r.pending_changes)
-        if pending_changes:
-            rprint(
-                f"[yellow]{pending_changes} pending change(s)[/] "
-                "(Push changes with `backy push`)"
-            )
 
-    def backup(self, tags: str, force: bool) -> int:
-        b = Repository(self.path, self.log)
-        b._clean()
-        tags_ = set(t.strip() for t in tags.split(","))
-        if not force:
-            b.validate_tags(tags_)
-        r = Revision.create(b, tags_, self.log)
-        r.materialize()
-        proc = subprocess.run(
-            [
-                b.type.value,
-                "-t",
-                self.taskid,
-                "-b",
-                str(self.path),
-                "backup",
-                r.uuid,
-            ],
-        )
-        b.scan()
-        b._clean()
-        return proc.returncode
+    async def backup(
+        self, repos: List[Repository], bg: bool, tags: str, force: bool
+    ) -> int:
+        if len(repos) > 1:
+            bg = True
+
+        if bg:
+            for repo in repos:
+                log = self.log.bind(job_name=repo.name)
+                try:
+                    # TODO support tags
+                    await self.api.run_job(repo.name)
+                    log.info("triggered-run")
+                except ClientResponseError as e:
+                    if e.status == HTTPNotFound.status_code:
+                        log.error("unknown-job")
+                        return 1
+                    raise
+            return 0
+        else:
+            repo = repos[0]
+            assert (
+                self.source.repository.path == repo.path
+            ), "only the current job is supported without --bg"
+            repo._clean()
+            tags_ = set(t.strip() for t in tags.split(","))
+            if not force:
+                repo.validate_tags(tags_)
+            r = Revision.create(repo, tags_, self.log)
+            r.materialize()
+            try:
+                return self.source.backup(r)
+            finally:
+                repo._clean()
 
     def restore(
-        self, revision: str, target: str, restore_backend: RestoreBackend
+        self,
+        revision: str,
+        **restore_args: Any,
     ) -> int:
-        b = Repository(self.path, self.log)
-        r = b.find(revision)
-        proc = subprocess.run(
-            [
-                b.type.value,
-                "-t",
-                self.taskid,
-                "-b",
-                str(self.path),
-                "restore",
-                "--backend",
-                restore_backend.value,
-                r.uuid,
-                target,
-            ]
+        r = self.source.repository.find(revision)
+        return self.source.restore(
+            r, self.source.restore_type.from_args(**restore_args)
         )
-        return proc.returncode
 
-    def distrust(self, revision: str) -> None:
-        b = Repository(self.path, self.log)
-        b.distrust(revision)
+    def distrust(self, repo: Repository, revision: str) -> None:
+        repo.distrust(repo.find_revisions(revision))
 
     def verify(self, revision: str) -> int:
-        b = Repository(self.path, self.log)
-        r = b.find(revision)
-        proc = subprocess.run(
-            [
-                b.type.value,
-                "-t",
-                self.taskid,
-                "-b",
-                str(self.path),
-                "verify",
-                r.uuid,
-            ]
-        )
-        return proc.returncode
+        # TODO support multiple repos
+        ret = 0
+        for r in self.source.repository.find_revisions(revision):
+            ret = max(ret, self.source.verify(r))
+        return ret
 
-    def rm(self, revision: str) -> None:
-        b = Repository(self.path, self.log)
-        b.forget(revision)
+    def rm(self, repo: Repository, revision: str) -> None:
+        repo.rm(repo.find_revisions(revision))
 
     def tags(
         self,
-        action: Literal["set", "add", "remove"],
+        repo: Repository,
+        tag_action: Literal["set", "add", "remove"],
         autoremove: bool,
         expect: Optional[str],
         revision: str,
@@ -259,9 +301,8 @@ class Command(object):
             expect_ = None
         else:
             expect_ = set(t.strip() for t in expect.split(","))
-        b = backy.repository.Repository(self.path, self.log)
-        success = b.tags(
-            action,
+        success = repo.tags(
+            tag_action,
             revision,
             tags_,
             expect=expect_,
@@ -270,33 +311,77 @@ class Command(object):
         )
         return int(not success)
 
-    def gc(self, expire: bool) -> None:
-        # XXX needs to update from remote API peers first (pull)
-        b = Repository(self.path, self.log)
+    def gc(self, repo: Repository, expire: bool, local: bool) -> None:
+        if expire and not local:
+            assert False  # request pull from daemon
+            # XXX needs to update from remote API peers first (pull)
+        assert self.source.repository.path == repo.path
         if expire:
-            b.expire()
-        proc = subprocess.run(
-            [
-                b.type.value,
-                "-t",
-                self.taskid,
-                "-b",
-                str(self.path),
-                "gc",
-            ]
-        )
-        # if remote:
-        # push
+            repo.expire()
+        if expire and not local:
+            assert False  # request push from daemon
+        self.source.gc()
 
-    def pull(self):
-        pass
+    def reports_list(self, repo: Repository):
+        for id in repo.report_ids:
+            print(id)
 
-    def check(self):
-        pass
+    def reports_show(self, repo: Repository, reports: Optional[str]):
+        if reports is None:
+            ids = repo.report_ids
+        else:
+            ids = reports.split(",")
+        for id in ids:
+            path = repo.report_path.joinpath(id).with_suffix(".report")
+            print(id)
+            print(path.read_text(encoding="utf-8"))
 
-    def show_jobs(self, filter_re="") -> int:
+    def reports_delete(self, repo: Repository, reports: Optional[str]):
+        log = self.log.bind(job_name=repo.name)
+        if reports is None:
+            ids = repo.report_ids
+        else:
+            ids = reports.split(",")
+        for id in ids:
+            path = repo.report_path.joinpath(id).with_suffix("report")
+            path.unlink()
+            log.info("report-deleted", id=id)
+
+    def check(self, repo: Repository):
+        log = self.log.bind(job_name=repo.name)
+        exitcode = 0
+
+        manual_tags = set()
+        for rev in repo.history:
+            manual_tags |= filter_manual_tags(rev.tags)
+        if manual_tags:
+            log.info("check-manual-tags", manual_tags=", ".join(manual_tags))
+
+        unsynced_revs = {r for r in repo.history if r.pending_changes}
+        if unsynced_revs:
+            log.info("check-unsynced-revs", unsynced_revs=len(unsynced_revs))
+
+        if not repo.sla:
+            log.critical(
+                "check-sla-violation",
+                last_time=str(
+                    repo.clean_history[-1].timestamp
+                    if repo.clean_history
+                    else None
+                ),
+                sla_overdue=repo.sla_overdue,
+            )
+            exitcode = max(exitcode, 2)
+
+        if repo.report_ids:
+            log.warning("check-reports", reports=len(repo.report_ids))
+            exitcode = max(exitcode, 1)
+
+        return exitcode
+
+    async def show_jobs(self, repos: List[Repository]):
         """List status of all known jobs. Optionally filter by regex."""
-        api = self.create_api_client()
+        repo_names = [r.name for r in repos]
 
         tz = format_datetime_local(None)[1]
 
@@ -312,9 +397,11 @@ class Command(object):
             "Next Tags",
         )
 
-        jobs = asyncio.run(api.fetch_status(filter_re))
+        jobs = await self.api.fetch_status(self.jobs)
         jobs.sort(key=lambda j: j["job"])
         for job in jobs:
+            if job["job"] not in repo_names:
+                continue
             overdue = (
                 humanize.naturaldelta(job["sla_overdue"])
                 if job["sla_overdue"]
@@ -339,22 +426,21 @@ class Command(object):
                 next_time,
                 job["next_tags"],
             )
-        backups = asyncio.run(api.list_backups())
-        if filter_re:
-            backups = list(filter(re.compile(filter_re).search, backups))
+        backups = await self.api.list_backups()
+        if self.jobs:
+            backups = list(filter(re.compile(self.jobs).search, backups))
         for b in backups:
             t.add_row(b, "-", "-", "Dead", "-", "", "-", "-", "")
 
         rprint(t)
         print("{} jobs shown".format(len(jobs) + len(backups)))
 
-    def show_daemon(self):
+    async def show_daemon(self):
         """Show job status overview"""
-        api = self.create_api_client()
         t = Table("Status", "#")
         state_summary: Dict[str, int] = {}
-        jobs = asyncio.run(api.get_jobs())
-        jobs += [{"status": "Dead"} for _ in asyncio.run(api.list_backups())]
+        jobs = await self.api.get_jobs()
+        jobs += [{"status": "Dead"} for _ in await self.api.list_backups()]
         for job in jobs:
             state_summary.setdefault(job["status"], 0)
             state_summary[job["status"]] += 1
@@ -363,60 +449,9 @@ class Command(object):
             t.add_row(state, str(state_summary[state]))
         rprint(t)
 
-    def run(self, job: str):
-        """Trigger immediate run for one job"""
-        try:
-            self.api.run_job(job)
-        except ClientResponseError as e:
-            if e.status == HTTPNotFound.status_code:
-                self.log.error("unknown-job", job=job)
-                sys.exit(1)
-            raise
-        self.log.info("triggered-run", job=job)
-
-    def runall(self):
-        """Trigger immediate run for all jobs"""
-        jobs = self.api.get_jobs()
-        for job in jobs:
-            self.run(job["name"])
-
-    def reload(self):
+    async def reload_daemon(self):
         """Reload the configuration."""
-        self.log.info("reloading-daemon")
-        self.api.reload_daemon()
-        self.log.info("reloaded-daemon")
-
-    def check(self):
-        status = self.api.fetch_status()
-
-        exitcode = 0
-
-        for job in status:
-            log = self.log.bind(job_name=job["job"])
-            if job["manual_tags"]:
-                log.info(
-                    "check-manual-tags",
-                    manual_tags=job["manual_tags"],
-                )
-            if job["unsynced_revs"]:
-                self.log.info(
-                    "check-unsynced-revs", unsynced_revs=job["unsynced_revs"]
-                )
-            if job["sla"] != "OK":
-                log.critical(
-                    "check-sla-violation",
-                    last_time=str(job["last_time"]),
-                    sla_overdue=job["sla_overdue"],
-                )
-                exitcode = max(exitcode, 2)
-            if job["quarantine_reports"]:
-                log.warning(
-                    "check-quarantined", reports=job["quarantine_reports"]
-                )
-                exitcode = max(exitcode, 1)
-
-        self.log.info("check-exit", exitcode=exitcode, jobs=len(status))
-        raise SystemExit(exitcode)
+        await self.api.reload_daemon()
 
 
 def main():
@@ -433,8 +468,10 @@ def main():
         default="/etc/backy.conf",
         help="(default: %(default)s)",
     )
+
     parser.add_argument(
         "-C",
+        dest="workdir",
         default=".",
         type=Path,
         help=(
@@ -443,8 +480,30 @@ def main():
         ),
     )
 
+    parser.add_argument(
+        "-n", "--dry-run", action="store_true", help="Do not modify state."
+    )
+    job_filter = parser.add_mutually_exclusive_group()
+    job_filter.add_argument(
+        "--jobs",
+        dest="jobs",
+        metavar="<job filter>",
+        help="Optional job filter regex. Defaults to current workdir",
+    )
+
+    job_filter.add_argument(
+        "-a",
+        "--all",
+        action="store_const",
+        const=".*",
+        dest="jobs",
+        help="Shortcut to select all jobs",
+    )
+
     subparsers = parser.add_subparsers()
 
+    # TODO
+    # INIT
     p = subparsers.add_parser("init", help="Create an empty backy repository.")
     p.add_argument(
         "type",
@@ -453,72 +512,7 @@ def main():
     )
     p.set_defaults(func="init")
 
-    p = subparsers.add_parser("show-jobs", help="List status of all known jobs")
-    p.add_argument(
-        "filter_re",
-        default="",
-        metavar="[filter]",
-        nargs="?",
-        help="Optional job filter regex",
-    )
-    p.set_defaults(func="show_jobs")
-
-    p = subparsers.add_parser("show-daemon", help="Show job status overview")
-    p.set_defaults(func="show_daemon")
-
-    p = subparsers.add_parser(
-        "check",
-        help="Check whether all jobs adhere to their schedules' SLA",
-    )
-    p.set_defaults(func="check")
-
-    p = subparsers.add_parser(
-        "backup",
-        help="Perform a backup",
-    )
-    p.add_argument(
-        "-f", "--force", action="store_true", help="Do not validate tags"
-    )
-    p.add_argument("tags", help="Tags to apply to the backup")
-    p.set_defaults(func="backup")
-
-    p = subparsers.add_parser(
-        "restore",
-        help="Restore (a given revision) to a given target",
-    )
-    p.add_argument(
-        "--backend",
-        type=RestoreBackend,
-        choices=list(RestoreBackend),
-        default=RestoreBackend.AUTO,
-        dest="restore_backend",
-        help="(default: %(default)s)",
-    )
-    p.add_argument(
-        "-r",
-        "--revision",
-        metavar="SPEC",
-        default="latest",
-        help="use revision SPEC as restore source (default: %(default)s)",
-    )
-    p.add_argument(
-        "target",
-        metavar="TARGET",
-        help='Copy backed up revision to TARGET. Use stdout if TARGET is "-"',
-    )
-    p.set_defaults(func="restore")
-
-    p = subparsers.add_parser(
-        "gc",
-        help="Purge the backup store (i.e. chunked) from unused data",
-    )
-    p.add_argument(
-        "--expire",
-        action="store_true",
-        help="Expire tags according to schedule",
-    )
-    p.set_defaults(func="gc")
-
+    # REV-PARSE
     p = subparsers.add_parser(
         "rev-parse",
         help="Print full path or uuid of specified revisions",
@@ -532,16 +526,17 @@ def main():
         "-r",
         "--revision",
         metavar="SPEC",
-        default="latest",
+        default="all",
         help="use revision SPEC to find (default: %(default)s)",
     )
     p.set_defaults(func="rev_parse")
 
+    # LOG
     p = subparsers.add_parser(
         "log",
         help="Show backup status. Show inventory and summary information",
     )
-    p.add_argument("--yaml", dest="yaml_", action="store_true")
+    p.add_argument("--json", dest="json_", action="store_true")
     p.add_argument(
         "-r",
         "--revision",
@@ -550,6 +545,42 @@ def main():
         help="use revision SPEC as filter (default: %(default)s)",
     )
     p.set_defaults(func="log_")
+
+    # BACKUP
+    p = subparsers.add_parser(
+        "backup",
+        help="Perform a backup",
+    )
+    p.add_argument(
+        "-f", "--force", action="store_true", help="Do not validate tags"
+    )
+    p.add_argument(
+        "--bg",
+        action="store_true",
+        help="Let the daemon run the backup job. Implied if if more than one job is selected.",
+    )
+    p.add_argument("tags", help="Tags to apply to the backup")
+    p.set_defaults(func="backup")
+
+    # RESTORE
+    p = subparsers.add_parser(
+        "restore",
+        help="Restore (a given revision) to a given target. The arguments vary for the different repo types.",
+    )
+    p.add_argument(
+        "-r",
+        "--revision",
+        metavar="SPEC",
+        default="latest",
+        help="use revision SPEC as restore source (default: %(default)s)",
+    )
+    restore_subparsers = p.add_subparsers()
+    for source_type in SOURCE_PLUGINS:
+        source = source_type.load()
+        source.restore_type.setup_argparse(
+            restore_subparsers.add_parser(source.type_)
+        )
+    p.set_defaults(func="restore")
 
     # DISTRUST
     p = subparsers.add_parser(
@@ -565,6 +596,7 @@ def main():
     )
     p.set_defaults(func="distrust")
 
+    # VERIFY
     p = subparsers.add_parser(
         "verify",
         help="Verify specified revisions",
@@ -578,19 +610,21 @@ def main():
     )
     p.set_defaults(func="verify")
 
+    # RM
     p = subparsers.add_parser(
-        "forget",
-        help="Forget specified revision",
+        "rm",
+        help="Remove specified revision",
     )
     p.add_argument(
         "-r",
         "--revision",
         metavar="SPEC",
         required=True,
-        help="use revision SPEC to forget",
+        help="use revision SPEC to remove",
     )
-    p.set_defaults(func="forget")
+    p.set_defaults(func="rm")
 
+    # TAGS
     p = subparsers.add_parser(
         "tags",
         help="Modify tags on revision",
@@ -609,7 +643,7 @@ def main():
         help="Do nothing if tags differ from the expected tags",
     )
     p.add_argument(
-        "action",
+        "tag_action",
         choices=["set", "add", "remove"],
     )
     p.add_argument(
@@ -627,33 +661,98 @@ def main():
     )
     p.set_defaults(func="tags")
 
+    # GC
+    p = subparsers.add_parser(
+        "gc",
+        help="Purge the backup store (i.e. chunked) from unused data",
+    )
+    p.add_argument(
+        "--expire",
+        action="store_true",
+        help="Expire tags according to schedule",
+    )
+    p.add_argument(
+        "--local",
+        action="store_true",
+        help="Do not expire on remote servers",
+    )
+    p.set_defaults(func="gc")
+
+    # REPORTS-LIST
+    p = subparsers.add_parser("reports-list", help="List problem reports")
+    p.set_defaults(func="reports_list")
+
+    # REPORTS-SHOW
+    p = subparsers.add_parser("reports-show", help="Show problem report")
+    p.add_argument(
+        "reports",
+        nargs="?",
+        metavar="<reports>",
+        help="comma separated list of report uuids",
+    )
+
+    p.set_defaults(func="reports_show")
+
+    # REPORTS-DELETE
+    p = subparsers.add_parser("reports-delete", help="Delete problem report")
+    report_sel = p.add_mutually_exclusive_group(required=True)
+    report_sel.add_argument(
+        "reports",
+        nargs="?",
+        metavar="<reports>",
+        help="comma separated list of report uuids",
+    )
+    report_sel.add_argument(
+        "--all-reports",
+        action="store_const",
+        const=None,
+        dest="reports",
+        help="Select all reports",
+    )
+    p.set_defaults(func="reports_delete")
+
+    # CHECK
+    p = subparsers.add_parser(
+        "check",
+        help="Check whether the selected jobs adhere to their schedules' SLA",
+    )
+    p.set_defaults(func="check")
+
+    # TODO: job filter default
+    # SHOW JOBS
+    p = subparsers.add_parser("show-jobs", help="List status of all known jobs")
+    p.set_defaults(func="show_jobs")
+
+    # SHOW DAEMON
+    p = subparsers.add_parser("show-daemon", help="Show job status overview")
+    p.set_defaults(func="show_daemon")
+
+    # RELOAD DAEMON
+    p = subparsers.add_parser("reload-daemon", help="Reload daemon config")
+    p.set_defaults(func="reload_daemon")
+
     args = parser.parse_args()
 
     if not hasattr(args, "func"):
         parser.print_usage()
         sys.exit(0)
 
-    task_id = generate_taskid()
-
     # Logging
 
-    logging.init_logging(args.verbose, defaults={"taskid": task_id})
+    logging.init_logging(args.verbose, defaults={"taskid": generate_taskid()})
     log = structlog.stdlib.get_logger(subsystem="command")
     log.debug("invoked", args=" ".join(sys.argv))
 
-    command = Command(args.C, args.config, task_id, log)
+    command = Command(args.workdir, args.config, args.dry_run, args.jobs, log)
     func = args.func
 
     # Pass over to function
     func_args = dict(args._get_kwargs())
     del func_args["func"]
     del func_args["verbose"]
+    del func_args["workdir"]
     del func_args["config"]
-    del func_args["C"]
+    del func_args["dry_run"]
+    del func_args["jobs"]
 
-    try:
-        log.debug("parsed", func=args.func, func_args=func_args)
-        sys.exit(command(func, func_args))
-    except Exception:
-        log.exception("failed")
-        sys.exit(1)
+    sys.exit(asyncio.run(command(func, func_args)))

@@ -76,29 +76,6 @@ class Job(object):
         return generator.randint(0, limit)
 
     @property
-    def sla(self) -> bool:
-        """Is the SLA currently held?
-
-        The SLA being held is only reflecting the current status.
-
-        It does not help to reflect on past situations that have failed as
-        those are not indicators whether and admin needs to do something
-        right now.
-        """
-        return not self.sla_overdue
-
-    @property
-    def sla_overdue(self) -> int:
-        """Amount of time the SLA is currently overdue."""
-        if not self.repository.clean_history:
-            return 0
-        age = backy.utils.now() - self.repository.clean_history[-1].timestamp
-        max_age = min(x["interval"] for x in self.schedule.schedule.values())
-        if age > max_age * 1.5:
-            return age.total_seconds()
-        return 0
-
-    @property
     def schedule(self) -> Schedule:
         return self.repository.schedule
 
@@ -113,8 +90,9 @@ class Job(object):
     def to_dict(self) -> dict:
         return {
             "name": self.name,
+            "path": self.path,
             "status": self.status,
-            "source": self.source,
+            # "source": self.source,
             "schedule": self.schedule.to_dict(),
         }
 

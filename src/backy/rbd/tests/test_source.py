@@ -39,8 +39,8 @@ class FakeCephRBD:
         assert self.data
         file.write(self.data)
 
-    def verify(self, target: IO):
-        assert self.data == target.read()
+    def verify(self, target: IO, report=None):
+        return self.data == target.read()
 
 
 @pytest.fixture

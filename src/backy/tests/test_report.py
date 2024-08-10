@@ -1,11 +1,8 @@
-import pytest
-
 from backy.report import ChunkMismatchReport
 from backy.tests import Ellipsis
 
 
-@pytest.mark.skip
-def test_quarantine(tmp_path, repository, log, clock):
+def test_report(tmp_path, repository, log, clock):
     repository.add_report(ChunkMismatchReport(b"source", b"target", 3))
     with open(
         (tmp_path / "quarantine" / repository.report_ids[0]).with_suffix(
@@ -22,9 +19,9 @@ target_hash: 42aefbae01d2dfd981f7da7d823d689e
 offset: 3
 traceback: |-
 ...
-    File ".../src/backy/rbd/tests/test_quarantine.py", line ..., in test_quarantine
-      store.add_report(QuarantineReport(b"source", b"target", 3))
-    File ".../src/backy/rbd/quarantine.py", line ..., in __init__
+    File ".../src/backy/tests/test_report.py", line ..., in test_report
+      repository.add_report(ChunkMismatchReport(b"source", b"target", 3))
+    File ".../src/backy/report.py", line ..., in __init__
       self.traceback = "".join(traceback.format_stack()).strip()
 """
             )

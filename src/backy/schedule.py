@@ -69,6 +69,12 @@ class Schedule(object):
     def to_dict(self) -> dict:
         return self.config
 
+    @classmethod
+    def from_dict(cls, conf) -> "Schedule":
+        r = cls()
+        r.configure(conf)
+        return r
+
     def next(
         self, relative: datetime.datetime, spread: int, repository: "Repository"
     ) -> Tuple[datetime.datetime, Set[str]]:

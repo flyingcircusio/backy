@@ -5,6 +5,7 @@ import subprocess
 import time
 from pathlib import Path
 from unittest import mock
+from unittest.mock import Mock
 
 import consulate
 import pytest
@@ -287,7 +288,9 @@ def test_verify_fail(ceph_rbd, rbdsource, repository, tmp_path, log):
         f.write(b"foobar")
     # The chunked store has false data, so this needs to be detected.
     with ceph_rbd(revision), rbdsource.open(revision) as target:
-        assert ceph_rbd.verify(target)
+        mock = Mock()
+        assert not ceph_rbd.verify(target, report=mock)
+        mock.assert_called_once()
 
 
 def test_verify(ceph_rbd, rbdsource, repository, tmp_path, log):
@@ -308,7 +311,9 @@ def test_verify(ceph_rbd, rbdsource, repository, tmp_path, log):
         f.flush()
 
     with ceph_rbd(revision), rbdsource.open(revision) as target:
-        assert not ceph_rbd.verify(target)
+        mock = Mock()
+        assert ceph_rbd.verify(target, report=mock)
+        mock.assert_not_called()
 
 
 @pytest.fixture

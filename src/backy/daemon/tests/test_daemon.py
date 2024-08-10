@@ -6,16 +6,61 @@ import re
 import signal
 from pathlib import Path
 from unittest import mock
+from unittest.mock import Mock
 
 import pytest
 import yaml
 
+import backy.daemon
 from backy import utils
 from backy.daemon import BackyDaemon
 from backy.daemon.scheduler import Job
 from backy.file import FileSource
 from backy.revision import Revision
 from backy.tests import Ellipsis
+
+
+def test_display_help(capsys, argv):
+    argv.append("--help")
+    with pytest.raises(SystemExit) as exit:
+        backy.daemon.main()
+    assert exit.value.code == 0
+    out, err = capsys.readouterr()
+    assert (
+        Ellipsis(
+            """\
+usage: pytest [-h] [-v] [-l LOGFILE] [-c CONFIG]
+
+Backy daemon - runs the scheduler and API.
+
+options:
+...
+"""
+        )
+        == out
+    )
+    assert err == ""
+
+
+async def test_main(tmp_path, argv, monkeypatch):
+    mock = Mock()
+    monkeypatch.setattr(backy.daemon.BackyDaemon, "start", mock)
+    monkeypatch.setattr(backy.daemon.BackyDaemon, "api_server", mock)
+    monkeypatch.setattr(backy.daemon.BackyDaemon, "run_forever", mock)
+    argv.extend(
+        ["-v", "-l", str(tmp_path / "log"), "-c", str(tmp_path / "conf")]
+    )
+    utils.log_data = ""
+
+    backy.daemon.main()
+
+    assert mock.call_count == 3
+    assert (
+        Ellipsis(
+            "... D -                    command/invoked                     args='... -v -l ... -c ...\n"
+        )
+        == utils.log_data
+    )
 
 
 @pytest.fixture
@@ -204,7 +249,7 @@ def test_sla_before_first_backup(daemon):
     # think of something when this happens. Maybe keeping a log of errors
     # or so to notice that we tried previously.
     assert len(job.repository.history) == 0
-    assert job.sla is True
+    assert job.repository.sla is True
 
 
 def test_sla_over_time(daemon, clock, tmp_path, log):
@@ -220,25 +265,25 @@ def test_sla_over_time(daemon, clock, tmp_path, log):
     revision.materialize()
     job.repository.scan()
     assert len(job.repository.history) == 1
-    assert job.sla is True
+    assert job.repository.sla is True
 
     # 24 hours is also fine.
     revision.timestamp = utils.now() - datetime.timedelta(hours=24)
     revision.write_info()
     job.repository.scan()
-    assert job.sla is True
+    assert job.repository.sla is True
 
     # 32 hours is also fine.
     revision.timestamp = utils.now() - datetime.timedelta(hours=32)
     revision.write_info()
     job.repository.scan()
-    assert job.sla is True
+    assert job.repository.sla is True
 
     # 24*1.5 hours is the last time that is OK.
     revision.timestamp = utils.now() - datetime.timedelta(hours=24 * 1.5)
     revision.write_info()
     job.repository.scan()
-    assert job.sla is True
+    assert job.repository.sla is True
 
     # 1 second later we consider this not to be good any longer.
     revision.timestamp = (
@@ -248,13 +293,13 @@ def test_sla_over_time(daemon, clock, tmp_path, log):
     )
     revision.write_info()
     job.repository.scan()
-    assert job.sla is False
+    assert job.repository.sla is False
 
     # a running backup does not influence this.
     job.update_status("running (slow)")
     r = Revision.create(job.repository, {"daily"}, log)
     r.write_info()
-    assert job.sla is False
+    assert job.repository.sla is False
 
 
 def test_incomplete_revs_dont_count_for_sla(daemon, clock, tmp_path, log):
@@ -267,7 +312,7 @@ def test_incomplete_revs_dont_count_for_sla(daemon, clock, tmp_path, log):
     r2.timestamp = utils.now() - datetime.timedelta(hours=1)
     r2.materialize()
     job.repository.scan()
-    assert False is job.sla
+    assert False is job.repository.sla
 
 
 def test_update_status(daemon, log):

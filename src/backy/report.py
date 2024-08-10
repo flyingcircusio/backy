@@ -1,28 +1,40 @@
-import dataclasses
 import datetime
 import hashlib
 import traceback
-from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Optional
 
 import shortuuid
 import yaml
 from structlog.stdlib import BoundLogger
 from yaml import SafeDumper
 
-import backy
+import backy.utils
 from backy.utils import SafeFile
 
 
-@dataclass(frozen=True)
-class ProblemReport:
-    uuid: str = field(init=False, default_factory=shortuuid.uuid)
-    timestamp: datetime.datetime = field(
-        init=False, default_factory=backy.utils.now
-    )
+class ProblemReport(ABC):
+    uuid: str
+    timestamp: datetime.datetime
+
+    def __init__(
+        self,
+        uuid: Optional[str] = None,
+        timestamp: Optional[datetime.datetime] = None,
+    ):
+        self.uuid = uuid or shortuuid.uuid()
+        self.timestamp = timestamp or backy.utils.now()
 
     def to_dict(self) -> dict:
-        return dataclasses.asdict(self)
+        return {
+            "uuid": self.uuid,
+            "timestamp": self.timestamp,
+        }
+
+    @abstractmethod
+    def get_message(self) -> str:
+        ...
 
     def store(self, dir: Path, log: BoundLogger) -> None:
         log.debug("store-report", uuid=self.uuid)
@@ -48,31 +60,33 @@ class ProblemReport:
             yaml.dump(self.to_dict(), f, sort_keys=False, Dumper=CustomDumper)
 
 
-@dataclass(frozen=True)
 class ChunkMismatchReport(ProblemReport):
     source_chunk: bytes
-    source_hash: str = field(init=False)
+    source_hash: str
     target_chunk: bytes
-    target_hash: str = field(init=False)
+    target_hash: str
     offset: int
-    traceback: str = field(init=False)
+    traceback: str
 
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "source_hash", hashlib.md5(self.source_chunk).hexdigest()
-        )
-        object.__setattr__(
-            self, "target_hash", hashlib.md5(self.target_chunk).hexdigest()
-        )
-        object.__setattr__(
-            self, "traceback", "".join(traceback.format_stack()).strip()
-        )
+    def __init__(self, source_chunk: bytes, target_chunk: bytes, offset: int):
+        super().__init__()
+        self.source_chunk = source_chunk
+        self.target_chunk = target_chunk
+        self.offset = offset
+        self.source_hash = hashlib.md5(self.source_chunk).hexdigest()
+        self.target_hash = hashlib.md5(self.target_chunk).hexdigest()
+        self.traceback = "".join(traceback.format_stack()).strip()
 
     def to_dict(self) -> dict:
-        dict = dataclasses.asdict(self)
-        del dict["source_chunk"]
-        del dict["target_chunk"]
-        return dict
+        return super().to_dict() | {
+            "source_hash": self.source_hash,
+            "target_hash": self.target_hash,
+            "offset": self.offset,
+            "traceback": self.traceback,
+        }
+
+    def get_message(self) -> str:
+        return f"Mismatching chunks at offset {self.offset}"
 
     def store(self, dir: Path, log: BoundLogger) -> None:
         chunks_path = dir / "chunks"

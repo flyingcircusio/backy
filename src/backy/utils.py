@@ -14,15 +14,15 @@ import tempfile
 import time
 import typing
 from asyncio import Event
-from typing import IO, Callable, Iterable, List, Literal, Optional, TypeVar
+from json import JSONEncoder
+from pathlib import Path
+from typing import IO, Any, Callable, Iterable, List, Literal, Optional, TypeVar
 from zoneinfo import ZoneInfo
 
 import aiofiles.os as aos
 import humanize
 import structlog
 import tzlocal
-
-import backy
 
 from .ext_deps import CP
 
@@ -389,7 +389,8 @@ def files_are_roughly_equal(
     samplesize=0.01,
     blocksize=CHUNK_SIZE,
     timeout=5 * 60,
-) -> Optional["backy.report.ChunkMismatchReport"]:
+    report: Callable[[bytes, bytes, int], None] = lambda a, b, c: None,
+) -> bool:
     a.seek(0, os.SEEK_END)
     size = a.tell()
     blocks = size // blocksize
@@ -413,24 +414,22 @@ def files_are_roughly_equal(
         duration = now() - started
         if duration > max_duration:
             log.info("files-roughly-equal-stopped", duration=duration)
-            return None
+            return True
 
         a.seek(block * blocksize)
         b.seek(block * blocksize)
         chunk_a = a.read(blocksize)
         chunk_b = b.read(blocksize)
         if chunk_a != chunk_b:
-            report = backy.report.ChunkMismatchReport(
-                chunk_a, chunk_b, block * blocksize
-            )
             log.error(
                 "files-not-roughly-equal",
-                hash_a=report.source_hash,
-                hash_b=report.target_hash,
-                pos=report.offset,
+                hash_a=hashlib.md5(chunk_a).hexdigest(),
+                hash_b=hashlib.md5(chunk_b).hexdigest(),
+                pos=block * blocksize,
             )
-            return report
-    return None
+            report(chunk_a, chunk_b, block * blocksize)
+            return False
+    return True
 
 
 def now():
@@ -648,3 +647,15 @@ def punch_hole(f, offset, len_):
         fallocate(*params)
     except OSError:
         _fake_fallocate(*params)
+
+
+class BackyJSONEncoder(JSONEncoder):
+    def default(self, o: Any) -> Any:
+        if hasattr(o, "to_dict"):
+            return o.to_dict()
+        elif isinstance(o, datetime.datetime):
+            return o.isoformat()
+        elif isinstance(o, Path):
+            return str(o)
+        else:
+            super().default(o)

@@ -125,6 +125,7 @@ class Revision(object):
             "server": self.server,
         }
 
+    # TODO: disallow local modification
     @property
     def pending_changes(self):
         return self.server and self.tags != self.orig_tags

@@ -1,7 +1,7 @@
 import shutil
 import sys
 import time
-from argparse import ArgumentParser, Namespace
+from argparse import _ActionsContainer
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -22,11 +22,11 @@ class FileRestoreArgs(RestoreArgs):
         return [str(self.target)]
 
     @classmethod
-    def from_args(cls, args: Namespace) -> "FileRestoreArgs":
-        return cls(args.target)
+    def from_args(cls, **kw: Any) -> "FileRestoreArgs":
+        return cls(kw["target"])
 
     @classmethod
-    def setup_argparse(cls, restore_parser: ArgumentParser) -> None:
+    def setup_argparse(cls, restore_parser: _ActionsContainer) -> None:
         restore_parser.add_argument(
             "target",
             type=Path,

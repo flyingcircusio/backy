@@ -14,11 +14,13 @@ from backy.tests import Ellipsis
 
 @pytest.fixture
 def source_on_disk(tmp_path, log):
-    with open(tmp_path / "config", "w", encoding="utf-8") as f:
+    path = tmp_path / "test01"
+    path.mkdir()
+    with open(path / "config", "w", encoding="utf-8") as f:
         f.write(
             f"""
 ---
-path: "{tmp_path}"
+path: "{path}"
 schedule:
     daily:
         interval: 1d
@@ -29,7 +31,7 @@ source:
     image: b
 """
         )
-    return CmdLineSource.load(tmp_path, log).create_source()
+    return CmdLineSource.load(path, log).create_source()
 
 
 def test_display_usage(capsys):
@@ -38,8 +40,8 @@ def test_display_usage(capsys):
     out, err = capsys.readouterr()
     assert (
         """\
-usage: pytest [-h] [-v] [-C WORKDIR] [-t TASKID]
-              {backup,restore,gc,verify} ...
+usage: backy-rbd [-h] [-v] [-C WORKDIR] [-t TASKID]
+                 {backup,restore,gc,verify} ...
 """
         == out
     )
@@ -54,8 +56,8 @@ def test_display_help(capsys):
     assert (
         Ellipsis(
             """\
-usage: pytest [-h] [-v] [-C WORKDIR] [-t TASKID]
-              {backup,restore,gc,verify} ...
+usage: backy-rbd [-h] [-v] [-C WORKDIR] [-t TASKID]
+                 {backup,restore,gc,verify} ...
 
 The rbd plugin for backy. You should not call this directly. Use the backy
 command instead.
@@ -145,7 +147,9 @@ def test_call_fun(
         partialmethod(print_args, return_value=rv),
     )
     utils.log_data = ""
-    exit = RBDSource.main("backy-rbd", "-v", *args)
+    exit = RBDSource.main(
+        "backy-rbd", "-v", "-C", str(source_on_disk.repository.path), *args
+    )
     assert exit == rc
     out, err = capsys.readouterr()
     assert (
@@ -160,8 +164,8 @@ def test_call_fun(
     assert (
         Ellipsis(
             f"""\
-... D -                    command/invoked                     args='backy-rbd -v {" ".join([ *args])}'
-... D -                    repo/scan-reports                   entries=0
+... D -                    command/invoked                     args='backy-rbd -v -C ... {" ".join([ *args])}'
+... D test01               repo/scan-reports                   entries=0
 ... D -                    command/return-code                 code={rc}
 """
         )
@@ -191,7 +195,7 @@ def test_call_unexpected_exception(
         Ellipsis(
             """\
 ... D -                    command/invoked                     args='backy-rbd -C ... gc'
-... D -                    repo/scan-reports                   entries=0
+... D test01               repo/scan-reports                   entries=0
 ... E -                    command/failed                      exception_class='builtins.RuntimeError' exception_msg='test'
 exception>\tTraceback (most recent call last):
 exception>\t  File ".../src/backy/source.py", line ..., in main

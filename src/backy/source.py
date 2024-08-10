@@ -4,7 +4,7 @@ import errno
 import filecmp
 import subprocess
 from abc import ABC, abstractmethod
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser, _ActionsContainer
 from dataclasses import dataclass
 from importlib.metadata import entry_points
 from pathlib import Path
@@ -40,14 +40,12 @@ class RestoreArgs(ABC):
 
     @classmethod
     @abstractmethod
-    def setup_argparse(cls, restore_parser: ArgumentParser) -> None:
+    def setup_argparse(cls, restore_parser: _ActionsContainer) -> None:
         ...
 
     @classmethod
     @abstractmethod
-    def from_args(
-        cls: type[RestoreArgsType], args: Namespace
-    ) -> RestoreArgsType:
+    def from_args(cls: type[RestoreArgsType], **kw: Any) -> RestoreArgsType:
         ...
 
 
@@ -124,7 +122,9 @@ class Source(ABC, Generic[RestoreArgsType]):
     @classmethod
     def create_argparse(cls) -> ArgumentParser:
         parser = argparse.ArgumentParser(
-            description=f"The {cls.type_} plugin for backy. You should not call this directly. Use the backy command instead.",
+            prog=f"backy-{cls.type_}",
+            description=f"The {cls.type_} plugin for backy.\n"
+            "You should not call this directly. Use the backy command instead.",
         )
         parser.add_argument(
             "-v", "--verbose", action="store_true", help="verbose output"
@@ -220,7 +220,10 @@ class Source(ABC, Generic[RestoreArgsType]):
                     ret = int(not success)
                 case "restore":
                     rev = source.repository.find_by_uuid(args.revision)
-                    source.restore(rev, cls.restore_type.from_args(args))
+                    source.restore(
+                        rev,
+                        cls.restore_type.from_args(**dict(args._get_kwargs())),
+                    )
                 case "gc":
                     source.gc()
                 case "verify":
@@ -249,6 +252,10 @@ class CmdLineSource:
     @property
     def type_(self):
         return self.source_conf["type"]
+
+    @property
+    def restore_type(self):
+        return factory_by_type(self.type_).restore_type
 
     @property
     def subcommand(self) -> str:

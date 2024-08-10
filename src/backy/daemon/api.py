@@ -1,7 +1,6 @@
 import datetime
 import re
 from asyncio import get_running_loop
-from json import JSONEncoder
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Tuple
 
 import aiohttp
@@ -22,22 +21,12 @@ from structlog.stdlib import BoundLogger
 import backy.repository
 from backy.repository import Repository, StatusDict
 from backy.revision import Revision
-from backy.utils import generate_taskid
+from backy.utils import BackyJSONEncoder, generate_taskid
 
 if TYPE_CHECKING:
     from backy.daemon import BackyDaemon
 
     from .scheduler import Job
-
-
-class BackyJSONEncoder(JSONEncoder):
-    def default(self, o: Any) -> Any:
-        if hasattr(o, "to_dict"):
-            return o.to_dict()
-        elif isinstance(o, datetime.datetime):
-            return o.isoformat()
-        else:
-            super().default(o)
 
 
 def to_json(response: Any) -> aiohttp.web.StreamResponse:

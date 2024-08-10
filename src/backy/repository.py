@@ -4,11 +4,12 @@ import fcntl
 import re
 from math import ceil, floor
 from pathlib import Path
-from typing import IO, Any, List, Literal, Optional, TypedDict
+from typing import IO, Any, Iterable, List, Literal, Optional, TypedDict
 
 import tzlocal
 from structlog.stdlib import BoundLogger
 
+import backy
 from backy.utils import (
     duplicates,
     list_get,
@@ -73,7 +74,7 @@ class Repository(object):
         self.path = path.resolve()
         self.report_path = self.path / "quarantine"
         self.schedule = schedule
-        self.log = log.bind(subsystem="repo")
+        self.log = log.bind(subsystem="repo", job_name=self.name)
         self._lock_fds = {}
 
     def connect(self):
@@ -94,8 +95,34 @@ class Repository(object):
         self.report_ids.append(report.uuid)
 
     def scan_reports(self) -> None:
-        self.report_ids = [g.name for g in self.report_path.glob("*.report")]
+        self.report_ids = [
+            g.name.removesuffix(".report")
+            for g in self.report_path.glob("*.report")
+        ]
         self.log.debug("scan-reports", entries=len(self.report_ids))
+
+    @property
+    def sla(self) -> bool:
+        """Is the SLA currently held?
+
+        The SLA being held is only reflecting the current status.
+
+        It does not help to reflect on past situations that have failed as
+        those are not indicators whether and admin needs to do something
+        right now.
+        """
+        return not self.sla_overdue
+
+    @property
+    def sla_overdue(self) -> int:
+        """Amount of time the SLA is currently overdue."""
+        if not self.clean_history:
+            return 0
+        age = backy.utils.now() - self.clean_history[-1].timestamp
+        max_age = min(x["interval"] for x in self.schedule.schedule.values())
+        if age > max_age * 1.5:
+            return age.total_seconds()
+        return 0
 
     # Locking strategy:
     #
@@ -276,8 +303,8 @@ class Repository(object):
                 revision.remove()
 
     @locked(target=".backup", mode="exclusive")
-    def forget(self, revision: str) -> None:
-        for r in self.find_revisions(revision):
+    def rm(self, revs: Iterable[Revision]) -> None:
+        for r in revs:
             r.remove()
 
     @locked(target=".backup", mode="exclusive")
@@ -319,10 +346,9 @@ class Repository(object):
         return True
 
     @locked(target=".backup", mode="exclusive")
-    def distrust(self, revision: str) -> None:
-        revs = self.find_revisions(revision)
-        self.prevent_remote_rev(revs)
+    def distrust(self, revs: Iterable[Revision]) -> None:
         for r in revs:
+            assert not r.server
             r.distrust()
             r.write_info()
 

@@ -1,6 +1,7 @@
 import datetime
 import os
 import random
+import sys
 from unittest import mock
 from zoneinfo import ZoneInfo
 
@@ -125,3 +126,12 @@ def no_subcommand(monkeypatch):
 
     monkeypatch.setattr(backy.source.CmdLineSource, "invoke", sync_invoke)
     monkeypatch.setattr(backy.source.AsyncCmdLineSource, "invoke", async_invoke)
+
+
+@pytest.fixture
+def argv():
+    original = sys.argv
+    new = original[:1]
+    sys.argv = new
+    yield new
+    sys.argv = original

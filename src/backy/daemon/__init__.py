@@ -350,8 +350,8 @@ class BackyDaemon(object):
             result.append(
                 dict(
                     job=job.name,
-                    sla="OK" if job.sla else "TOO OLD",
-                    sla_overdue=job.sla_overdue,
+                    sla="OK" if job.repository.sla else "TOO OLD",
+                    sla_overdue=job.repository.sla_overdue,
                     status=job.status,
                     last_time=history[-1].timestamp if history else None,
                     last_tags=(

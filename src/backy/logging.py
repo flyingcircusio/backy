@@ -3,7 +3,6 @@
 # repository for complete details.
 
 import io
-import os
 import string
 import sys
 from pathlib import Path

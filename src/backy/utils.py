@@ -1,6 +1,8 @@
 import asyncio
 import base64
 import contextlib
+import ctypes
+import ctypes.util
 import datetime
 import hashlib
 import mmap
@@ -12,8 +14,9 @@ import tempfile
 import time
 import typing
 from asyncio import Event
-from os import DirEntry
-from typing import IO, Callable, Iterable, List, Literal, Optional, TypeVar
+from json import JSONEncoder
+from pathlib import Path
+from typing import IO, Any, Callable, Iterable, List, Literal, Optional, TypeVar
 from zoneinfo import ZoneInfo
 
 import aiofiles.os as aos
@@ -22,7 +25,6 @@ import structlog
 import tzlocal
 
 from .ext_deps import CP
-from .fallocate import punch_hole
 
 _T = TypeVar("_T")
 _U = TypeVar("_U")
@@ -508,29 +510,152 @@ def duplicates(a: List[_T], b: List[_T]) -> List[_T]:
     return unique(i for i in a if i in b)
 
 
-def list_rindex(l: List[_T], v: _T) -> int:
-    return len(l) - l[-1::-1].index(v) - 1
+def list_rindex(L: List[_T], v: _T) -> int:
+    return len(L) - L[-1::-1].index(v) - 1
 
 
 @typing.overload
-def list_get(l: List[_T], i: int) -> _T | None:
+def list_get(L: List[_T], i: int) -> _T | None:
     ...
 
 
 @typing.overload
-def list_get(l: List[_T], i: int, default: _U) -> _T | _U:
+def list_get(L: List[_T], i: int, default: _U) -> _T | _U:
     ...
 
 
-def list_get(l, i, default=None):
-    return l[i] if -len(l) <= i < len(l) else default
+def list_get(L, i, default=None):
+    return L[i] if -len(L) <= i < len(L) else default
 
 
-def list_split(l: List[_T], v: _T) -> List[List[_T]]:
+def list_split(L: List[_T], v: _T) -> List[List[_T]]:
     res: List[List[_T]] = [[]]
-    for i in l:
+    for i in L:
         if i == v:
             res.append([])
         else:
             res[-1].append(i)
     return res
+
+
+class TimeOutError(RuntimeError):
+    pass
+
+
+class TimeOut(object):
+    def __init__(self, timeout, interval=1, raise_on_timeout=False):
+        """Creates a timeout controller.
+
+        TimeOut is typically used in a while loop to retry a command
+        for a while, e.g. for polling. Example::
+
+            timeout = TimeOut()
+            while timeout.tick():
+                do_something
+        """
+
+        self.remaining = timeout
+        self.cutoff = time.time() + timeout
+        self.interval = interval
+        self.timed_out = False
+        self.first = True
+        self.raise_on_timeout = raise_on_timeout
+
+    def tick(self):
+        """Perform a `tick` for this timeout.
+
+        Returns True if we should keep going or False if not.
+
+        Instead of returning False this can raise an exception
+        if raise_on_timeout is set.
+        """
+
+        self.remaining = self.cutoff - time.time()
+        self.timed_out = self.remaining <= 0
+
+        if self.timed_out:
+            if self.raise_on_timeout:
+                raise TimeOutError()
+            else:
+                return False
+
+        if self.first:
+            self.first = False
+        else:
+            time.sleep(self.interval)
+        return True
+
+
+# Adapted from
+# https://github.com/trbs/fallocate/issues/4
+
+
+log = structlog.stdlib.get_logger()
+
+FALLOC_FL_KEEP_SIZE = 0x01
+FALLOC_FL_PUNCH_HOLE = 0x02
+
+
+def _fake_fallocate(fd, mode, offset, len_):
+    log.debug("fallocate-non-hole-punching")
+    if len_ <= 0:
+        raise IOError("fallocate: length must be positive")
+    if mode & FALLOC_FL_PUNCH_HOLE:
+        old = fd.tell()
+        fd.seek(offset)
+        fd.write(b"\x00" * len_)
+        fd.seek(old)
+    else:
+        raise NotImplementedError(
+            "fake fallocate() supports only hole punching"
+        )
+
+
+def _make_fallocate():
+    libc_name = ctypes.util.find_library("c")
+    libc = ctypes.CDLL(libc_name, use_errno=True)
+    _fallocate = libc.fallocate
+    c_off_t = ctypes.c_size_t
+    _fallocate.restype = ctypes.c_int
+    _fallocate.argtypes = [ctypes.c_int, ctypes.c_int, c_off_t, c_off_t]
+
+    def fallocate(fd, mode, offset, len_):
+        if len_ <= 0:
+            raise IOError("fallocate: length must be positive")
+        res = _fallocate(fd.fileno(), mode, offset, len_)
+        if res != 0:
+            errno = ctypes.get_errno()
+            raise OSError(errno, "fallocate: " + os.strerror(errno))
+
+    return fallocate
+
+
+try:
+    fallocate = _make_fallocate()
+except AttributeError:  # pragma: no cover
+    fallocate = _fake_fallocate
+
+
+def punch_hole(f, offset, len_):
+    """Ensure that the specified byte range is zeroed.
+
+    Depending on the availability of fallocate(), this is either
+    delegated to the kernel or done manualy.
+    """
+    params = (f, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE, offset, len_)
+    try:
+        fallocate(*params)
+    except OSError:
+        _fake_fallocate(*params)
+
+
+class BackyJSONEncoder(JSONEncoder):
+    def default(self, o: Any) -> Any:
+        if hasattr(o, "to_dict"):
+            return o.to_dict()
+        elif isinstance(o, datetime.datetime):
+            return o.isoformat()
+        elif isinstance(o, Path):
+            return str(o)
+        else:
+            super().default(o)

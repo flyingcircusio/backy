@@ -3,7 +3,6 @@
 # repository for complete details.
 
 import io
-import os
 import string
 import sys
 from pathlib import Path
@@ -215,7 +214,7 @@ class ConsoleFileRenderer:
                 self._level_to_color[level] + level[0].upper() + RESET_ALL + " "
             )
 
-        job_name = event_dict.pop("job_name", "")
+        job_name = event_dict.pop("job_name", "-")
         sub_taskid = event_dict.pop("sub_taskid", None)
         if sub_taskid:
             job_name += f"[{sub_taskid}]"
@@ -232,10 +231,14 @@ class ConsoleFileRenderer:
             + RESET_ALL
             + " "
         )
-        if len(subsystem + event) > self._pad_event and hasattr(
-            utils, "log_data"
-        ):
-            raise RuntimeWarning("logline to long: " + subsystem + event)
+
+        test_mode = hasattr(utils, "log_data")
+        if test_mode and len(subsystem + event) > self._pad_event:
+            raise RuntimeWarning(
+                "subsystem and/or event names are too long: "
+                + subsystem
+                + event
+            )
 
         logger_name = event_dict.pop("logger", None)
         if logger_name is not None:
@@ -358,7 +361,6 @@ def init_logging(
     logfile: Optional[Path] = None,
     defaults: Optional[dict] = None,
 ):
-
     console_file_renderer = ConsoleFileRenderer(
         min_level="trace" if verbose else "info",
     )

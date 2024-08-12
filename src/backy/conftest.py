@@ -1,21 +1,37 @@
 import datetime
-import json
 import os
 import random
-import shutil
+import sys
 from unittest import mock
 from zoneinfo import ZoneInfo
 
 import pytest
 import structlog
+import tzlocal
 
-import backy.backup
 import backy.logging
-import backy.main
 import backy.schedule
+import backy.source
 from backy import utils
+from backy.file import FileSource
+from backy.repository import Repository
+from backy.revision import Revision
+from backy.schedule import Schedule
 
-fixtures = os.path.dirname(__file__) + "/tests/samples"
+
+def create_rev(repository, tags) -> Revision:
+    r = Revision.create(repository, tags, repository.log)
+    r.materialize()
+    repository.scan()
+    return repository.find_by_uuid(r.uuid)
+
+
+@pytest.fixture
+def tz_berlin(monkeypatch):
+    """Fix time zone to gain independece from runtime environment."""
+    monkeypatch.setattr(
+        tzlocal, "get_localzone", lambda: ZoneInfo("Europe/Berlin")
+    )
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -26,29 +42,12 @@ def fix_pytest_coverage_465():
         )
 
 
-@pytest.fixture
-def simple_file_config(tmp_path, monkeypatch, log):
-    shutil.copy(fixtures + "/simple_file/config", str(tmp_path))
-    monkeypatch.chdir(tmp_path)
-    b = backy.backup.Backup(tmp_path, log)
-    return b
-
-
 def pytest_assertrepr_compare(op, left, right):
     if left.__class__.__name__ != "Ellipsis":
         return
 
     report = left.compare(right)
     return report.diff
-
-
-@pytest.fixture(autouse=True)
-def log(monkeypatch):
-    def noop_init_logging(*args, **kwargs):
-        pass
-
-    monkeypatch.setattr(backy.logging, "init_logging", noop_init_logging)
-    return structlog.stdlib.get_logger()
 
 
 @pytest.fixture(autouse=True)
@@ -79,26 +78,25 @@ def seed_random(monkeypatch):
 
 @pytest.fixture
 def schedule():
-    schedule = backy.schedule.Schedule()
+    schedule = Schedule()
     schedule.configure({"daily": {"interval": "1d", "keep": 5}})
     return schedule
 
 
-@pytest.fixture(params=["chunked", "cowfile"])
-def backup(request, schedule, tmp_path, log):
-    with open(str(tmp_path / "config"), "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "source": {
-                    "type": "file",
-                    "filename": "test",
-                    "backend": request.param,
-                },
-                "schedule": schedule.to_dict(),
-            },
-            f,
-        )
-    return backy.backup.Backup(tmp_path, log)
+@pytest.fixture
+def repository(tmp_path, schedule, log):
+    repo = Repository(tmp_path, schedule, log)
+    repo.connect()
+    return repo
+
+
+@pytest.fixture(autouse=True)
+def log(monkeypatch):
+    def noop_init_logging(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(backy.logging, "init_logging", noop_init_logging)
+    return structlog.stdlib.get_logger()
 
 
 @pytest.fixture(scope="session")
@@ -116,3 +114,24 @@ def setup_structlog():
 @pytest.fixture(autouse=True)
 def reset_structlog(setup_structlog):
     utils.log_data = ""
+
+
+@pytest.fixture(autouse=True)
+def no_subcommand(monkeypatch):
+    def sync_invoke(self, *args):
+        return FileSource.main(*args)
+
+    async def async_invoke(self, *args):
+        return FileSource.main(*args)
+
+    monkeypatch.setattr(backy.source.CmdLineSource, "invoke", sync_invoke)
+    monkeypatch.setattr(backy.source.AsyncCmdLineSource, "invoke", async_invoke)
+
+
+@pytest.fixture
+def argv():
+    original = sys.argv
+    new = original[:1]
+    sys.argv = new
+    yield new
+    sys.argv = original

@@ -37,7 +37,7 @@ and use it the following way:
    data relevant to one thing that we are backing up.
 
 2. A **source** provides the data that should be backed up. Different kinds
-   of sources can model arbitrary data models: backy does not care whether 
+   of sources can model arbitrary data models: backy does not care whether
    you are backing up virtual disk images or S3 buckets.
 
 3. A **revision** specifies the state of the source at a certain point in time

@@ -35,25 +35,38 @@ class Store(object):
         self.db.row_factory = sqlite3.Row
         with self.db:
             self.db.execute(
-                "CREATE TABLE IF NOT EXISTS object(id INTEGER NOT NULL PRIMARY KEY, key VARCHAR NOT NULL, lastmodified timestamp NOT NULL, etag VARCHAR NOT NULL)"
+                """
+                CREATE TABLE IF NOT EXISTS object (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    key VARCHAR NOT NULL,
+                    lastmodified timestamp NOT NULL,
+                    etag VARCHAR NOT NULL
+                )
+                """
             )
             self.db.execute(
                 "CREATE INDEX IF NOT EXISTS obj_key_idx ON object(key)"
             )
             self.db.execute(
-                "CREATE TABLE IF NOT EXISTS revision(id INTEGER NOT NULL PRIMARY KEY, name VARCHAR NOT NULL UNIQUE)"
+                """\
+                CREATE TABLE IF NOT EXISTS revision (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    name VARCHAR NOT NULL UNIQUE
+                )
+                """
             )
             self.db.execute(
-                "CREATE TABLE IF NOT EXISTS rev_obj(revision INTEGER NOT NULL REFERENCES revision(id) ON DELETE CASCADE, object INTEGER NOT NULL REFERENCES object(id) ON DELETE CASCADE, PRIMARY KEY (revision, object))"
+                """CREATE TABLE IF NOT EXISTS rev_obj (
+                    revision INTEGER NOT NULL REFERENCES revision(id) ON DELETE CASCADE,
+                    object INTEGER NOT NULL REFERENCES object(id) ON DELETE CASCADE,
+                    PRIMARY KEY (revision, object))
+                """
             )
             self.db.execute(
                 "CREATE INDEX IF NOT EXISTS rev_obj_obj_idx ON rev_obj(object)"
             )
             self.db.execute(
                 "CREATE INDEX IF NOT EXISTS rev_obj_rev_idx ON rev_obj(revision)"
-            )
-            self.db.execute(
-                "CREATE TABLE IF NOT EXISTS rev_obj(revision INTEGER NOT NULL REFERENCES revision(id) ON DELETE CASCADE, object INTEGER NOT NULL REFERENCES object(id) ON DELETE CASCADE, PRIMARY KEY (revision, object))"
             )
 
     def get_rev_id(self, revision: Revision) -> Optional[int]:

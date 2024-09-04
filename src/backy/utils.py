@@ -567,8 +567,9 @@ class FuturePool:
             self.futures, return_when=return_when
         )
         for t in _done:
-            if t.exception():
-                raise t.exception()
+            e: Optional[BaseException] = t.exception()
+            if e is not None:
+                raise e
 
     async def submit(
         self, coro: Coroutine[Any, Any, _T] | Future[_T] | Callable[..., _T]

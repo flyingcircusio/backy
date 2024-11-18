@@ -172,7 +172,7 @@ class Backup(object):
 
     @property
     def contains_distrusted(self):
-        return any((r == Trust.DISTRUSTED for r in self.clean_history))
+        return any(r.trust == Trust.DISTRUSTED for r in self.clean_history)
 
     #################
     # Making backups

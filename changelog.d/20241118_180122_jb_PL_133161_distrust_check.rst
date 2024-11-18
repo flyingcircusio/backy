@@ -1,0 +1,3 @@
+.. A new scriv changelog fragment.
+
+- Fix check for distrusted revisions when writing to store

@@ -247,17 +247,12 @@ class Repository(object):
 
     @property
     def local_history(self):
-        """History without incomplete revisions."""
+        """History without remote revisions."""
         return self.get_history(local=True)
 
     @property
     def contains_distrusted(self) -> bool:
-        return any(
-            (
-                r == Trust.DISTRUSTED
-                for r in self.get_history(clean=True, local=True)
-            )
-        )
+        return any((r.trust == Trust.DISTRUSTED for r in self.local_history))
 
     def validate_tags(self, tags):
         missing_tags = (

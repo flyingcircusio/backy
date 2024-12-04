@@ -164,6 +164,18 @@ def test_gc(rbdsource, repository, log):
     assert len(list(rbdsource.store.ls())) == 0
 
 
+def test_open_distrusted(rbdsource, repository):
+    r1 = create_rev(repository, set())
+    rbdsource.open(r1, "wb")
+    assert not rbdsource.store.force_writes
+
+    r1.distrust()
+    r1.write_info()
+    r2 = create_rev(repository, set())
+    rbdsource.open(r2, "wb")
+    assert rbdsource.store.force_writes
+
+
 def test_smoketest_internal(rbdsource, repository, tmp_path, log):
     # These copies of data are intended to be different versions of the same
     # file.

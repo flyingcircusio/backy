@@ -38,11 +38,12 @@ let
         # replace poetry to avoid dependency on vulnerable python-cryptography package
         nativeBuildInputs = [ super.poetry-core ] ++ builtins.filter (p: p.pname or "" != "poetry") old.nativeBuildInputs;
       });
+      # This is hacky.
       packaging = super.packaging.overrideAttrs (oldAttrs: {
         src = fetchPypi {
           pname = "packaging";
-          version = "23.1";
-          hash = "sha256-o5KYDSts/6ZEQxiYvlSwBFFRMZ0efsNPDP7Uh2fdM08=";
+          version = "23.2";
+          hash = "sha256-BI+w6UBQNlGOqvSKVZU8dQwR4aG2jg3RqdYu0MCSz8U=";
         };
       });
     })

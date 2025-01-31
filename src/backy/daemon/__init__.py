@@ -21,7 +21,11 @@ from backy import logging
 from backy.repository import Repository, StatusDict
 from backy.revision import filter_manual_tags
 from backy.schedule import Schedule
-from backy.utils import has_recent_changes, is_dir_no_symlink
+from backy.utils import (
+    AdjustableBoundedSemaphore,
+    has_recent_changes,
+    is_dir_no_symlink,
+)
 
 from .api import BackyAPI
 from .scheduler import Job
@@ -45,7 +49,7 @@ class BackyDaemon(object):
     jobs: dict[str, Job]
     dead_repositories: dict[str, Repository]
 
-    backup_semaphores: dict[str, asyncio.BoundedSemaphore]
+    backup_semaphores: dict[str, AdjustableBoundedSemaphore]
     log: BoundLogger
     _lock: Optional[IO] = None
     reload_api: asyncio.Event
@@ -57,7 +61,9 @@ class BackyDaemon(object):
         self.log = log.bind(subsystem="daemon")
         self.config = {}
         self.schedules = {}
-        self.backup_semaphores = {}
+        self.backup_semaphores = {
+            n: AdjustableBoundedSemaphore(0) for n in ("slow", "fast")
+        }
         self.jobs = {}
         self.dead_repositories = {}
         self._lock = None
@@ -153,24 +159,8 @@ class BackyDaemon(object):
                     "invalid-backup", job_name=b.name, exc_style="short"
                 )
 
-        if (
-            not self.backup_semaphores
-            or self.backup_semaphores["slow"]._bound_value != self.worker_limit  # type: ignore
-        ):
-            # Adjusting the settings of a semaphore is not obviously simple. So
-            # here is a simplified version with hopefully clear semantics:
-            # when the semaphores are replaced all the currently running +
-            # waiting backups will still use the old semaphores. This may
-            # cause a total of 2*old_limit + 2*new_limit of jobs to be active
-            # at one time until this settings.
-            # We only change the semaphores when the settings actually change
-            # to avoid unnecessary overlap.
-            self.backup_semaphores["slow"] = asyncio.BoundedSemaphore(
-                self.worker_limit
-            )
-            self.backup_semaphores["fast"] = asyncio.BoundedSemaphore(
-                self.worker_limit
-            )
+        for sem in self.backup_semaphores.values():
+            sem.adjust(self.worker_limit)
 
     def lock(self):
         """Ensures that only a single daemon instance is active."""

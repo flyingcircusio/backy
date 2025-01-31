@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import os
 import sys
@@ -8,6 +9,7 @@ import pytest
 import backy.utils
 from backy.tests import Ellipsis
 from backy.utils import (
+    AdjustableBoundedSemaphore,
     SafeFile,
     copy_overwrite,
     files_are_equal,
@@ -337,3 +339,88 @@ def test_unmocked_now_returns_time_time_float():
     now = backy.utils.now()
     after = datetime.datetime.now(ZoneInfo("UTC"))
     assert before <= now <= after
+
+
+async def test_adjustable_bound_semaphore_simple():
+    async def acquire(sem, num, assert_full=True):
+        for _ in range(num):
+            assert not sem.locked()
+            await sem.acquire()
+        if assert_full:
+            assert sem.locked()
+
+    def release(sem, num, assert_empty=True):
+        for _ in range(num):
+            sem.release()
+        if assert_empty:
+            with pytest.raises(ValueError):
+                sem.release()
+
+    sem = AdjustableBoundedSemaphore(3)
+    sem.adjust(5)
+    sem.adjust(2)
+    release(sem, 0)
+    await acquire(sem, 2)
+    release(sem, 2)
+
+    sem.adjust(4)
+    await acquire(sem, 2, assert_full=False)
+    # bound: 4, value: 2
+    sem.adjust(0)
+    t = asyncio.create_task(sem.acquire())
+    await asyncio.sleep(0)
+    assert not t.done()
+    assert sem.locked()
+
+    release(sem, 2)
+    await asyncio.sleep(0)
+    assert not t.done()
+    assert sem.locked()
+
+    sem.adjust(1)
+    await t
+    assert sem.locked()
+
+
+async def test_adjustable_bound_semaphore_wait():
+    sem = AdjustableBoundedSemaphore(1)
+
+    await sem.acquire()
+    t = asyncio.create_task(sem.acquire())
+    await asyncio.sleep(0)
+    assert not t.done()
+
+    sem.release()
+    # task t gets immediately scheduled
+    assert sem._value == 0
+
+    sem.adjust(0)
+    # ... and continues to execute
+    await t
+    assert sem._value == 0
+
+
+async def test_adjustable_bound_semaphore_cancel():
+    """task is scheduled but cancelled before it can acquire"""
+    sem = AdjustableBoundedSemaphore(1)
+
+    await sem.acquire()
+    t = asyncio.create_task(sem.acquire())
+    await asyncio.sleep(0)
+    assert not t.done()
+
+    sem.release()
+    # task t gets immediately scheduled
+    assert sem._value == 0
+
+    t.cancel()
+    sem.adjust(0)
+    with pytest.raises(asyncio.CancelledError):
+        await t
+    # this is a bug: releases from scheduled but cancelled tasks will not be intercepted
+    assert sem._value == 1
+
+    await sem.acquire()
+    sem.release()
+    # it will however converge on the next release call
+    assert sem._value == 0

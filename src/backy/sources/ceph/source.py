@@ -96,12 +96,11 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
         self.diff(target, parent)
 
     def diff(self, target, parent):
-        self.log.info("diff")
         snap_from = "backy-" + parent.uuid
         snap_to = "backy-" + self.revision.uuid
+        self.log.info("diff", from_=snap_from, to=snap_to)
         s = self.rbd.export_diff(self._image_name + "@" + snap_to, snap_from)
-        t = target.open("r+b")
-        with s as source, t as target:
+        with s as source, target.open("r+b") as target:
             bytes = source.integrate(target, snap_from, snap_to)
         self.log.info("diff-integration-finished")
 
@@ -123,6 +122,7 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
             while True:
                 buf = source.read(4 * backy.utils.MiB)
                 if not buf:
+                    target.truncate()
                     break
                 target.write(buf)
                 copied += len(buf)

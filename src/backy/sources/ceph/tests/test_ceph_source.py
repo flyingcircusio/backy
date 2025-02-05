@@ -281,17 +281,33 @@ def test_full_backup(
     backup.scan()
 
     with mock.patch("backy.sources.ceph.rbd.RBDClient.export") as export:
-        export.return_value = io.BytesIO(b"Han loves Leia.")
+        export.return_value = io.BytesIO(b"Longer text to test size changes")
         backend = backend_factory(revision2, log)
         with source(revision2):
             source.full(backend)
 
     with backend.open("rb") as f:
-        assert f.read() == b"Han loves Leia."
+        assert f.read() == b"Longer text to test size changes"
+
+    # Now make another full backup. This overwrites the second.
+    revision3 = Revision(
+        backup, log, "a2", backy.utils.now() + datetime.timedelta(seconds=2)
+    )
+    revision3.materialize()
+    backup.scan()
+
+    with mock.patch("backy.sources.ceph.rbd.RBDClient.export") as export:
+        export.return_value = io.BytesIO(b"Short text")
+        backend = backend_factory(revision3, log)
+        with source(revision3):
+            source.full(backend)
+
+    with backend.open("rb") as f:
+        assert f.read() == b"Short text"
 
     current_snaps = source.rbd.snap_ls("test/foo")
     assert len(current_snaps) == 1
-    assert current_snaps[0]["name"] == "backy-a1"
+    assert current_snaps[0]["name"] == "backy-a2"
 
 
 @pytest.mark.parametrize(

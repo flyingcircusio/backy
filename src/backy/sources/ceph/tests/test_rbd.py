@@ -1,10 +1,8 @@
-import os
 import subprocess
 from unittest import mock
 
 import pytest
 
-import backy.sources.ceph
 from backy.ext_deps import RBD
 from backy.sources.ceph.diff import RBDDiffV1
 from backy.sources.ceph.rbd import RBDClient
@@ -102,7 +100,9 @@ def test_rbd_export_diff(popen, rbdclient, tmpdir):
     stdout = open(str(tmpdir / "foobar"), "wb+")
     stdout.write(RBDDiffV1.header)
     stdout.seek(0)
-    popen.return_value = mock.Mock(stdout=stdout)
+    popen.return_value = mock.Mock(
+        stdout=stdout, wait=mock.Mock(return_value=0)
+    )
     with rbdclient.export_diff("test/test04.root@new", "old") as diff:
         assert isinstance(diff, RBDDiffV1)
     popen.assert_has_calls(
@@ -144,13 +144,15 @@ def test_rbd_image_reader_explicit_closed(rbdclient, tmpdir):
 @mock.patch("subprocess.Popen")
 def test_rbd_export(popen, rbdclient, tmpdir):
     stdout = open(str(tmpdir / "rbd0"), "wb+")
-    popen.return_value = mock.Mock(stdout=stdout)
-    with rbdclient.export(mock.sentinel.image) as f:
+    popen.return_value = mock.Mock(
+        stdout=stdout, wait=mock.Mock(return_value=0)
+    )
+    with rbdclient.export("asdf") as f:
         assert f == stdout
     popen.assert_has_calls(
         [
             mock.call(
-                [RBD, "export", mock.sentinel.image, "-"],
+                [RBD, "export", "asdf", "-"],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 bufsize=mock.ANY,

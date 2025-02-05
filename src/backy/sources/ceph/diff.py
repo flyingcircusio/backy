@@ -137,8 +137,7 @@ class RBDDiffV1(object):
 
         for record in self.read_metadata():
             if isinstance(record, SnapSize):
-                target.seek(record.size)
-                target.truncate()
+                target.truncate(record.size)
             elif isinstance(record, FromSnap):
                 assert record.snapshot == snapshot_from
             elif isinstance(record, ToSnap):

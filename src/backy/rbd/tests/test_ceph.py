@@ -230,16 +230,30 @@ def test_full_backup(ceph_rbd, rbdsource, repository, tmp_path, log):
     repository.scan()
 
     with mock.patch("backy.rbd.rbd.RBDClient.export") as export:
-        export.return_value = io.BytesIO(b"Han loves Leia.")
+        export.return_value = io.BytesIO(b"Longer text to test size changes")
         with ceph_rbd(revision2), rbdsource.open(revision2, "wb") as f:
             ceph_rbd.full(f)
 
     with rbdsource.open(revision2) as f:
-        assert f.read() == b"Han loves Leia."
+        assert f.read() == b"Longer text to test size changes"
+
+    # Now make another full backup. This overwrites the second.
+    revision3 = Revision.create(repository, set(), log, uuid="a2")
+    revision3.timestamp = backy.utils.now() + datetime.timedelta(seconds=2)
+    revision3.materialize()
+    repository.scan()
+
+    with mock.patch("backy.rbd.rbd.RBDClient.export") as export:
+        export.return_value = io.BytesIO(b"Short text")
+        with ceph_rbd(revision3), rbdsource.open(revision3, "wb") as f:
+            ceph_rbd.full(f)
+
+    with rbdsource.open(revision3) as f:
+        assert f.read() == b"Short text"
 
     current_snaps = ceph_rbd.rbd.snap_ls("test/foo")
     assert len(current_snaps) == 1
-    assert current_snaps[0]["name"] == "backy-a1"
+    assert current_snaps[0]["name"] == "backy-a2"
 
 
 def test_full_backup_integrates_changes(

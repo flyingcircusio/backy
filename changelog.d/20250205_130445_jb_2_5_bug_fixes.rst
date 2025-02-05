@@ -1,0 +1,7 @@
+.. A new scriv changelog fragment.
+
+- truncate on full export
+- correctly discard dirty chunks on truncate
+- more efficiently fill empty blocks on truncate
+- check returncode for rbd export(-diff)
+- also check the size when verifying backups

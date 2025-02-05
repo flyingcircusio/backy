@@ -511,9 +511,9 @@ class CephRBD:
             return parent
 
     def diff(self, target: File, parent: Revision) -> None:
-        self.log.info("diff")
         snap_from = "backy-" + parent.uuid
         snap_to = "backy-" + self.revision.uuid
+        self.log.info("diff", from_=snap_from, to=snap_to)
         s = self.rbd.export_diff(self._image_name + "@" + snap_to, snap_from)
         with s as source:
             source.integrate(target, snap_from, snap_to)
@@ -527,6 +527,7 @@ class CephRBD:
         with s as source:
             while buf := source.read(4 * backy.utils.MiB):
                 target.write(buf)
+        target.truncate()
 
     def verify(
         self,

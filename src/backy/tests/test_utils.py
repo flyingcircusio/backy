@@ -287,12 +287,25 @@ def test_roughly_compare_files_1_changed_block(tmp_path):
         f.write(b"asdf" * 100)
 
     detected = 0
-    for x in range(20):
-        detected += files_are_roughly_equal(
+    for x in range(200):
+        detected += not files_are_roughly_equal(
             open("a", "rb"), open("b", "rb"), blocksize=10
         )
 
-    assert detected > 0 and detected <= 20
+    assert 0 < detected <= 200
+
+
+def test_roughly_compare_files_size_mismatch(tmp_path):
+    os.chdir(str(tmp_path))
+    with open("a", "wb") as f:
+        f.write(b"asdf" * 100)
+        f.write(b"bsdf")
+    with open("b", "wb") as f:
+        f.write(b"asdf" * 100)
+
+    assert not files_are_roughly_equal(
+        open("a", "rb"), open("b", "rb"), blocksize=10
+    )
 
 
 def test_roughly_compare_files_timeout(tmp_path):

@@ -477,3 +477,38 @@ def format_datetime_local(dt):
         dt.astimezone(tz).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S"),
         tz,
     )
+
+
+class AdjustableBoundedSemaphore(asyncio.Semaphore):
+    """A bounded Semaphore which can be adjusted.
+
+    Increasing the value is instantaneous.
+    Decreasing the value may be delayed until the necessary number of
+    release calls have been made.
+    It is safe to call adjust multiple times, even if the previous adjust
+    invocation did not fully take effect.
+    """
+
+    def __init__(self, value: int = 1):
+        self._target_bound_value = value
+        self._bound_value = value
+        super().__init__(value)
+
+    def release(self) -> None:
+        if self._value >= self._bound_value:
+            raise ValueError(
+                "AdjustableBoundedSemaphore released too many times"
+            )
+        if self._bound_value > self._target_bound_value:
+            self._bound_value -= 1
+            return
+        super().release()
+
+    def adjust(self, new_value: int) -> None:
+        self._target_bound_value = new_value
+        while self._bound_value < self._target_bound_value:
+            self._bound_value += 1
+            super().release()
+        while self._value > 0 and self._bound_value > self._target_bound_value:
+            self._bound_value -= 1
+            self._value -= 1

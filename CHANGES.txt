@@ -9,13 +9,22 @@ See the fragment files in the `changelog.d` directory.
 
 .. scriv-insert-here
 
-.. _changelog-2.5.1:
+.. _changelog-2.5.2:
 
-2.5.2 (unreleased)
+2.5.2 (2025-02-19)
 ==================
 
-- Nothing changed yet.
+- Fix check for distrusted revisions when writing to store
 
+- truncate on full export
+- correctly discard dirty chunks on truncate
+- more efficiently fill empty blocks on truncate
+- check returncode for rbd export(-diff)
+- also check the size when verifying backups
+
+- immediately propagate worker-slots changes to jobs
+
+.. _changelog-2.5.1:
 
 2.5.1 (2023-10-12)
 ==================

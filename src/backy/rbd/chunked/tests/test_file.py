@@ -210,7 +210,7 @@ def test_truncate(tmp_path, log):
 
     f = File(tmp_path / "asdf", store)
     for i in range(5):
-        # Write 20 chunks
+        # Write 5 chunks
         chunk = b" " * Chunk.CHUNK_SIZE
         f.write(chunk)
 
@@ -225,6 +225,44 @@ def test_truncate(tmp_path, log):
     # Interesting optimization: truncating re-uses the existing
     # chunk and only limits how much we read from it.
     assert f._mapping == {0: space_hash}
+    f.close()
+
+
+def test_truncate_dirty(tmp_path, log):
+    store = Store(tmp_path, log)
+
+    f = File(tmp_path / "asdf", store)
+    for i in range(5):
+        # Write 5 chunks
+        chunk = b" " * Chunk.CHUNK_SIZE
+        f.write(chunk)
+
+    # not flushed
+    assert f._mapping == {}
+
+    f.truncate(Chunk.CHUNK_SIZE)
+    f.seek(0)
+    assert f.read() == b" " * Chunk.CHUNK_SIZE
+    space_hash = "c01b5d75bfe6a1fa5bca6e492c5ab09a"
+
+    # update _mapping
+    f.flush()
+    assert f._mapping == {0: space_hash}
+    f.close()
+
+
+def test_truncate_increase(tmp_path, log):
+    store = Store(tmp_path, log)
+
+    f = File(tmp_path / "asdf", store)
+    assert f.read() == b""
+
+    f.write(b"asdf")
+    f.seek(0)
+
+    f.truncate(20 + Chunk.CHUNK_SIZE)
+    assert f.tell() == 0
+    assert f.read() == b"asdf" + b"\00" * (Chunk.CHUNK_SIZE + 20 - 4)
     f.close()
 
 

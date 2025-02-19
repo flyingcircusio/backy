@@ -3,7 +3,7 @@ import json
 import struct
 import subprocess
 from collections import namedtuple
-from typing import IO, BinaryIO, Iterator, Optional
+from typing import IO, BinaryIO, Iterator, Optional, cast
 
 from structlog.stdlib import BoundLogger
 
@@ -43,10 +43,7 @@ class RBDClient(object):
         )
 
     def _rbd(self, cmd, format=None):
-        cmd = filter(None, cmd)
-        rbd = [RBD]
-
-        rbd.extend(cmd)
+        rbd = [RBD, *filter(None, cmd)]
 
         if format == "json":
             rbd.append("--format=json")
@@ -59,6 +56,29 @@ class RBDClient(object):
             result = json.loads(result)
 
         return result
+
+    @contextlib.contextmanager
+    def _rbd_stream(self, cmd: list[str]) -> Iterator[IO[bytes]]:
+        rbd = [RBD, *filter(None, cmd)]
+
+        self.log.debug("executing-command", command=" ".join(rbd))
+        proc = subprocess.Popen(
+            rbd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            # Have a rather largish buffer size, so rbd has some room to
+            # push its data to, when we are busy writing.
+            bufsize=8 * CHUNK_SIZE,
+        )
+        stdout = cast(IO[bytes], proc.stdout)
+        try:
+            yield stdout
+        finally:
+            stdout.close()
+            rc = proc.wait()
+            self.log.debug("executed-command", command=" ".join(rbd), rc=rc)
+            if rc:
+                raise subprocess.CalledProcessError(rc, proc.args)
 
     def exists(self, snapspec: str):
         try:
@@ -128,27 +148,21 @@ class RBDClient(object):
 
     @contextlib.contextmanager
     def export_diff(self, new: str, old: str) -> Iterator["RBDDiffV1"]:
-        self.log.info("export-diff")
         if CEPH_RBD_SUPPORTS_WHOLE_OBJECT_DIFF:
             EXPORT_WHOLE_OBJECT = ["--whole-object"]
         else:
             EXPORT_WHOLE_OBJECT = []
-        proc = subprocess.Popen(
-            [RBD, "export-diff", new, "--from-snap", old]
-            + EXPORT_WHOLE_OBJECT
-            + ["-"],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            # Have a rather largish buffer size, so rbd has some room to
-            # push its data to, when we are busy writing.
-            bufsize=8 * CHUNK_SIZE,
-        )
-        assert proc.stdout is not None
-        try:
-            yield RBDDiffV1(proc.stdout)
-        finally:
-            proc.stdout.close()
-            proc.wait()
+        with self._rbd_stream(
+            [
+                "export-diff",
+                new,
+                "--from-snap",
+                old,
+                *EXPORT_WHOLE_OBJECT,
+                "-",
+            ]
+        ) as stdout:
+            yield RBDDiffV1(stdout)
 
     @contextlib.contextmanager
     def image_reader(self, image: str) -> Iterator[BinaryIO]:
@@ -161,22 +175,9 @@ class RBDClient(object):
             self.unmap(mapped["device"])
 
     @contextlib.contextmanager
-    def export(self, image: str) -> Iterator[IO]:
-        self.log.info("export")
-        proc = subprocess.Popen(
-            [RBD, "export", image, "-"],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            # Have a rather largish buffer size, so rbd has some room to
-            # push its data to, when we are busy writing.
-            bufsize=4 * CHUNK_SIZE,
-        )
-        assert proc.stdout is not None
-        try:
-            yield proc.stdout
-        finally:
-            proc.stdout.close()
-            proc.wait()
+    def export(self, image: str) -> Iterator[IO[bytes]]:
+        with self._rbd_stream(["export", image, "-"]) as stdout:
+            yield stdout
 
 
 def unpack_from(fmt, f):
@@ -306,8 +307,7 @@ class RBDDiffV1(object):
 
         for record in self.read_metadata():
             if isinstance(record, SnapSize):
-                target.seek(record.size)
-                target.truncate()
+                target.truncate(record.size)
             elif isinstance(record, FromSnap):
                 assert record.snapshot == snapshot_from
             elif isinstance(record, ToSnap):

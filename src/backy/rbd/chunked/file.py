@@ -167,40 +167,57 @@ class File(object):
         if position < 0:
             raise ValueError("Can not seek before the beginning of a file.")
         if position > self.size:
-            # Fill up the missing parts with zeroes.
-            target = position
-            self.seek(self.size)
-            # This is not performance optimized at all. We could do some
-            # lower-level magic to avoid copying data all over all the time.
-            # Ideally we would fill up the last existing chunk and then
-            # just inject the well-known "zero chunk" into the map.
-            filler = position - self.size
-            while filler > 0:
-                chunk = min(filler, 4 * 1024 * 1024) * b"\00"
-                filler = filler - len(chunk)
-                self.write(chunk)
-
-            # Filling up should have caused our position to have moved properly
-            # and the size also reflecting this already.
-            assert self._position == target
-            assert self.size == target
+            self.truncate(position)
 
         self._position = position
         return position
 
-    def truncate(self, size: Optional[int] = None) -> None:
+    def truncate(self, target: Optional[int] = None, /) -> None:
         assert "w" in self.mode and not self.closed
-        if size is None:
-            size = self._position
-        # Update content hash
-        self.size = size
+        if target is None:
+            target = self._position
         # Remove chunks past the size
         to_remove = set(
-            key for key in self._mapping if key * Chunk.CHUNK_SIZE > size
+            key
+            for key in set(self._mapping) | set(self._chunks)
+            if key * Chunk.CHUNK_SIZE >= target
         )
         for key in to_remove:
-            del self._mapping[key]
-        self.flush()
+            self._mapping.pop(key, None)
+            self._chunks.pop(key, None)
+
+        # Fill up the missing parts with zeroes.
+        orig_pos = self._position
+        self._position = self.size
+
+        if target > self._position:
+            # fill first chunk
+            data = min(target - self._position, Chunk.CHUNK_SIZE) * b"\00"
+            chunk, _, offset = self._current_chunk()
+            written, _ = chunk.write(offset, data)
+            self._position += written
+
+        if target > self._position:
+            chunk, chunk_id, offset = self._current_chunk()
+            assert offset == 0
+            written, _ = chunk.write(offset, Chunk.CHUNK_SIZE * b"\00")
+            assert written == Chunk.CHUNK_SIZE
+            self._position += Chunk.CHUNK_SIZE
+            empty_chunk_hash = chunk.flush()
+            assert empty_chunk_hash
+            self._mapping[chunk_id] = empty_chunk_hash
+
+            while target > self._position:
+                chunk_id = self._position // Chunk.CHUNK_SIZE
+                self._mapping[chunk_id] = empty_chunk_hash
+                self._position += Chunk.CHUNK_SIZE
+
+        # Filling up should have caused our position to have moved properly.
+        # Note that we will always fill full chunks. This is safe as data after
+        # the size limit can not be revealed.
+        assert self._position >= target
+        self._position = orig_pos
+        self.size = target
 
     def read(self, size: int = -1) -> bytes:
         assert "r" in self.mode and not self.closed

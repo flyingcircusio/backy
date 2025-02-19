@@ -391,8 +391,18 @@ def files_are_roughly_equal(
     timeout=5 * 60,
     report: Callable[[bytes, bytes, int], None] = lambda a, b, c: None,
 ) -> bool:
-    a.seek(0, os.SEEK_END)
-    size = a.tell()
+    size = a.seek(0, os.SEEK_END)
+    if size != (size_b := b.seek(0, os.SEEK_END)):
+        log.error(
+            "files-roughly-equal-size-mismatch",
+            size_a=size,
+            size_b=size_b,
+        )
+        min_size = min(size, size_b)
+        a.seek(min_size)
+        b.seek(min_size)
+        report(a.read(blocksize), b.read(blocksize), min_size)  # size mismatch
+        return False
     blocks = size // blocksize
     blocklist = range(0, max(blocks, 1))
     sample = random.sample(blocklist, max(int(samplesize * blocks), 1))

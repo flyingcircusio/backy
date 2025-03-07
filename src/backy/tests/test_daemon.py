@@ -20,6 +20,13 @@ from backy.scheduler import Job
 from backy.tests import Ellipsis
 
 
+async def cancel_background_tasks(names=("save-status", "purge-old-files")):
+    tasks = [t for t in asyncio.all_tasks() if t.get_name() in names]
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
 @pytest.fixture
 async def daemon(tmpdir, event_loop, log):
     daemon = BackyDaemon(str(tmpdir / "config"), log)
@@ -292,6 +299,7 @@ async def test_task_generator(daemon, clock, tmpdir, monkeypatch, tz_berlin):
 async def test_task_generator_backoff(
     daemon, clock, tmpdir, monkeypatch, tz_berlin
 ):
+    await cancel_background_tasks()
     for j in daemon.jobs.values():
         await cancel_and_wait(j)
     job = daemon.jobs["test01"]
@@ -338,6 +346,7 @@ async def test_task_generator_backoff(
         Ellipsis(
             """\
 ... D test01               job/loop-started               \n\
+... D test01               quarantine/scan                entries=0
 ... I test01               job/waiting                    next_tags='daily' next_time='2015-09-02 07:32:51'
 ... E test01               job/exception                  exception_class='builtins.Exception' exception_msg=''
 exception>\tTraceback (most recent call last):
@@ -347,6 +356,7 @@ exception>\t  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_c
 exception>\t    raise Exception()
 exception>\tException
 ... W test01               job/backoff                    backoff=120
+... D test01               quarantine/scan                entries=0
 ... I test01               job/waiting                    next_tags='daily' next_time='2015-09-01 09:08:47'
 ... E test01               job/exception                  exception_class='builtins.Exception' exception_msg=''
 exception>\tTraceback (most recent call last):
@@ -356,6 +366,7 @@ exception>\t  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_c
 exception>\t    raise Exception()
 exception>\tException
 ... W test01               job/backoff                    backoff=240
+... D test01               quarantine/scan                entries=0
 ... I test01               job/waiting                    next_tags='daily' next_time='2015-09-01 09:10:47'
 ... E test01               job/exception                  exception_class='builtins.Exception' exception_msg=''
 exception>\tTraceback (most recent call last):
@@ -365,8 +376,10 @@ exception>\t  File "/.../src/backy/tests/test_daemon.py", line ..., in failing_c
 exception>\t    raise Exception()
 exception>\tException
 ... W test01               job/backoff                    backoff=480
+... D test01               quarantine/scan                entries=0
 ... I test01               job/waiting                    next_tags='daily' next_time='2015-09-01 09:14:47'
 ... I test01               job/stop                       \n\
+... D test01               quarantine/scan                entries=0
 ... I test01               job/waiting                    next_tags='daily' next_time='2015-09-02 07:32:51'
 """
         )
@@ -470,7 +483,8 @@ def test_check_manual_tags(daemon, setup_structlog, log):
 def test_check_quarantine(daemon, setup_structlog, log):
     setup_structlog.default_job_name = "-"
     job = daemon.jobs["test01"]
-    job.backup.quarantine.add_report(QuarantineReport(b"a", b"b", 0))
+    report = QuarantineReport(b"a", b"b", 0)
+    job.backup.quarantine.add_report(report)
     daemon._write_status_file()
 
     utils.log_data = ""
@@ -478,12 +492,24 @@ def test_check_quarantine(daemon, setup_structlog, log):
         daemon.check()
     except SystemExit as exit:
         assert exit.code == 1
+
+    os.unlink(p.join(job.backup.quarantine.path, f"{report.uuid}.report"))
+    daemon._write_status_file()
+    try:
+        daemon.check()
+    except SystemExit as exit:
+        assert exit.code == 0
+
     assert (
         Ellipsis(
             """\
 ... I -                    daemon/read-config             ...
 ... W test01               daemon/check-quarantined       reports=1
 ... I -                    daemon/check-exit              exitcode=1 jobs=2
+... D test01               quarantine/scan                entries=0
+... D foo00                quarantine/scan                entries=0
+... I -                    daemon/read-config             ...
+... I -                    daemon/check-exit              exitcode=0 jobs=2
 """
         )
         == utils.log_data

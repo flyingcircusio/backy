@@ -92,7 +92,7 @@ class Repository(object):
     def add_report(self, report: ProblemReport) -> None:
         self.log.info("add-report", uuid=report.uuid)
         report.store(self.report_path, self.log)
-        self.report_ids.append(report.uuid)
+        self.scan_reports()
 
     def scan_reports(self) -> None:
         self.report_ids = [

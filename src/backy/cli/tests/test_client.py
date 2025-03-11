@@ -331,11 +331,16 @@ async def test_check_manual_tags(daemon, command, log):
 
 async def test_check_quarantine(daemon, command, log):
     job = daemon.jobs["test01"]
-    job.repository.add_report(ChunkMismatchReport(b"a", b"b", 0))
+    report = ChunkMismatchReport(b"a", b"b", 0)
+    job.repository.add_report(report)
 
     utils.log_data = ""
     exitcode = await command("check", {})
     assert exitcode == 1
+
+    job.repository.report_path.joinpath(f"{report.uuid}.report").unlink()
+    exitcode = await command("check", {})
+    assert exitcode == 0
     assert (
         Ellipsis(
             """\
@@ -347,6 +352,13 @@ async def test_check_quarantine(daemon, command, log):
 ... D foo00                repo/scan-reports                   entries=0
 ... W test01               command/check-reports               reports=1
 ... D -                    command/return-code                 code=1
+... D -                    command/call                        func='check' func_args={}
+... D ~[ABCD]              api/new-conn                        path='/v1/jobs' query=''
+... I ~cli[ABCD]           api/get-jobs                        \n\
+... D ~cli[ABCD]           api/request-result                  response=... status_code=200
+... D test01               repo/scan-reports                   entries=0
+... D foo00                repo/scan-reports                   entries=0
+... D -                    command/return-code                 code=0
 """
         )
         == utils.log_data

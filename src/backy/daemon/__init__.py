@@ -329,7 +329,7 @@ class BackyDaemon(object):
         for job in list(self.jobs.values()):
             if filter_re and not filter_re.search(job.name):
                 continue
-            job.repository.scan()
+            job.repository.connect()
             manual_tags = set()
             unsynced_revs = 0
             history = job.repository.clean_history

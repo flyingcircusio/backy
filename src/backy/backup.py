@@ -100,6 +100,7 @@ class Backup(object):
         self._lock_fds = {}
 
         self.path = p.realpath(path)
+        self.quarantine = QuarantineStore(self.path, self.log)
         self.scan()
 
         # Load config from file
@@ -149,9 +150,8 @@ class Backup(object):
                 "Unsupported backend_type '{}'".format(self.backend_type)
             )
 
-        self.quarantine = QuarantineStore(self.path, self.log)
-
     def scan(self):
+        self.quarantine.scan()
         self.history = []
         self._by_uuid = {}
         for f in glob.glob(p.join(self.path, "*.rev")):

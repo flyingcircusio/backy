@@ -60,7 +60,6 @@ class QuarantineStore:
         if not p.exists(self.chunks_path):
             os.mkdir(self.chunks_path)
         self.log = log.bind(subsystem="quarantine")
-        self.scan()
 
     def add_report(self, report: QuarantineReport):
         self.log.info("add-report", uuid=report.uuid)
@@ -68,7 +67,7 @@ class QuarantineStore:
         self._store_chunk(report.target_chunk, report.target_hash)
         self._store_report(report)
 
-        self.report_ids.append(report.uuid)
+        self.scan()
 
     def _store_report(self, report: QuarantineReport):
         self.log.debug("store-report", uuid=report.uuid)
@@ -105,6 +104,7 @@ class QuarantineStore:
 
     def scan(self):
         self.report_ids = [
-            p.basename(g) for g in glob.glob(p.join(self.path, "*.report"))
+            p.basename(g).removesuffix(".report")
+            for g in glob.glob(p.join(self.path, "*.report"))
         ]
         self.log.debug("scan", entries=len(self.report_ids))

@@ -61,13 +61,13 @@ let
       nh3 =
         let
           getCargoHash = version: {
-            "0.2.17" = "sha256-WomlVzKOUfcgAWGJInSvZn9hm+bFpgc4nJbRiyPCU64=";
+            "0.2.21" = "sha256-1Ytca/GiHidR8JOcz+DydN6N/iguLchbP8Wnrd/0NTk";
           }.${version} or (
             lib.warn "Unknown nh3 version: '${version}'. Please update getCargoHash." lib.fakeHash
           );
         in
         super.nh3.overridePythonAttrs (old: {
-          cargoDeps = rustPlatform.fetchCargoTarball {
+          cargoDeps = rustPlatform.fetchCargoVendor {
             inherit (old) src;
             name = "${old.pname}-${old.version}";
             hash = getCargoHash old.version;
@@ -85,21 +85,21 @@ let
       cryptography =
         let
           getCargoHash = version: {
-            "42.0.5" = "sha256-Pw3ftpcDMfZr/w6US5fnnyPVsFSB9+BuIKazDocYjTU=";
+            "44.0.2" = "sha256-HbUsV+ABE89UvhCRZYXr+Q/zRDKUy+HgCVdQFHqaP4o=";
           }.${version} or (
             lib.warn "Unknown cryptography version: '${version}'. Please update getCargoHash." lib.fakeHash
           );
-          sha256 = getCargoHash super.cryptography.version;
+          hash = getCargoHash super.cryptography.version;
           isWheel = lib.hasSuffix ".whl" super.cryptography.src;
         in
         super.cryptography.overridePythonAttrs (old:
           lib.optionalAttrs (lib.versionAtLeast old.version "3.5" && !isWheel) {
             cargoDeps =
-              rustPlatform.fetchCargoTarball {
+              rustPlatform.fetchCargoVendor {
                 inherit (old) src;
                 sourceRoot = "${old.pname}-${old.version}/${old.cargoRoot}";
                 name = "${old.pname}-${old.version}";
-                inherit sha256;
+                inherit hash;
               };
           }
         );

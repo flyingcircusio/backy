@@ -1,7 +1,8 @@
 {
   poetry2nix,
   lzo,
-  python310,
+  # currently needs to be hardcoded here, as it is hardcoded in the pyproject.toml as well
+  python312,
   mkShellNoCC,
   poetry,
   runCommand,
@@ -50,18 +51,18 @@ let
   ];
   poetryEnv = poetry2nix.mkPoetryEnv {
     projectDir = ./.;
-    python = python310;
+    python = python312;
     overrides = poetryOverrides;
     editablePackageSources = {
       backy = ./src;
     };
   };
   poetryApplication = poetry2nix.mkPoetryApplication {
-      projectDir = ./.;
-      doCheck = true;
-      python = python310;
-      overrides = poetryOverrides;
-    };
+    projectDir = ./.;
+    doCheck = true;
+    python = python312;
+    overrides = poetryOverrides;
+  };
 in
 {
   packages = {

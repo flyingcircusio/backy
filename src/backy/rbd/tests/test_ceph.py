@@ -158,7 +158,8 @@ def test_choose_diff_with_snapshot(ceph_rbd, repository, log):
 def test_diff_backup(ceph_rbd, rbdsource, repository, tmp_path, log):
     """When doing a diff backup between two revisions with snapshot, the RBDDiff needs
     to be called properly, a snapshot for the new revision needs to be created and the
-    snapshot of the previous revision needs to be removed after the successfull backup."""
+    snapshot of the previous revision needs to be removed after the successfull backup.
+    """
 
     parent = Revision.create(
         repository, set(), log, uuid="ed968696-5ab0-4fe0-af1c-14cadab44661"

@@ -215,9 +215,11 @@ class Command(object):
                 duration,
                 tags,
                 r.trust.value,
-                f"[underline italic]{r.server}[/]"
-                if r.pending_changes
-                else r.server,
+                (
+                    f"[underline italic]{r.server}[/]"
+                    if r.pending_changes
+                    else r.server
+                ),
             )
 
         rprint(t)

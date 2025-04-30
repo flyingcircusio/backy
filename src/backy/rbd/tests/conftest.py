@@ -73,16 +73,13 @@ class CephCLIBase:
         del args["func"]
         return func(**args)
 
-    def version(self):
-        ...
+    def version(self): ...
 
-    def map(self, snapspec, read_only):
-        ...
+    def map(self, snapspec, read_only): ...
 
     # implementation restriction: `rbd unmap` takes imagespecs, snapspecs, or devices
     # as args, AFAIK we only use devices as args in backy for now
-    def unmap(self, device):
-        ...
+    def unmap(self, device): ...
 
     def showmapped(self, format):
         assert format == "json"
@@ -157,7 +154,8 @@ class CephCLIBase:
     def _register_image_for_snaps(self, imagespec):
         """helper function to register an image as present in test setup, such that it
         can receive snapshots.
-        Reason: `rbd snap` fails for snapshot operations on images that do not exist."""
+        Reason: `rbd snap` fails for snapshot operations on images that do not exist.
+        """
         self.snaps[imagespec] = []
 
     @staticmethod

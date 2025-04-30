@@ -33,8 +33,7 @@ class ProblemReport(ABC):
         }
 
     @abstractmethod
-    def get_message(self) -> str:
-        ...
+    def get_message(self) -> str: ...
 
     def store(self, dir: Path, log: BoundLogger) -> None:
         log.debug("store-report", uuid=self.uuid)

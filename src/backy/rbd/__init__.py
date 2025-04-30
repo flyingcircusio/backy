@@ -110,9 +110,10 @@ class RBDSource(Source[RBDRestoreArgs]):
     ) -> File:
         if "w" in mode or "+" in mode:
             if parent and not self._path_for_revision(revision).exists():
-                with self._path_for_revision(revision).open(
-                    "wb"
-                ) as new, self._path_for_revision(parent).open("rb") as old:
+                with (
+                    self._path_for_revision(revision).open("wb") as new,
+                    self._path_for_revision(parent).open("rb") as old,
+                ):
                     # This is ok, this is just metadata, not the actual data.
                     new.write(old.read())
         file = File(self._path_for_revision(revision), self.store, mode)

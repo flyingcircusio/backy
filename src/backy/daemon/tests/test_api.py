@@ -587,19 +587,19 @@ async def test_wait_for_leader_crash(jobs_dry_run, monkeypatch):
 ...
 ... AAAA I test01[N6PW]         job/local-revs                      [server-1] local_revs=0
 ... AAAA I test01[N6PW]         job/duplicate-job                   [server-1] remote_revs=1 server='server-0'
-... AAAA I test01[N6PW]         job/server-unavailable              [server-1] exception_class='aiohttp.client_exceptions.ClientConnectorError' exception_msg="Cannot connect to host ... ssl:default [Connect call failed (...)]" server='server-2'
+... AAAA I test01[N6PW]         job/server-unavailable              [server-1] exception_class='aiohttp.client_exceptions.ClientConnectorError' exception_msg="Cannot connect to host ..." server='server-2'
 ... AAAA I test01[N6PW]         job/leader-found                    [server-1] leader='server-0' leader_revs=1
 ... AAAA D test01[N6PW]         job/updating-status                 [server-1] status='monitoring (server-0)'
 ...
 ... AAAA I test01[A4WN]         job/local-revs                      [server-0] local_revs=1
 ... AAAA I test01[A4WN]         job/duplicate-job                   [server-0] remote_revs=0 server='server-1'
-... AAAA I test01[A4WN]         job/server-unavailable              [server-0] exception_class='aiohttp.client_exceptions.ClientConnectorError' exception_msg="Cannot connect to host ... ssl:default [Connect call failed (...)]" server='server-2'
+... AAAA I test01[A4WN]         job/server-unavailable              [server-0] exception_class='aiohttp.client_exceptions.ClientConnectorError' exception_msg="Cannot connect to host ..." server='server-2'
 ... AAAA I test01[A4WN]         job/leader-found                    [server-0] leader=None leader_revs=1
 ... AAAA D test01[A4WN]         job/updating-status                 [server-0] status='waiting for worker slot (fast)'
 ... AAAA D test01[A4WN]         job/updating-status                 [server-0] status='running (fast)'
 ... AAAA I -                    daemon/api-reconfigure              [server-0] \n\
 ...
-... AAAA W test01[N6PW]         job/leader-failed                   [server-1] exception_class='aiohttp.client_exceptions.ClientResponseError' exception_msg="401, message='Unauthorized', url=URL('...')" leader='server-0'
+... AAAA W test01[N6PW]         job/leader-failed                   [server-1] exception_class='aiohttp.client_exceptions.ClientResponseError' exception_msg="401, message='Unauthorized', url='...'" leader='server-0'
 ... AAAA D test01[N6PW]         job/updating-status                 [server-1] status='waiting for worker slot (slow)'
 ... AAAA D test01[N6PW]         job/updating-status                 [server-1] status='running (slow)'
 ... AAAA D -                    revision/writing-info               revision_uuid='...' tags='daily'

@@ -525,13 +525,11 @@ def list_rindex(L: List[_T], v: _T) -> int:
 
 
 @typing.overload
-def list_get(L: List[_T], i: int) -> _T | None:
-    ...
+def list_get(L: List[_T], i: int) -> _T | None: ...
 
 
 @typing.overload
-def list_get(L: List[_T], i: int, default: _U) -> _T | _U:
-    ...
+def list_get(L: List[_T], i: int, default: _U) -> _T | _U: ...
 
 
 def list_get(L, i, default=None):

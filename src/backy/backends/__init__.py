@@ -14,12 +14,10 @@ class BackyBackend(ABC):
     @abstractmethod
     def __init__(
         self, revision: "backy.revision.Revision", log: BoundLogger
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
-    def open(self, mode="rb"):
-        ...
+    def open(self, mode="rb"): ...
 
     def purge(self) -> None:
         pass

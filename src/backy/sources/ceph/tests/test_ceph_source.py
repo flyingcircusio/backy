@@ -194,7 +194,8 @@ def test_diff_backup(
 ):
     """When doing a diff backup between two revisions with snapshot, the RBDDiff needs
     to be called properly, a snapshot for the new revision needs to be created and the
-    snapshot of the previous revision needs to be removed after the successfull backup."""
+    snapshot of the previous revision needs to be removed after the successfull backup.
+    """
     from backy.sources.ceph.diff import RBDDiffV1
 
     source = ceph_rbd_imagesource

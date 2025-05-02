@@ -9,18 +9,15 @@ import backy.revision
 
 class BackySource(ABC):
     @abstractmethod
-    def backup(self, target: "backy.backends.BackyBackend") -> None:
-        ...
+    def backup(self, target: "backy.backends.BackyBackend") -> None: ...
 
     @abstractmethod
-    def verify(self, target: "backy.backends.BackyBackend") -> bool:
-        ...
+    def verify(self, target: "backy.backends.BackyBackend") -> bool: ...
 
 
 class BackySourceContext(ABC):
     @abstractmethod
-    def __enter__(self) -> BackySource:
-        ...
+    def __enter__(self) -> BackySource: ...
 
     def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
         pass
@@ -28,14 +25,12 @@ class BackySourceContext(ABC):
 
 class BackySourceFactory(ABC):
     @abstractmethod
-    def __init__(self, config: dict, log: BoundLogger) -> None:
-        ...
+    def __init__(self, config: dict, log: BoundLogger) -> None: ...
 
     @abstractmethod
     def __call__(
         self, revision: "backy.revision.Revision"
-    ) -> BackySourceContext:
-        ...
+    ) -> BackySourceContext: ...
 
     @abstractmethod
     def ready(self) -> bool:

@@ -127,6 +127,7 @@ class ConsoleFileRenderer:
     LEVELS = [
         "alert",
         "critical",
+        "exception",
         "error",
         "warn",
         "warning",
@@ -151,6 +152,7 @@ class ConsoleFileRenderer:
         self._level_to_color = {
             "alert": RED,
             "critical": RED,
+            "exception": RED,
             "error": RED,
             "warn": YELLOW,
             "warning": YELLOW,

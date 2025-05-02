@@ -25,12 +25,16 @@ repos:
 - hooks:
   - id: black
   repo: https://github.com/psf/black
-  rev: 22.12.0
+  rev: 25.1.0
 - hooks:
   - id: mypy
     additional_dependencies:
       - types-PyYAML==5.4.0
       - types-setuptools
       - types-tzlocal==4.2
+      - types-aiofiles==23.2.0.20240311
+    exclude: tests
+    args:
+      - --ignore-missing-imports
   repo: https://github.com/pre-commit/mirrors-mypy
-  rev: 'v1.0.1'
+  rev: 'v1.8.0'

@@ -1,7 +1,8 @@
 {
   poetry2nix,
   lzo,
-  python310,
+  # currently needs to be hardcoded here, as it is hardcoded in the pyproject.toml as well
+  python312,
   mkShellNoCC,
   poetry,
   runCommand,
@@ -38,30 +39,22 @@ let
         # replace poetry to avoid dependency on vulnerable python-cryptography package
         nativeBuildInputs = [ super.poetry-core ] ++ builtins.filter (p: p.pname or "" != "poetry") old.nativeBuildInputs;
       });
-      # This is hacky.
-      packaging = super.packaging.overrideAttrs (oldAttrs: {
-        src = fetchPypi {
-          pname = "packaging";
-          version = "23.2";
-          hash = "sha256-BI+w6UBQNlGOqvSKVZU8dQwR4aG2jg3RqdYu0MCSz8U=";
-        };
-      });
     })
   ];
   poetryEnv = poetry2nix.mkPoetryEnv {
     projectDir = ./.;
-    python = python310;
+    python = python312;
     overrides = poetryOverrides;
     editablePackageSources = {
       backy = ./src;
     };
   };
   poetryApplication = poetry2nix.mkPoetryApplication {
-      projectDir = ./.;
-      doCheck = true;
-      python = python310;
-      overrides = poetryOverrides;
-    };
+    projectDir = ./.;
+    doCheck = true;
+    python = python312;
+    overrides = poetryOverrides;
+  };
 in
 {
   packages = {

@@ -102,9 +102,9 @@ class BackyDaemon(object):
             and self.api_port
             and "url" not in self.api_cli_default
         ):
-            self.api_cli_default[
-                "url"
-            ] = f"http://{self.api_addrs[0]}:{self.api_port}"
+            self.api_cli_default["url"] = (
+                f"http://{self.api_addrs[0]}:{self.api_port}"
+            )
 
         new = {}
         for name, config in self.config["schedules"].items():

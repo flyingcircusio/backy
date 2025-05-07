@@ -1,6 +1,6 @@
 [tool.black]
 line-length = 80
-target-version = [ "py310" ]
+target-version = [ "py312" ]
 
 [tool.isort]
 profile = "black"
@@ -30,8 +30,7 @@ classifiers = [
     "Operating System :: POSIX",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.12",
     "Topic :: System :: Archiving :: Backup"
 ]
 packages = [
@@ -40,12 +39,12 @@ packages = [
 license = "GPLv3"
 
 [tool.poetry.dependencies]
-python = "~3.10"
+python = "~3.12"
 PyYAML = "^6.0.1"
 consulate-fc-nix-test = "1.1.0a1"
 humanize = "4.8.0"
 mmh3 = "^4.0"
-packaging = "^23.1"
+packaging = "^24.2"
 python-lzo = "^1.15"
 requests = "^2.31.0"
 shortuuid = "^1.0.11"

@@ -19,8 +19,6 @@
           inherit system;
           config = {
             permittedInsecurePackages = [
-              "python3.10-requests-2.28.2"
-              "python3.10-requests-2.29.0"
             ];
           };
         };

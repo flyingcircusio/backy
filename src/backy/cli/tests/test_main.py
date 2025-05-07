@@ -330,6 +330,7 @@ def test_call_unexpected_exception(
 exception>\tTraceback (most recent call last):
 exception>\t  File ".../src/backy/cli/__init__.py", line ..., in __call__
 exception>\t    ret = func(**kwargs)
+exception>\t          ^^^^^^^^^^^^^^
 exception>\t  File ".../src/backy/cli/tests/test_main.py", line ..., in do_raise
 exception>\t    raise RuntimeError("test")
 exception>\tRuntimeError: test

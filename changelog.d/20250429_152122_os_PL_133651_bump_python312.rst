@@ -1,0 +1,4 @@
+.. A new scriv changelog fragment.
+
+- require python 3.12 (PL-133651)
+  - also update the locked nix input dependencies

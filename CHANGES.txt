@@ -9,13 +9,17 @@ See the fragment files in the `changelog.d` directory.
 
 .. scriv-insert-here
 
-.. _changelog-2.5.2:
+.. _changelog-2.5.3:
 
-2.5.4 (unreleased)
+2.5.3 (2025-06-10)
 ==================
 
-- Nothing changed yet.
+- Rescan the quarantine store on every backy check
 
+- require python 3.12 (PL-133651)
+  - also update the locked nix input dependencies
+
+.. _changelog-2.5.2:
 
 2.5.2 (2025-02-19)
 ==================

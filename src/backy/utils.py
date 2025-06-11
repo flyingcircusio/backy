@@ -1,8 +1,6 @@
 import asyncio
 import base64
 import contextlib
-import ctypes
-import ctypes.util
 import datetime
 import hashlib
 import mmap
@@ -39,8 +37,6 @@ MiB = kiB * 1024
 GiB = MiB * 1024
 TiB = GiB * 1024
 
-# 64 kiB blocks are a good compromise between sparsiness and fragmentation.
-PUNCH_SIZE = 4 * MiB
 CHUNK_SIZE = 4 * MiB
 
 END = object()
@@ -244,58 +240,6 @@ else:
 
 
 @report_status
-def copy_overwrite(source: IO, target: IO):
-    """Efficiently overwrites `target` with a copy of `source`.
-
-    Identical regions won't be touched so this is COW-friendly. Assumes
-    that `target` is a shallow copy of a previous version of `source`.
-
-    Assumes that `target` exists and is open in read-write mode.
-    """
-    punch_size = PUNCH_SIZE
-    source.seek(0, 2)
-    size = source.tell()
-    if size > 500 * GiB:
-        punch_size *= 10
-    source.seek(0)
-    yield size / punch_size
-    try:
-        posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)  # type: ignore
-        posix_fadvise(target.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)  # type: ignore
-    except Exception:
-        pass
-    with zeroes(punch_size) as z:
-        while True:
-            startpos = source.tell()
-            chunk = source.read(punch_size)
-            if not chunk:
-                break
-            target.seek(startpos)
-            compare = target.read(len(chunk))
-            if not compare or chunk != compare:
-                if chunk == z:
-                    target.flush()
-                    punch_hole(target, startpos, len(chunk))
-                else:
-                    target.seek(startpos)
-                    target.write(chunk)
-            yield
-
-    size = source.tell()
-    target.flush()
-    try:
-        target.truncate(size)
-    except OSError:
-        pass  # truncate may not be supported, i.e. on special files
-    try:
-        os.fsync(target)
-    except OSError:
-        pass  # fsync may not be supported, i.e. on special files
-    yield END
-    yield size
-
-
-@report_status
 def copy(source: IO, target: IO):
     """Efficiently overwrites `target` with a copy of `source`.
 
@@ -394,7 +338,7 @@ def files_are_roughly_equal(
     size = a.seek(0, os.SEEK_END)
     if size != (size_b := b.seek(0, os.SEEK_END)):
         log.error(
-            "files-roughly-equal-size-mismatch",
+            "files-roughly-equal-size-diff",
             size_a=size,
             size_b=size_b,
         )
@@ -592,69 +536,6 @@ class TimeOut(object):
         else:
             time.sleep(self.interval)
         return True
-
-
-# Adapted from
-# https://github.com/trbs/fallocate/issues/4
-
-
-log = structlog.stdlib.get_logger()
-
-FALLOC_FL_KEEP_SIZE = 0x01
-FALLOC_FL_PUNCH_HOLE = 0x02
-
-
-def _fake_fallocate(fd, mode, offset, len_):
-    log.debug("fallocate-non-hole-punching")
-    if len_ <= 0:
-        raise IOError("fallocate: length must be positive")
-    if mode & FALLOC_FL_PUNCH_HOLE:
-        old = fd.tell()
-        fd.seek(offset)
-        fd.write(b"\x00" * len_)
-        fd.seek(old)
-    else:
-        raise NotImplementedError(
-            "fake fallocate() supports only hole punching"
-        )
-
-
-def _make_fallocate():
-    libc_name = ctypes.util.find_library("c")
-    libc = ctypes.CDLL(libc_name, use_errno=True)
-    _fallocate = libc.fallocate
-    c_off_t = ctypes.c_size_t
-    _fallocate.restype = ctypes.c_int
-    _fallocate.argtypes = [ctypes.c_int, ctypes.c_int, c_off_t, c_off_t]
-
-    def fallocate(fd, mode, offset, len_):
-        if len_ <= 0:
-            raise IOError("fallocate: length must be positive")
-        res = _fallocate(fd.fileno(), mode, offset, len_)
-        if res != 0:
-            errno = ctypes.get_errno()
-            raise OSError(errno, "fallocate: " + os.strerror(errno))
-
-    return fallocate
-
-
-try:
-    fallocate = _make_fallocate()
-except AttributeError:  # pragma: no cover
-    fallocate = _fake_fallocate
-
-
-def punch_hole(f, offset, len_):
-    """Ensure that the specified byte range is zeroed.
-
-    Depending on the availability of fallocate(), this is either
-    delegated to the kernel or done manualy.
-    """
-    params = (f, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE, offset, len_)
-    try:
-        fallocate(*params)
-    except OSError:
-        _fake_fallocate(*params)
 
 
 class BackyJSONEncoder(JSONEncoder):

@@ -4,7 +4,6 @@ import subprocess
 
 import pytest
 
-import backy.sources.ceph
 from backy.sources.ceph.rbd import RBDClient
 
 
@@ -242,11 +241,8 @@ class CephNautilusCLI(CephCLIBase):
 
 @pytest.fixture(params=[CephJewelCLI, CephLuminousCLI, CephNautilusCLI])
 def rbdclient(request, tmpdir, monkeypatch, log):
-    monkeypatch.setattr(
-        backy.sources.ceph, "CEPH_RBD_SUPPORTS_WHOLE_OBJECT_DIFF", True
-    )
-
     client = RBDClient(log)
+    client._supports_whole_object = True
     client._ceph_cli = request.param(tmpdir)
 
     return client

@@ -13,6 +13,18 @@ version = "literal: pyproject.toml: tool.poetry.version"
 entry_title_template = "{% if version %}{{ version }} {% endif %}({{ date.strftime('%Y-%m-%d') }})"
 categories = ""
 
+
+[tool.pytest.ini_options]
+addopts = "--timeout=30 --tb=native --cov=src --cov-report=html --cov-config=pyproject.toml src -r w"
+markers = "slow: This is a non-unit test and thus is not run by default. Use ``-m slow`` to run these, or ``-m 1`` to run all tests."
+log_level = "NOTSET"
+asyncio_mode = "auto"
+filterwarnings = [ "ignore::DeprecationWarning:telnetlib3.*:" ]
+
+[tool.coverage.run]
+branch = true
+omit = [ "*/tests/*" ]
+
 [tool.poetry]
 name = "backy"
 version = "2.5.4.dev0"
@@ -59,7 +71,7 @@ pre-commit = "^3.3.3"
 pytest = "^7.4.0"
 pytest-asyncio = "^0.21.1"
 pytest-cache = "^1.0"
-pytest-cov = "^4.1.0"
+pytest-cov = "^6.1.0"
 pytest-flake8 = "^1.1.1"
 pytest-timeout = "^2.1.0"
 scriv = "^1.3.1"

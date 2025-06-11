@@ -15,7 +15,7 @@ from backy.rbd import CephRBD, RBDSource
 from backy.rbd.rbd import RBDDiffV1
 from backy.revision import Revision
 
-BLOCK = backy.utils.PUNCH_SIZE
+BLOCK = backy.utils.CHUNK_SIZE
 
 with open(Path(__file__).parent / "nodata.rbddiff", "rb") as f:
     SAMPLE_RBDDIFF = f.read()

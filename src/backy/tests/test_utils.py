@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import os
-import sys
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -13,11 +12,8 @@ from backy.utils import (
     SafeFile,
     TimeOut,
     TimeOutError,
-    _fake_fallocate,
-    copy_overwrite,
     files_are_equal,
     files_are_roughly_equal,
-    punch_hole,
 )
 
 
@@ -324,78 +320,11 @@ def test_roughly_compare_files_timeout(tmp_path):
     assert not files_are_roughly_equal(open("a", "rb"), open("b", "rb"))
 
 
-def test_copy_overwrite_correctly_makes_sparse_file(tmp_path):
-    # Create a test file that contains random data, then we insert
-    # blocks of zeroes. copy_overwrite will not break them and will make the
-    # file sparse.
-    source_name = str(tmp_path / "input")
-    with open(source_name, "wb") as f:
-        f.write(b"12345" * 1024 * 100)
-        f.seek(1024 * 16)
-        f.write(b"\x00" * 1024 * 16)
-    with open(source_name, "rb") as source:
-        target_name = str(tmp_path / "output")
-        with open(target_name, "wb") as target:
-            # To actually ensure that we punch holes and truncate, lets
-            # fill the file with a predictable pattern that is non-zero and
-            # longer than the source.
-            target.write(b"1" * 1024 * 150)
-        with open(target_name, "r+b") as target:
-            copy_overwrite(source, target)
-    with open(source_name, "rb") as source_current:
-        with open(target_name, "rb") as target_current:
-            assert source_current.read() == target_current.read()
-    if sys.platform == "linux2":
-        assert os.stat(source_name).st_blocks > os.stat(target_name).st_blocks
-    else:
-        assert os.stat(source_name).st_blocks >= os.stat(target_name).st_blocks
-
-
 def test_unmocked_now_returns_time_time_float():
     before = datetime.datetime.now(ZoneInfo("UTC"))
     now = backy.utils.now()
     after = datetime.datetime.now(ZoneInfo("UTC"))
     assert before <= now <= after
-
-
-@pytest.fixture
-def testfile(tmp_path):
-    fn = str(tmp_path / "myfile")
-    with open(fn, "wb") as f:
-        f.write(b"\xde\xad\xbe\xef" * 32)
-    return fn
-
-
-def test_punch_hole(testfile):
-    with open(testfile, "r+b") as f:
-        f.seek(0)
-        punch_hole(f, 2, 4)
-        f.seek(0)
-        assert f.read(8) == b"\xde\xad\x00\x00\x00\x00\xbe\xef"
-
-
-def test_punch_hole_needs_length(testfile):
-    with pytest.raises(IOError):
-        with open(testfile, "r+b") as f:
-            punch_hole(f, 10, 0)
-
-
-def test_punch_hole_needs_writable_file(testfile):
-    with pytest.raises(OSError):
-        with open(testfile, "rb") as f:
-            punch_hole(f, 0, 1)
-
-
-def test_punch_hole_needs_nonnegative_offset(testfile):
-    with pytest.raises(OSError):
-        with open(testfile, "r+b") as f:
-            punch_hole(f, -1, 1)
-
-
-def test_fake_fallocate_only_punches_holes(testfile):
-    with pytest.raises(NotImplementedError):
-        with open(testfile, "r+b") as f:
-            _fake_fallocate(f, 0, 0, 10)
 
 
 def test_timeout(capsys):

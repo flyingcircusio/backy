@@ -9,7 +9,7 @@ from typing import IO, BinaryIO, Iterator, Optional, cast
 from structlog.stdlib import BoundLogger
 
 from backy.ext_deps import RBD
-from backy.utils import CHUNK_SIZE, punch_hole
+from backy.utils import CHUNK_SIZE
 
 
 class RBDClient(object):
@@ -305,7 +305,7 @@ class RBDDiffV1(object):
         for record in self.read_data():
             target.seek(record.start)
             if isinstance(record, Zero):
-                punch_hole(target, target.tell(), record.length)
+                target.write(b"\x00" * record.length)
             elif isinstance(record, Data):
                 for chunk in record.stream():
                     target.write(chunk)

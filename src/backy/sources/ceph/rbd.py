@@ -1,11 +1,10 @@
 import contextlib
+import functools
 import json
 import subprocess
 from typing import IO, Iterator, cast
 
 from structlog.stdlib import BoundLogger
-
-import backy.sources.ceph
 
 from ...ext_deps import RBD
 from ...utils import CHUNK_SIZE
@@ -65,6 +64,10 @@ class RBDClient(object):
             self.log.debug("executed-command", command=" ".join(rbd), rc=rc)
             if rc:
                 raise subprocess.CalledProcessError(rc, proc.args)
+
+    @functools.cached_property
+    def _supports_whole_object(self):
+        return "--whole-object" in self._rbd(["help", "export-diff"])
 
     def exists(self, snapspec):
         try:
@@ -134,7 +137,7 @@ class RBDClient(object):
 
     @contextlib.contextmanager
     def export_diff(self, new: str, old: str) -> Iterator[RBDDiffV1]:
-        if backy.sources.ceph.CEPH_RBD_SUPPORTS_WHOLE_OBJECT_DIFF:
+        if self._supports_whole_object:
             EXPORT_WHOLE_OBJECT = ["--whole-object"]
         else:
             EXPORT_WHOLE_OBJECT = []

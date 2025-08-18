@@ -36,6 +36,8 @@ CHUNK_SIZE = 4 * MiB
 
 END = object()
 
+DEBUG = os.environ.get("BACKY_DEBUG") == "1"
+
 
 def report_status(f):
     def wrapped(*args, **kw):

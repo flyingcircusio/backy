@@ -15,7 +15,7 @@ from structlog.stdlib import BoundLogger
 
 import backy.backup
 import backy.daemon
-from backy.utils import format_datetime_local
+from backy.utils import DEBUG, format_datetime_local
 
 from . import logging
 
@@ -334,9 +334,11 @@ def main():
         args.verbose,
         args.logfile or default_logfile,
         default_job_name="-" if is_daemon else "",
+        trace=DEBUG,
     )
     log = structlog.stdlib.get_logger(subsystem="command")
     log.debug("invoked", args=" ".join(sys.argv))
+    log.trace("tracing-enabled")
 
     command = Command(args.backupdir, log)
     func = getattr(command, args.func)

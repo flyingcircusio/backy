@@ -7,6 +7,7 @@ from typing import Optional
 
 import lzo
 import mmh3
+import structlog
 
 import backy.backends.chunked
 from backy.backends import BackendException
@@ -16,6 +17,9 @@ chunk_stats = {
     "write_full": 0,
     "write_partial": 0,
 }
+
+
+log = structlog.stdlib.get_logger(subsystem="chunk")
 
 
 class InconsistentHash(BackendException):
@@ -140,7 +144,9 @@ class Chunk(object):
         needs_forced_write = (
             self.store.force_writes and self.hash not in self.store.seen_forced
         )
-        if self.hash not in self.store.known or needs_forced_write:
+        write = self.hash not in self.store.known or needs_forced_write
+        log.trace("flush", id=self.id, write=write, hash=self.hash)
+        if write:
             # Create the tempfile in the right directory to increase locality
             # of our change - avoid renaming between multiple directories to
             # reduce traffic on the directory nodes.

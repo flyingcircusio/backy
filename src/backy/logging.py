@@ -3,6 +3,7 @@
 # repository for complete details.
 
 import io
+import logging
 import os
 import string
 import sys
@@ -330,7 +331,12 @@ def init_logging(
     verbose: bool,
     logfile: Optional[Path] = None,
     default_job_name: str = "",
+    trace=False,
 ):
+    TRACE = 3
+
+    structlog.stdlib.LEVEL_TO_NAME[TRACE] = "trace"
+    structlog.stdlib.NAME_TO_LEVEL["trace"] = TRACE
 
     console_file_renderer = ConsoleFileRenderer(
         min_level="trace" if verbose else "info",
@@ -356,7 +362,9 @@ def init_logging(
 
     structlog.configure(
         processors=processors,
-        wrapper_class=structlog.stdlib.BoundLogger,
+        wrapper_class=structlog._native._make_filtering_bound_logger(
+            TRACE if trace else logging.DEBUG
+        ),
         logger_factory=MultiOptimisticLoggerFactory(**loggers),
         cache_logger_on_first_use=False,
     )

@@ -135,6 +135,9 @@ class RBDClient(object):
     def snap_rm(self, image):
         return self._rbd(["snap", "rm", image])
 
+    def snap_protect(self, image):
+        return self._rbd(["snap", "protect", image])
+
     @contextlib.contextmanager
     def export_diff(self, new: str, old: str) -> Iterator[RBDDiffV1]:
         if self._supports_whole_object:

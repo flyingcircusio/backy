@@ -14,6 +14,9 @@ class BackySource(ABC):
     @abstractmethod
     def verify(self, target: "backy.backends.BackyBackend") -> bool: ...
 
+    def archive(self) -> None:
+        pass
+
 
 class BackySourceContext(ABC):
     @abstractmethod

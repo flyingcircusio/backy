@@ -1,7 +1,7 @@
 import datetime
 import glob
 import os
-import os.path as p
+import shutil
 from enum import Enum
 from typing import Optional
 
@@ -129,6 +129,12 @@ class Revision(object):
 
         if self in self.backup.history:
             self.backup.history.remove(self)
+
+    def archive(self, path):
+        self.log.info("archive")
+        for filename in glob.glob(self.filename + "*"):
+            if os.path.exists(filename):
+                shutil.copy(filename, path)
 
     def writable(self):
         if os.path.exists(self.filename):

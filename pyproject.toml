@@ -12,6 +12,7 @@ output_file = "CHANGES.txt"
 version = "literal: pyproject.toml: tool.poetry.version"
 entry_title_template = "{% if version %}{{ version }} {% endif %}({{ date.strftime('%Y-%m-%d') }})"
 categories = ""
+format = "rst"
 
 
 [tool.pytest.ini_options]

@@ -65,6 +65,21 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
     def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
         self._delete_old_snapshots()
 
+    def archive(self):
+        # protect all snapshots
+        for snapshot in self.rbd.snap_ls(self._image_name):
+            if not snapshot["name"].startswith("backy-"):
+                # Do not touch non-backy snapshots
+                continue
+            self.log.info("snapshot-protect", snapshot_name=snapshot["name"])
+            try:
+                self.rbd.snap_protect(self._image_name + "@" + snapshot["name"])
+            except Exception:
+                self.log.exception(
+                    "snapshot-protect-failed",
+                    snapshot_name=snapshot["name"],
+                )
+
     def backup(self, target):
         if self.always_full:
             self.log.info("backup-always-full")
@@ -143,7 +158,12 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
 
         with s as source, t as target:
             self.log.info("verify")
-            return backy.utils.files_are_roughly_equal(
+            if backy.utils.DEBUG:
+                f = backy.utils.files_are_equal
+            else:
+                f = backy.utils.files_are_roughly_equal  # type: ignore
+
+            return f(
                 source,
                 target,
                 report=lambda s, t, o: self.revision.backup.quarantine.add_report(
@@ -166,6 +186,12 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
         for snapshot in self.rbd.snap_ls(self._image_name):
             if not snapshot["name"].startswith("backy-"):
                 # Do not touch non-backy snapshots
+                continue
+            if snapshot["protected"] == "true":
+                self.log.info(
+                    "delete-old-snapshot-protected",
+                    snapshot_name=snapshot["name"],
+                )
                 continue
             uuid = snapshot["name"].replace("backy-", "")
             if uuid != keep_snapshot_revision:

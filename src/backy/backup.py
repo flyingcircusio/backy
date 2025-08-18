@@ -6,10 +6,11 @@ import os.path as p
 import time
 from typing import IO, Optional, Type
 
+import shortuuid
 import yaml
 from structlog.stdlib import BoundLogger
 
-from backy.utils import min_date
+from backy.utils import DEBUG, min_date
 
 from .backends import BackendException, BackyBackend
 from .backends.chunked import ChunkedFileBackend
@@ -243,6 +244,19 @@ class Backup(object):
                     "verification-failed",
                     revision_uuid=new_revision.uuid,
                 )
+                if DEBUG:
+                    new_revision.stats["duration"] = time.time() - start
+                    new_revision.write_info()
+
+                    archive_id = shortuuid.uuid()
+                    self.log.info("archive", id=archive_id)
+                    archive = os.path.join(self.path, "archives", archive_id)
+                    os.makedirs(archive)
+                    self.scan()
+                    for r in self.history:
+                        r.archive(archive)
+                    source.archive()
+
                 new_revision.remove()
             else:
                 self.log.info(

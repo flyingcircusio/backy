@@ -174,41 +174,6 @@ class CephCLIBase:
         return imagedata
 
 
-class CephJewelCLI(CephCLIBase):
-    def __init__(self, tmpdir):
-        super().__init__(tmpdir)
-        self.mapped_images = {}
-
-    def version(self):
-        # This isn't really what happens in upstream but due to the way
-        # we built it on NixOS. Don't hurt the Ceph people.
-        return "ceph version Development (no_version)"
-
-    def unmap(self, device):
-        if not self._freeze_mapped:
-            for k, v in list(self.mapped_images.items()):
-                if device == v["device"]:
-                    del self.mapped_images[k]
-                    break
-            else:
-                raise subprocess.CalledProcessError(cmd="unmap", returncode=2)
-
-    def map(self, snapspec, read_only):
-        image = self._parse_snapspec(snapspec)
-        id = len(self.mapped_images)
-        image["device"] = f"{self.tmpdir}/rbd{id}"
-        if not self._freeze_mapped:
-            with open(image["device"], "a"):
-                pass
-            self.mapped_images[str(id)] = image
-        return ""
-
-
-class CephLuminousCLI(CephJewelCLI):
-    def version(self):
-        return "ceph version Development (no_version) luminous (stable)"
-
-
 class CephNautilusCLI(CephCLIBase):
     def __init__(self, tmpdir):
         super().__init__(tmpdir)
@@ -239,7 +204,12 @@ class CephNautilusCLI(CephCLIBase):
                 raise subprocess.CalledProcessError(cmd="unmap", returncode=2)
 
 
-@pytest.fixture(params=[CephJewelCLI, CephLuminousCLI, CephNautilusCLI])
+class CephPacificCLI(CephNautilusCLI):
+    def version(self):
+        return "ceph version 16.2.15 (618f440892089921c3e944a991122ddc44e60516) pacific (stable)"
+
+
+@pytest.fixture(params=[CephPacificCLI, CephNautilusCLI])
 def rbdclient(request, tmpdir, monkeypatch, log):
     client = RBDClient(log)
     client._supports_whole_object = True

@@ -1,0 +1,3 @@
+.. A new scriv changelog fragment.
+
+- sources/ceph: drop special cases for Jewel and Luminous, start supporting Pacific (PL-135242)

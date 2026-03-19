@@ -13,11 +13,9 @@ from .diff import RBDDiffV1
 
 class RBDClient(object):
     log: BoundLogger
-    use_whole_object_diff: bool
 
-    def __init__(self, log: BoundLogger, use_whole_object_diff=False):
+    def __init__(self, log: BoundLogger):
         self.log = log.bind(subsystem="rbd")
-        self.use_whole_object_diff = False
 
     def _ceph_cli(self, cmdline, encoding="utf-8") -> str:
         # This wrapper function for the `rbd` command is only used for
@@ -69,8 +67,6 @@ class RBDClient(object):
 
     @functools.cached_property
     def _supports_whole_object(self):
-        if not self.use_whole_object_diff:
-            return False
         return "--whole-object" in self._rbd(["help", "export-diff"])
 
     def exists(self, snapspec):

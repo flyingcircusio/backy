@@ -28,9 +28,7 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
         self.image = config["image"]
         self.always_full = config.get("full-always", False)
         self.log = log.bind(subsystem="ceph")
-        self.rbd = RBDClient(
-            self.log, config.get("use-full-object-diff", False)
-        )
+        self.rbd = RBDClient(self.log)
 
     def ready(self) -> bool:
         """Check whether the source can be backed up.
@@ -148,10 +146,8 @@ class CephRBD(BackySource, BackySourceFactory, BackySourceContext):
             return backy.utils.files_are_roughly_equal(
                 source,
                 target,
-                report=(
-                    lambda s, t, o: self.revision.backup.quarantine.add_report(
-                        QuarantineReport(s, t, o)
-                    )
+                report=lambda s, t, o: self.revision.backup.quarantine.add_report(
+                    QuarantineReport(s, t, o)
                 ),
             )
 

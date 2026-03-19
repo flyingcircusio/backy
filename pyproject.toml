@@ -72,6 +72,7 @@ filter_files = true
 
 [tool.scriv]
 output_file = "CHANGES.txt"
+format = "rst"
 version = "literal: pyproject.toml: tool.poetry.version"
 entry_title_template = "{% if version %}{{ version }} {% endif %}({{ date.strftime('%Y-%m-%d') }})"
 categories = ""

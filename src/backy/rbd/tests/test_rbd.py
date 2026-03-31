@@ -159,3 +159,36 @@ def test_rbd_export(popen, rbdclient, tmp_path):
             ),
         ]
     )
+
+
+RBD_HELP_WHOLE_OBJECT = """\
+usage: rbd export-diff [--pool <pool>] [--namespace <namespace>]
+                       [--image <image>] [--snap <snap>] [--path <path>]
+                       [--from-snap <from-snap>] [--whole-object]
+                       [--no-progress]
+                       <source-image-or-snap-spec> <path-name>
+"""
+
+
+def test_rbd_whole_object_support_detection(log):
+    rbd_mock = mock.Mock()
+    rbd_mock.return_value = RBD_HELP_WHOLE_OBJECT
+    client1 = RBDClient(log)  # assume default: `use_whole_object_diff=False`
+    client1._rbd = rbd_mock
+    assert not client1._supports_whole_object
+
+    client2 = RBDClient(log, use_whole_object_diff=False)
+    client2._rbd = rbd_mock
+    assert not client2._supports_whole_object
+
+    client3 = RBDClient(log, use_whole_object_diff=True)
+    client3._rbd = rbd_mock
+    assert client3._supports_whole_object
+
+    rbd_mock_no_whole_object = mock.Mock()
+    rbd_mock_no_whole_object.return_value = (
+        "usage: rbd export-diff [--pool <pool>] [--namespace <namespace>]"
+    )
+    client4 = RBDClient(log, use_whole_object_diff=True)
+    client4._rbd = rbd_mock_no_whole_object
+    assert not client4._supports_whole_object

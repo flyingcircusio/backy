@@ -368,6 +368,7 @@ class CephRBD:
     rbd: RBDClient
     revision: Revision
     log: BoundLogger
+    use_full_object_diff: bool
 
     snapshot_timeout = 90
 
@@ -379,6 +380,7 @@ class CephRBD:
         vm: Optional[str] = None,
         consul_acl_token: Optional[str] = None,
         always_full: bool = False,
+        use_full_object_diff: bool = False,
     ):
         self.pool = pool
         self.image = image
@@ -386,7 +388,7 @@ class CephRBD:
         self.vm = vm
         self.consul_acl_token = consul_acl_token
         self.log = log.bind(subsystem="ceph")
-        self.rbd = RBDClient(self.log)
+        self.rbd = RBDClient(self.log, self.use_full_object_diff)
 
     @classmethod
     def from_config(cls, config: dict, log: BoundLogger) -> "CephRBD":
@@ -397,6 +399,7 @@ class CephRBD:
             config.get("vm"),
             config.get("consul_acl_token"),
             config.get("full-always", False),
+            config.get("use-full-object-diff", False),
         )
 
     def ready(self) -> bool:

@@ -9,31 +9,31 @@ on:
   pull_request:
 
 jobs:
-  check-poetry:
+  check-uv:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - name: Install poetry
-      run: pipx install poetry
+    - uses: actions/checkout@v6
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
     - name: Set up Python 3.12
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v6
       with:
         python-version: '3.12'
-        cache: 'poetry'
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install liblzo2-dev
-        poetry install
+    - name: Install the project
+      run: uv sync --locked --all-extras --dev
     - name: Test with pytest
       run: |
-        poetry run pytest
+        uv run pytest
 
   check-nix:
     runs-on: ubuntu-latest
     steps:
       - name: git checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@main
       - name: check flake

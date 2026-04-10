@@ -6,25 +6,43 @@
       flake = false;
     };
     flake-utils.url = "github:numtide/flake-utils";
-    poetry2nix = {
-      url = "github:nix-community/poetry2nix";
+    pyproject-nix = {
+      url = "github:pyproject-nix/pyproject.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    uv2nix = {
+      url = "github:pyproject-nix/uv2nix";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    pyproject-build-systems = {
+      url = "github:pyproject-nix/build-system-pkgs";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.uv2nix.follows = "uv2nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, poetry2nix, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      pyproject-nix,
+      uv2nix,
+      pyproject-build-systems,
+      ...
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
-        pkgs = import nixpkgs {
-          inherit system;
-          config = {
-            permittedInsecurePackages = [
-            ];
-          };
-        };
-        lib = pkgs.callPackage "${self}/lib.nix" { poetry2nix = import poetry2nix { inherit pkgs; }; };
+        pkgs = nixpkgs.legacyPackages.${system};
+        lib = pkgs.callPackage "${self}/lib.nix" { inherit uv2nix pyproject-nix pyproject-build-systems; };
       in
       {
         inherit (lib) packages devShells checks;
-      });
-  }
+      }
+    );
+}

@@ -1,88 +1,110 @@
 {
-  poetry2nix,
+  uv2nix,
+  pyproject-nix,
+  pyproject-build-systems,
   lzo,
+  lib,
+  callPackage,
+  callPackages,
+  mkShellNoCC,
+  runCommand,
+  uv,
   # currently needs to be hardcoded here, as it is hardcoded in the pyproject.toml as well
   python312,
-  mkShellNoCC,
-  poetry,
-  runCommand,
-  fetchPypi,
   ...
 }:
+
 let
-  poetryOverrides = [
-    # https://github.com/nix-community/poetry2nix/pull/899#issuecomment-1620306977
-    poetry2nix.defaultPoetryOverrides
-    (self: super: {
-      python-lzo = super.python-lzo.overrideAttrs (old: {
-        buildInputs = (old.buildInputs or []) ++ [ lzo ];
-      });
-      scriv = super.scriv.overrideAttrs (old: {
-        buildInputs = (old.buildInputs or []) ++ [ super.setuptools ];
-      });
-      telnetlib3 = super.telnetlib3.overrideAttrs (old: {
-        buildInputs = (old.buildInputs or []) ++ [ super.setuptools ];
-      });
-      execnet = super.execnet.overrideAttrs (old: {
-        buildInputs = (old.buildInputs or []) ++ [ super.hatchling super.hatch-vcs ];
-      });
-      attrs = super.attrs.overrideAttrs (old: {
-        buildInputs = (old.buildInputs or []) ++ [ super.hatchling super.hatch-vcs super.hatch-fancy-pypi-readme ];
-      });
-      urllib3 = super.urllib3.overrideAttrs (old: {
-        buildInputs = (old.buildInputs or []) ++ [ super.hatchling super.hatch-vcs ];
-      });
-      consulate-fc-nix-test = super.consulate-fc-nix-test.overrideAttrs (old: {
-        buildInputs = (old.buildInputs or []) ++ [ super.setuptools super.setuptools-scm ];
-      });
-      shortuuid = super.shortuuid.overrideAttrs (old: {
-        # replace poetry to avoid dependency on vulnerable python-cryptography package
-        nativeBuildInputs = [ super.poetry-core ] ++ builtins.filter (p: p.pname or "" != "poetry") old.nativeBuildInputs;
-      });
-    })
-  ];
-  poetryEnv = poetry2nix.mkPoetryEnv {
-    projectDir = ./.;
-    python = python312;
-    overrides = poetryOverrides;
-    editablePackageSources = {
-      backy = ./src;
-    };
+
+  workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./.; };
+
+  overlay = workspace.mkPyprojectOverlay {
+    sourcePreference = "wheel";
   };
-  poetryApplication = poetry2nix.mkPoetryApplication {
-    projectDir = ./.;
-    doCheck = true;
-    python = python312;
-    overrides = poetryOverrides;
-  };
+
+  # This gets exposed slightly different via the flake.nix and default.nix
+  py-build-system-wheel-overlay =
+    if pyproject-build-systems ? overlays then
+      pyproject-build-systems.overlays.wheel
+    else
+      pyproject-build-systems.wheel;
+
+  pythonSet =
+    let
+      python = python312;
+    in
+    (callPackage pyproject-nix.build.packages {
+      inherit python;
+    }).overrideScope
+      (
+        lib.composeManyExtensions [
+          py-build-system-wheel-overlay
+          overlay
+          (final: prev: {
+            consulate-fc-nix-test = prev.consulate-fc-nix-test.overrideAttrs (oA: {
+              nativeBuildInputs = (oA.nativeBuildInputs or [ ]) ++ [ final.setuptools ];
+            });
+            pytest-cache = prev.pytest-cache.overrideAttrs (oA: {
+              nativeBuildInputs = (oA.nativeBuildInputs or [ ]) ++ [ final.setuptools ];
+            });
+            python-lzo = prev.python-lzo.overrideAttrs (oA: {
+              nativeBuildInputs = (oA.nativeBuildInputs or [ ]) ++ [ final.setuptools ];
+              buildInputs = (oA.buildInputs or [ ]) ++ [ lzo ];
+            });
+          })
+        ]
+      );
+
 in
-{
-  packages = {
-    default = poetryApplication;
-    venv = poetryEnv;
-  };
-
-  devShells = {
-    default = mkShellNoCC {
-      BACKY_CMD = "backy";
-      packages = [
-        poetryEnv
-        poetry
-      ];
+rec {
+  checks =
+    let
+      virtualenv = pythonSet.mkVirtualEnv "backy-dev-env" workspace.deps.all;
+    in
+    {
+      pytest =
+        runCommand "pytest"
+          {
+            nativeBuildInputs = [ virtualenv ];
+            src = ./.;
+          }
+          ''
+            unpackPhase
+            cd *-source
+            export BACKY_CMD=${packages.default}/bin/backy
+            patchShebangs src
+            pytest -vv -p no:cacheprovider --no-cov
+            touch $out
+          '';
     };
-  };
+  devShells =
+    let
+      virtualenv = pythonSet.mkVirtualEnv "backy-dev-env" workspace.deps.all;
+    in
+    {
+      default = mkShellNoCC {
+        packages = [
+          virtualenv
+          uv
+        ];
+        env = {
+          UV_NO_SYNC = "1";
+          UV_PYTHON = pythonSet.python.interpreter;
+          UV_PYTHON_DOWNLOADS = "never";
+        };
+      };
+    };
 
-  checks = {
-    pytest = runCommand "pytest" {
-      nativeBuildInputs = [ poetryEnv ];
-      src = ./.;
-    } ''
-      unpackPhase
-      cd *-source
-      export BACKY_CMD=${poetryApplication}/bin/backy
-      patchShebangs src
-      pytest -vv -p no:cacheprovider --no-cov
-      touch $out
-    '';
-  };
+  packages =
+    let
+      venv = pythonSet.mkVirtualEnv "backy-env" workspace.deps.default;
+      inherit (callPackages pyproject-nix.build.util { }) mkApplication;
+    in
+    rec {
+      default = mkApplication {
+        inherit venv;
+        package = pythonSet.backy;
+      };
+      inherit venv;
+    };
 }

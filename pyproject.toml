@@ -1,3 +1,66 @@
+[project]
+name = "backy"
+version = "2.5.4.dev0"
+description = ""
+authors = [
+    { name = "Christian Theune", email = "ct@flyingcircus.io" },
+    { name = "Christian Kauhaus", email = "kc@flyingcircus.io" },
+    { name = "Daniel Kraft", email = "daniel.kraft@d9t.de" },
+]
+requires-python = ">=3.12,<3.13"
+license = "GPL-3.0"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: POSIX",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Archiving :: Backup",
+]
+dependencies = [
+    "PyYAML>=6.0.1,<7",
+    "consulate-fc-nix-test==1.1.0a1",
+    "humanize>=4.8.0,<5",
+    "mmh3>=4.0,<5",
+    "packaging>=24.2",
+    "prettytable>=3.6.0,<4",
+    "python-lzo>=1.15,<2",
+    "requests>=2.31.0,<3",
+    "shortuuid>=1.0.11,<2",
+    "structlog>=23.1.0,<24",
+    "telnetlib3>=2.0.0,<3",
+    "tzlocal>=5.0,<6",
+    "colorama>=0.4.6,<0.5",
+]
+
+[project.scripts]
+backy = "backy.main:main"
+
+[project.entry-points."backy.sources"]
+ceph-rbd = "backy.sources.ceph.source:CephRBD"
+file = "backy.sources.file:File"
+flyingcircus = "backy.sources.flyingcircus.source:FlyingCircusRootDisk"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "editables>=0.5",
+    "pre-commit>=3.3.3,<4",
+    "pytest>=7.4.0,<8",
+    "pytest-asyncio>=0.21.1,<0.22",
+    "pytest-cache>=1.0,<2",
+    "pytest-cov>=6.1.0,<7",
+    "pytest-flake8>=1.1.1,<2",
+    "pytest-timeout>=2.1.0,<3",
+    "scriv>=1.3.1,<2",
+]
+
 [tool.black]
 line-length = 80
 target-version = [ "py312" ]
@@ -13,6 +76,14 @@ version = "literal: pyproject.toml: tool.poetry.version"
 entry_title_template = "{% if version %}{{ version }} {% endif %}({{ date.strftime('%Y-%m-%d') }})"
 categories = ""
 
+[tool.hatch.build.targets.sdist]
+include = ["src/backy"]
+
+[tool.hatch.build.targets.wheel]
+include = ["src/backy"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src/backy" = "backy"
 
 [tool.pytest.ini_options]
 addopts = "--timeout=30 --tb=native --cov=src --cov-report=html --cov-config=pyproject.toml src -r w"
@@ -24,66 +95,3 @@ filterwarnings = [ "ignore::DeprecationWarning:telnetlib3.*:" ]
 [tool.coverage.run]
 branch = true
 omit = [ "*/tests/*" ]
-
-[tool.poetry]
-name = "backy"
-version = "2.5.4.dev0"
-description = ""
-authors = [
-    "Christian Theune <ct@flyingcircus.io>",
-    "Christian Kauhaus <kc@flyingcircus.io>",
-    "Daniel Kraft <daniel.kraft@d9t.de>"
-]
-classifiers = [
-    "Development Status :: 5 - Production/Stable",
-    "Environment :: Console",
-    "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
-    "Operating System :: POSIX",
-    "Programming Language :: Python",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Topic :: System :: Archiving :: Backup"
-]
-packages = [
-    { include = "backy", from = "src" }
-]
-license = "GPLv3"
-
-[tool.poetry.dependencies]
-python = "~3.12"
-PyYAML = "^6.0.1"
-consulate-fc-nix-test = "1.1.0a1"
-humanize = "^4.8.0"
-mmh3 = "^4.0"
-packaging = ">=24.2"
-prettytable = "^3.6.0"
-python-lzo = "^1.15"
-requests = "^2.31.0"
-shortuuid = "^1.0.11"
-structlog = "^23.1.0"
-telnetlib3 = "^2.0.0"
-tzlocal = "^5.0"
-colorama = "^0.4.6"
-
-[tool.poetry.dev-dependencies]
-pre-commit = "^3.3.3"
-pytest = "^7.4.0"
-pytest-asyncio = "^0.21.1"
-pytest-cache = "^1.0"
-pytest-cov = "^6.1.0"
-pytest-flake8 = "^1.1.1"
-pytest-timeout = "^2.1.0"
-scriv = "^1.3.1"
-
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.scripts]
-backy = "backy.main:main"
-
-[tool.poetry.plugins."backy.sources"]
-ceph-rbd = "backy.sources.ceph.source:CephRBD"
-file = "backy.sources.file:File"
-flyingcircus = "backy.sources.flyingcircus.source:FlyingCircusRootDisk"

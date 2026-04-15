@@ -87,34 +87,18 @@ class RBDClient(object):
             raise
 
     def map(self, image, readonly=False):
-        def parse_mappings_pre_nautilus(mappings):
-            """The parser code for Ceph release Luminous and earlier."""
-            for mapping in mappings.values():
-                if image == "{pool}/{name}@{snap}".format(**mapping):
-                    return mapping
-            raise RuntimeError("Map not found in mapping list.")
-
-        def parse_mappings_since_nautilus(mappings):
+        def parse_mappings(mappings):
             """The parser code for Ceph release Nautilus and later."""
             for mapping in mappings:
                 if image == "{pool}/{name}@{snap}".format(**mapping):
                     return mapping
             raise RuntimeError("Map not found in mapping list.")
 
-        versionstring = self._rbd(["--version"])
-
         self._rbd(["map", image, "--read-only" if readonly else ""])
 
         mappings_raw = self._rbd(["showmapped"], format="json")
 
-        if "nautilus" in versionstring:
-            mapping = parse_mappings_since_nautilus(mappings_raw)
-        elif "luminous" in versionstring:
-            mapping = parse_mappings_pre_nautilus(mappings_raw)
-        else:
-            # our jewel build provides no version info
-            # this will break with releases newer than nautilus
-            mapping = parse_mappings_pre_nautilus(mappings_raw)
+        mapping = parse_mappings(mappings_raw)
 
         def scrub_mapping(mapping):
             SPEC = set(["pool", "name", "snap", "device"])

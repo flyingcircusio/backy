@@ -76,6 +76,7 @@ format = "rst"
 version = "literal: pyproject.toml: tool.poetry.version"
 entry_title_template = "{% if version %}{{ version }} {% endif %}({{ date.strftime('%Y-%m-%d') }})"
 categories = ""
+format = "rst"
 
 [tool.hatch.build.targets.sdist]
 include = ["src/backy"]

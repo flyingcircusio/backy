@@ -2,6 +2,8 @@ import struct
 from collections import namedtuple
 from typing import IO, Optional
 
+import structlog
+
 from backy.fallocate import punch_hole
 
 
@@ -16,6 +18,8 @@ Data = namedtuple("Data", ["start", "length", "stream"])
 SnapSize = namedtuple("SnapSize", ["size"])
 FromSnap = namedtuple("FromSnap", ["snapshot"])
 ToSnap = namedtuple("ToSnap", ["snapshot"])
+
+log = structlog.stdlib.get_logger(subsystem="rbddiff")
 
 
 class RBDDiffV1(object):
@@ -137,19 +141,28 @@ class RBDDiffV1(object):
 
         for record in self.read_metadata():
             if isinstance(record, SnapSize):
+                log.trace("new-size", size=record.size)
                 target.truncate(record.size)
             elif isinstance(record, FromSnap):
+                log.trace("new-from", snapshot=record.snapshot)
                 assert record.snapshot == snapshot_from
             elif isinstance(record, ToSnap):
+                log.trace("new-to", snapshot=record.snapshot)
                 assert record.snapshot == snapshot_to
+            else:
+                assert False
 
         for record in self.read_data():
             target.seek(record.start)
             if isinstance(record, Zero):
+                log.trace("new-zero", start=record.start, length=record.length)
                 punch_hole(target, target.tell(), record.length)
             elif isinstance(record, Data):
+                log.trace("new-data", start=record.start, length=record.length)
                 for chunk in record.stream():
                     target.write(chunk)
+            else:
+                assert False
             bytes += record.length
 
         self.f.close()
